@@ -1,4 +1,5 @@
-import { Activity, BadgeCheck, AlertTriangle, Footprints, Users, Nfc, ClipboardList } from "lucide-react";
+import { useState } from "react";
+import { Activity, BadgeCheck, AlertTriangle, Footprints, Users, Nfc, ClipboardList, BellRing, ShieldAlert, Sparkles } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import StatCard from "../components/ui/StatCard";
 import Panel from "../components/ui/Panel";
@@ -8,12 +9,14 @@ import { JOURNAL, CHECKPOINTS, CONSIGNES, VISITORS } from "../data/mock";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [sosSent, setSosSent] = useState(false);
   if (!user) return null;
 
   const doneCp = CHECKPOINTS.filter((c) => c.status === "done").length;
   const missedCp = CHECKPOINTS.filter((c) => c.status === "missed").length;
   const unreadConsignes = CONSIGNES.filter((c) => c.unread).length;
   const activeVisitors = VISITORS.filter((v) => v.status === "actif").length;
+  const aiSummary = `Résumé IA : ${JOURNAL.filter((j) => j.type === "alerte").length} incident(s) à surveiller, ${missedCp} ronde(s) à valider et ${activeVisitors} visiteur(s) présents.`;
 
   return (
     <>
@@ -27,6 +30,42 @@ export default function DashboardPage() {
         <StatCard label="Badges verts actifs" value={39} sub="Personnel permanent" tone="green" icon={<BadgeCheck size={22} />} />
         <StatCard label="Visiteurs actifs" value={activeVisitors} sub="Badges orange en site" tone="orange" icon={<Users size={22} />} />
         <StatCard label="Accès refusés" value={2} sub="Alerte superviseur émise" tone="red" icon={<AlertTriangle size={22} />} />
+      </div>
+
+      <div className="row2">
+        <Panel
+          title="Actions rapides"
+          icon={<Sparkles size={16} color="var(--accent)" />}
+          badge={{ label: "NOUVEAU", tone: "green" }}
+        >
+          <div className="quick-grid">
+            <button className="btn-danger" onClick={() => setSosSent(true)}>
+              <ShieldAlert size={14} /> SOS urgence
+            </button>
+            <button className="btn-secondary">
+              <BellRing size={14} /> Notification push
+            </button>
+          </div>
+          <p className="ci-text" style={{ marginTop: 10 }}>
+            Les alertes critiques, les rondes manquées et les badges rouges peuvent être relancées en un clic vers le superviseur.
+          </p>
+          {sosSent && (
+            <div className="login-error" style={{ marginTop: 10 }}>
+              Alerte SOS transmise au superviseur — géolocalisation et contexte d’intervention ajoutés.
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title="Résumé IA / synthèse"
+          icon={<Sparkles size={16} color="var(--orange)" />}
+          badge={{ label: "IA", tone: "orange" }}
+        >
+          <p className="ci-text">{aiSummary}</p>
+          <div className="vacation-card" style={{ marginTop: 10 }}>
+            <div className="vac-block"><b>Suggestion :</b> prioriser la zone Parking et la ronde CP4 avant la fin de vacation.</div>
+          </div>
+        </Panel>
       </div>
 
       <div className="row2">

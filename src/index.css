@@ -443,6 +443,39 @@ body::after {
   color: rgba(255,255,255,0.6);
 }
 
+/* === SITE SUPERVISION === */
+.site-map-card {
+  position: relative;
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  min-height: 240px;
+  background:
+    linear-gradient(rgba(0,200,255,0.03), rgba(0,200,255,0.03)),
+    linear-gradient(90deg, rgba(0,200,255,0.06) 1px, transparent 1px),
+    linear-gradient(rgba(0,200,255,0.06) 1px, transparent 1px);
+  background-size: auto, 36px 36px, 36px 36px;
+  overflow: hidden;
+}
+.site-map-zone {
+  position: absolute;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: rgba(13, 21, 32, 0.92);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+.zone-hall { top: 20px; left: 18px; }
+.zone-store { top: 78px; right: 22px; border-color: var(--orange); }
+.zone-park { bottom: 24px; left: 32px; border-color: var(--red); }
+.zone-nfc { top: 40%; right: 18px; border-color: var(--accent); }
+.zone-cam { bottom: 72px; right: 90px; border-color: var(--green); }
+.zone-agent { top: 56px; left: 40%; border-color: var(--yellow); }
+
 /* === BUTTONS === */
 .btn-primary {
   background: linear-gradient(135deg, #00a8d4, #0080b0);

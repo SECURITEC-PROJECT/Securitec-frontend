@@ -22,6 +22,8 @@ import BadgesPage from "./pages/BadgePage";
 import ReglementPage from "./pages/ReglementPage";
 import ArchivagePage from "./pages/ArchivagePage";
 import AuditPage from "./pages/AuditPage";
+import SupervisionPage from "./pages/SupervisionPage";
+import MaintenancePage from "./pages/MaintenancePage";
 
 function Protected({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
   const { user } = useAuth();
@@ -53,6 +55,8 @@ function AppRoutes() {
       <Route path="/cameras" element={<Protected roles={["agent3", "supervisor"]}><CamerasPage /></Protected>} />
       <Route path="/cr" element={<Protected roles={["agent3", "supervisor"]}><CRPage /></Protected>} />
       <Route path="/consignes" element={<Protected><ConsignesPage /></Protected>} />
+      <Route path="/supervision" element={<Protected roles={["supervisor", "agent2", "agent3"]}><SupervisionPage /></Protected>} />
+      <Route path="/maintenance" element={<Protected roles={["supervisor", "agent2", "agent3"]}><MaintenancePage /></Protected>} />
       <Route path="/badges" element={<Protected><BadgesPage /></Protected>} />
       <Route path="/reglement" element={<Protected><ReglementPage /></Protected>} />
       <Route path="/archivage" element={<Protected roles={["supervisor"]}><ArchivagePage /></Protected>} />

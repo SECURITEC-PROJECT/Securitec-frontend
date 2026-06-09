@@ -8,6 +8,7 @@ import type { Visitor } from "../types";
 export default function VisitorsPage() {
   const [list, setList] = useState<Visitor[]>(VISITORS);
   const [form, setForm] = useState({ name: "", company: "", motif: "", host: "", duration: "1h" });
+  const [qrCode, setQrCode] = useState("SECURITEC-QR-001");
 
   const create = () => {
     if (!form.name) return;
@@ -25,6 +26,7 @@ export default function VisitorsPage() {
       status: "actif",
     };
     setList([v, ...list]);
+    setQrCode(`SEC-${Date.now().toString().slice(-6)}`);
     setForm({ name: "", company: "", motif: "", host: "", duration: "1h" });
   };
 
@@ -78,6 +80,25 @@ export default function VisitorsPage() {
           <div className="btn-row">
             <button className="btn-primary" onClick={create}>
               <UserPlus size={14} /> Créer & attribuer badge
+            </button>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel
+        title="Pré-enregistrement QR Code"
+        icon={<UserPlus size={16} color="var(--accent)" />}
+        badge={{ label: "QR VISITEUR", tone: "blue" }}
+      >
+        <div className="form-grid">
+          <div className="nfc-demo" style={{ padding: 20 }}>
+            <strong style={{ fontFamily: "var(--font-head)", letterSpacing: 2 }}>CODE QR</strong>
+            <div style={{ fontFamily: "var(--font-mono)", color: "var(--accent)", marginTop: 8 }}>{qrCode}</div>
+            <div className="ci-text" style={{ marginTop: 8 }}>Ce code peut être scanné à l’accueil pour pré-remplir l’enregistrement et accélérer la prise en charge du visiteur.</div>
+          </div>
+          <div className="btn-row">
+            <button className="btn-secondary" onClick={() => setQrCode(`SEC-${Math.floor(Math.random() * 900000 + 100000)}`)}>
+              Générer un nouveau QR
             </button>
           </div>
         </div>

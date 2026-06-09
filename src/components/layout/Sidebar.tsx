@@ -18,6 +18,8 @@ import {
   CreditCard,
   Scale,
   X,
+  MapPinned,
+  Wrench,
 } from "lucide-react";
 import type { Role } from "../../types";
 import { useAuth } from "../../context/AuthContext";
@@ -71,6 +73,8 @@ const NAV: { section: string; items: NavConfig[] }[] = [
   {
     section: "Supervision",
     items: [
+      { to: "/supervision", label: "Carte de supervision", icon: MapPinned, roles: ["supervisor", "agent2", "agent3"], dot: "green" },
+      { to: "/maintenance", label: "Maintenance", icon: Wrench, roles: ["supervisor", "agent2", "agent3"], dot: "orange" },
       { to: "/archivage", label: "Archivage", icon: Archive, roles: ["supervisor"] },
       { to: "/audit", label: "Audit", icon: ShieldCheck, roles: ["supervisor"] },
     ],
