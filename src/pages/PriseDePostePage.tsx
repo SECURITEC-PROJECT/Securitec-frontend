@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { CheckCircle2, Send, PenLine } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
+import { useAuth } from "../context/AuthContext";
 
 const EQUIPMENTS = [
   "Tablette agent",

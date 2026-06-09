@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { UserPlus, Users, LogOut } from "lucide-react";
-import type { Visitor } from "../types";
-import { VISITORS } from "../data/mock";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
+import { VISITORS } from "../data/mock";
+import type { Visitor } from "../types";
 
 export default function VisitorsPage() {
   const [list, setList] = useState<Visitor[]>(VISITORS);

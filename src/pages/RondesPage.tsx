@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Footprints, Play, Check, X, MapPin } from "lucide-react";
-import type { Checkpoint } from "../types";
+import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
 import { CHECKPOINTS } from "../data/mock";
-import Panel from "../components/ui/Panel";
+import type { Checkpoint } from "../types";
 
 export default function RondesPage() {
   const [circuit, setCircuit] = useState("Circuit Nuit");

@@ -4,16 +4,22 @@ import type {
   Checkpoint,
   Consigne,
   JournalEntry,
+  LogbookEntry,
   Notification,
+  PersonMovement,
   Role,
   Ronde,
   User,
+  Vacation,
+  VehicleMovement,
   Visitor,
 } from "../types";
 
 export const USERS: Record<Role, User> = {
   agent1: {
     id: "U01",
+    username: "agent1",
+    password: "1234",
     name: "KOUASSI Anicet",
     role: "agent1",
     roleLabel: "Accueil & Administration",
@@ -22,6 +28,8 @@ export const USERS: Record<Role, User> = {
   },
   agent2: {
     id: "U02",
+    username: "agent2",
+    password: "1234",
     name: "RABE Olivier",
     role: "agent2",
     roleLabel: "Contrôle NFC & Rondes",
@@ -30,6 +38,8 @@ export const USERS: Record<Role, User> = {
   },
   agent3: {
     id: "U03",
+    username: "agent3",
+    password: "1234",
     name: "ANDRY Soa",
     role: "agent3",
     roleLabel: "Surveillance & CR",
@@ -38,6 +48,8 @@ export const USERS: Record<Role, User> = {
   },
   supervisor: {
     id: "U99",
+    username: "superviseur",
+    password: "admin",
     name: "RAJAONA Patrick",
     role: "supervisor",
     roleLabel: "Superviseur Site",
@@ -57,39 +69,9 @@ export const ACCESS_LOG: AccessLog[] = [
 ];
 
 export const VISITORS: Visitor[] = [
-  {
-    id: "V1",
-    name: "ANDRIA Paul",
-    company: "Cabinet Audit RAVO",
-    motif: "Réunion direction",
-    badge: "V-0003",
-    hostAgent: "Mme RAHARISOA",
-    arrival: "09:05",
-    expectedDuration: "2h",
-    status: "actif",
-  },
-  {
-    id: "V2",
-    name: "TIANA Lova",
-    company: "Telma Telecom",
-    motif: "Maintenance fibre",
-    badge: "V-0004",
-    hostAgent: "M. RABE",
-    arrival: "09:24",
-    expectedDuration: "4h",
-    status: "actif",
-  },
-  {
-    id: "V3",
-    name: "RANDRIA Bako",
-    company: "DHL Express",
-    motif: "Livraison colis",
-    badge: "V-0001",
-    hostAgent: "Accueil",
-    arrival: "08:12",
-    expectedDuration: "15min",
-    status: "sorti",
-  },
+  { id: "V1", name: "ANDRIA Paul", company: "Cabinet Audit RAVO", motif: "Réunion direction", badge: "V-0003", hostAgent: "Mme RAHARISOA", arrival: "09:05", expectedDuration: "2h", status: "actif" },
+  { id: "V2", name: "TIANA Lova", company: "Telma Telecom", motif: "Maintenance fibre", badge: "V-0004", hostAgent: "M. RABE", arrival: "09:24", expectedDuration: "4h", status: "actif" },
+  { id: "V3", name: "RANDRIA Bako", company: "DHL Express", motif: "Livraison colis", badge: "V-0001", hostAgent: "Accueil", arrival: "08:12", expectedDuration: "15min", status: "sorti" },
 ];
 
 export const CHECKPOINTS: Checkpoint[] = [
@@ -104,14 +86,7 @@ export const CHECKPOINTS: Checkpoint[] = [
 ];
 
 export const RONDES: Ronde[] = [
-  {
-    id: "R1",
-    circuit: "Circuit Nuit — 06h",
-    start: "06:00",
-    agent: "Agent 02",
-    checkpoints: CHECKPOINTS,
-    status: "encours",
-  },
+  { id: "R1", circuit: "Circuit Nuit — 06h", start: "06:00", agent: "Agent 02", checkpoints: CHECKPOINTS, status: "encours" },
 ];
 
 export const JOURNAL: JournalEntry[] = [
@@ -126,33 +101,9 @@ export const JOURNAL: JournalEntry[] = [
 ];
 
 export const CONSIGNES: Consigne[] = [
-  {
-    id: "C1",
-    from: "RAJAONA Patrick (Superviseur)",
-    text: "Renforcer la vigilance sur la zone parking après 18h suite à l'intrusion signalée hier soir.",
-    priority: "high",
-    time: "07:42",
-    unread: true,
-    target: "all",
-  },
-  {
-    id: "C2",
-    from: "RAJAONA Patrick (Superviseur)",
-    text: "Visite délégation prévue à 14h — accueil à préparer, escorte permanente requise (badges V-0010 à V-0014).",
-    priority: "med",
-    time: "08:10",
-    unread: true,
-    target: ["agent1", "agent2"],
-  },
-  {
-    id: "C3",
-    from: "Direction",
-    text: "Rappel — port obligatoire du badge en zone B.",
-    priority: "low",
-    time: "Hier 17:30",
-    unread: false,
-    target: "all",
-  },
+  { id: "C1", from: "RAJAONA Patrick (Superviseur)", text: "Renforcer la vigilance sur la zone parking après 18h suite à l'intrusion signalée hier soir.", priority: "high", time: "07:42", unread: true, target: "all" },
+  { id: "C2", from: "RAJAONA Patrick (Superviseur)", text: "Visite délégation prévue à 14h — accueil à préparer, escorte permanente requise (badges V-0010 à V-0014).", priority: "med", time: "08:10", unread: true, target: ["agent1", "agent2"] },
+  { id: "C3", from: "Direction", text: "Rappel — port obligatoire du badge en zone B.", priority: "low", time: "Hier 17:30", unread: false, target: "all" },
 ];
 
 export const NOTIFICATIONS: Notification[] = [
@@ -166,4 +117,43 @@ export const CAMERAS: CameraFeed[] = [
   { id: "CAM2", label: "CAM 02 — Hall accueil", status: "live" },
   { id: "CAM3", label: "CAM 03 — Parking visiteurs", status: "alerte" },
   { id: "CAM4", label: "CAM 04 — Zone stockage", status: "live" },
+];
+
+const today = new Date().toISOString().slice(0, 10);
+
+export const PERSON_MOVEMENTS: PersonMovement[] = [
+  { id: "PM1", type: "entree", personType: "permanent", fullName: "RAKOTO Jean", badge: "A-0042", badgeColor: "VERT", zone: "ZONE A", date: today, time: "08:47", agent: "Agent 01" },
+  { id: "PM2", type: "entree", personType: "permanent", fullName: "RABE Marie", badge: "A-0017", badgeColor: "VERT", zone: "ZONE B", date: today, time: "08:52", agent: "Agent 01" },
+  { id: "PM3", type: "entree", personType: "visiteur", fullName: "ANDRIA Paul", badge: "V-0003", badgeColor: "ORANGE", zone: "ZONE A", motif: "Réunion direction", date: today, time: "09:05", agent: "Agent 01" },
+  { id: "PM4", type: "entree", personType: "prestataire", fullName: "TIANA Lova", badge: "V-0004", badgeColor: "ORANGE", zone: "ZONE A", motif: "Maintenance fibre", date: today, time: "09:24", agent: "Agent 01" },
+  { id: "PM5", type: "sortie", personType: "prestataire", fullName: "RANDRIA Bako", badge: "V-0001", badgeColor: "ORANGE", zone: "ZONE A", motif: "Livraison DHL", date: today, time: "08:27", agent: "Agent 01", linkedTo: "PM0" },
+];
+
+export const VEHICLE_MOVEMENTS: VehicleMovement[] = [
+  { id: "VM1", type: "entree", plate: "3456 TBA", category: "leger", driver: "RAKOTO Jean", motif: "Personnel permanent", parkingSpot: "P-12", date: today, time: "08:45", agent: "Agent 02" },
+  { id: "VM2", type: "entree", plate: "7821 TBC", category: "utilitaire", driver: "TIANA Lova", company: "Telma Telecom", motif: "Maintenance fibre", parkingSpot: "L-03", date: today, time: "09:23", agent: "Agent 02" },
+  { id: "VM3", type: "sortie", plate: "1190 TAA", category: "poids-lourd", driver: "RANDRIA Bako", company: "DHL", motif: "Livraison terminée", date: today, time: "08:27", agent: "Agent 02" },
+];
+
+export const LOGBOOK: LogbookEntry[] = [
+  { id: "LB1", date: today, time: "06:15", category: "ronde", zone: "Périmètre", description: "Début ronde Circuit Nuit, tous accès vérifiés.", severity: "info", agent: "Agent 02" },
+  { id: "LB2", date: today, time: "07:42", category: "observation", zone: "Parking", description: "Véhicule visiteur stationné sans badge — propriétaire identifié et badge délivré.", severity: "mineur", agent: "Agent 01" },
+  { id: "LB3", date: today, time: "09:12", category: "alerte", zone: "ZONE A", description: "Badge inconnu refusé au lecteur principal. Alerte superviseur émise.", severity: "majeur", agent: "Système" },
+  { id: "LB4", date: today, time: "09:32", category: "incident", zone: "Parking visiteurs", description: "Détection mouvement caméra 03 hors horaires, levée de doute OK.", severity: "mineur", agent: "Agent 03" },
+];
+
+export const VACATIONS: Vacation[] = [
+  {
+    id: "VAC1",
+    date: today,
+    shift: "jour",
+    outgoingAgent: "Équipe Nuit (RAFANO Hery)",
+    incomingAgent: "KOUASSI Anicet",
+    summary: "RAS sur la nuit, 1 alerte caméra levée à 03h12 (chat errant).",
+    remarks: "Stock badges visiteurs : 12 restants. Renforcer le suivi parking après 18h.",
+    pendingItems: "Visite délégation prévue 14h — préparer 5 badges ORANGE.",
+    signedOut: true,
+    signedIn: true,
+    status: "validee",
+  },
 ];

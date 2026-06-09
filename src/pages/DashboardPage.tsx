@@ -1,10 +1,10 @@
 import { Activity, BadgeCheck, AlertTriangle, Footprints, Users, Nfc, ClipboardList } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import StatCard from "../components/ui/StatCard";
-import PageHeader from "../components/ui/PageHeader";
-import { CHECKPOINTS, CONSIGNES, JOURNAL, VISITORS } from "../data/mock";
-import AccessLogList from "../components/blocks/AccessLogList";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
+import AccessLogList from "../components/blocks/AccessLogList";
+import { JOURNAL, CHECKPOINTS, CONSIGNES, VISITORS } from "../data/mock";
 
 export default function DashboardPage() {
   const { user } = useAuth();

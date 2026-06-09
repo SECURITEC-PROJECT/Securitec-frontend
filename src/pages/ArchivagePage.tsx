@@ -1,6 +1,6 @@
 import { Archive, Search, Download } from "lucide-react";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
 
 const ARCHIVES = [
   { date: "2026-05-05", vacation: "Nuit 18h-06h", agent: "RANDRIA Tojo", events: 38, incidents: 1, status: "Validé" },

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Mail, CheckCheck, Plus } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { CONSIGNES } from "../data/mock";
-import type { Consigne } from "../types";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
+import { CONSIGNES } from "../data/mock";
+import { useAuth } from "../context/AuthContext";
+import type { Consigne } from "../types";
 
 export default function ConsignesPage() {
   const { user } = useAuth();

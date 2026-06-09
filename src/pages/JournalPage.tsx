@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Search, Download, FileText } from "lucide-react";
-import type { JournalEntry } from "../types";
-import { JOURNAL } from "../data/mock";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
+import { JOURNAL } from "../data/mock";
+import type { JournalEntry } from "../types";
 
 const TYPES: JournalEntry["type"][] = ["info", "acces", "ronde", "visiteur", "alerte", "cr"];
 

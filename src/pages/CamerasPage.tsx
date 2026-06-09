@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Video, ZoomIn, Download, AlertTriangle } from "lucide-react";
-import { CAMERAS } from "../data/mock";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
+import { CAMERAS } from "../data/mock";
 
 export default function CamerasPage() {
   const [selected, setSelected] = useState(CAMERAS[0].id);

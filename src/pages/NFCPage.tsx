@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Nfc, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
+import PageHeader from "../components/ui/PageHeader";
 import AccessLogList from "../components/blocks/AccessLogList";
 
 type ScanResult = {

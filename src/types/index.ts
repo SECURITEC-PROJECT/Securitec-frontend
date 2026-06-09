@@ -2,6 +2,8 @@ export type Role = "agent1" | "agent2" | "agent3" | "supervisor";
 
 export interface User {
   id: string;
+  username: string;
+  password: string;
   name: string;
   role: Role;
   roleLabel: string;
@@ -77,4 +79,63 @@ export interface CameraFeed {
   id: string;
   label: string;
   status: "live" | "alerte";
+}
+
+/* ====== Nouveaux modules CDC ====== */
+
+export type BadgeColor = "VERT" | "ORANGE" | "BLEU" | "ROUGE";
+export type PersonType = "permanent" | "visiteur" | "prestataire" | "interimaire";
+
+export interface PersonMovement {
+  id: string;
+  type: "entree" | "sortie";
+  personType: PersonType;
+  fullName: string;
+  badge: string;
+  badgeColor: BadgeColor;
+  zone: string;
+  motif?: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  agent: string; // saisi par
+  linkedTo?: string; // id de l'entrée correspondante pour une sortie
+}
+
+export interface VehicleMovement {
+  id: string;
+  type: "entree" | "sortie";
+  plate: string;
+  category: "leger" | "utilitaire" | "poids-lourd" | "moto";
+  driver: string;
+  company?: string;
+  motif: string;
+  parkingSpot?: string;
+  date: string;
+  time: string;
+  agent: string;
+}
+
+export interface LogbookEntry {
+  id: string;
+  date: string;
+  time: string;
+  category: "ronde" | "incident" | "intervention" | "livraison" | "observation" | "alerte";
+  zone: string;
+  description: string;
+  severity: "info" | "mineur" | "majeur" | "critique";
+  agent: string;
+}
+
+export interface Vacation {
+  id: string;
+  date: string;
+  shift: "jour" | "nuit";
+  outgoingAgent: string;
+  incomingAgent: string;
+  summary: string;
+  remarks: string;
+  pendingItems: string;
+  signedOut: boolean;
+  signedIn: boolean;
+  status: "en-cours" | "transmise" | "validee";
 }

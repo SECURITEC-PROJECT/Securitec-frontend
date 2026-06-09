@@ -12,6 +12,11 @@ import {
   Archive,
   ShieldCheck,
   LogOut,
+  DoorOpen,
+  Car,
+  Repeat,
+  CreditCard,
+  Scale,
   X,
 } from "lucide-react";
 import type { Role } from "../../types";
@@ -25,18 +30,51 @@ interface NavConfig {
   dot?: "green" | "orange" | "red";
 }
 
-const NAV: NavConfig[] = [
-  { to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard, roles: ["agent1", "agent2", "agent3", "supervisor"], dot: "green" },
-  { to: "/prise-de-poste", label: "Prise de poste", icon: ClipboardList, roles: ["agent1"] },
-  { to: "/journal", label: "Journal de bord", icon: BookOpen, roles: ["agent1", "agent2", "agent3", "supervisor"] },
-  { to: "/nfc", label: "Contrôle NFC", icon: Nfc, roles: ["agent2"], dot: "green" },
-  { to: "/visiteurs", label: "Registre visiteurs", icon: Users, roles: ["agent1", "supervisor"] },
-  { to: "/rondes", label: "Rondes digitalisées", icon: Footprints, roles: ["agent2"], dot: "orange" },
-  { to: "/cameras", label: "Surveillance caméras", icon: Video, roles: ["agent3", "supervisor"], dot: "red" },
-  { to: "/cr", label: "CR automatisé", icon: FileText, roles: ["agent3", "supervisor"] },
-  { to: "/consignes", label: "Consignes", icon: Mail, roles: ["agent1", "agent2", "agent3", "supervisor"], dot: "orange" },
-  { to: "/archivage", label: "Archivage", icon: Archive, roles: ["supervisor"] },
-  { to: "/audit", label: "Audit", icon: ShieldCheck, roles: ["supervisor"] },
+const ALL: Role[] = ["agent1", "agent2", "agent3", "supervisor"];
+
+const NAV: { section: string; items: NavConfig[] }[] = [
+  {
+    section: "Pilotage",
+    items: [
+      { to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard, roles: ALL, dot: "green" },
+      { to: "/consignes", label: "Consignes", icon: Mail, roles: ALL, dot: "orange" },
+    ],
+  },
+  {
+    section: "Saisie opérateur",
+    items: [
+      { to: "/prise-de-poste", label: "Prise de poste", icon: ClipboardList, roles: ["agent1"] },
+      { to: "/entrees-sorties", label: "Entrées / Sorties", icon: DoorOpen, roles: ["agent1", "agent2", "supervisor"] },
+      { to: "/vehicules", label: "Mouvements véhicules", icon: Car, roles: ["agent1", "agent2", "supervisor"] },
+      { to: "/visiteurs", label: "Registre visiteurs", icon: Users, roles: ["agent1", "supervisor"] },
+      { to: "/main-courante", label: "Main courante", icon: BookOpen, roles: ALL },
+      { to: "/passations", label: "Passations", icon: Repeat, roles: ALL },
+    ],
+  },
+  {
+    section: "Terrain",
+    items: [
+      { to: "/nfc", label: "Contrôle NFC", icon: Nfc, roles: ["agent2", "supervisor"], dot: "green" },
+      { to: "/rondes", label: "Rondes digitalisées", icon: Footprints, roles: ["agent2", "supervisor"], dot: "orange" },
+      { to: "/cameras", label: "Surveillance caméras", icon: Video, roles: ["agent3", "supervisor"], dot: "red" },
+      { to: "/cr", label: "CR automatisé", icon: FileText, roles: ["agent3", "supervisor"] },
+    ],
+  },
+  {
+    section: "Référentiel",
+    items: [
+      { to: "/badges", label: "Système de badges", icon: CreditCard, roles: ALL },
+      { to: "/reglement", label: "Règlement intérieur", icon: Scale, roles: ALL },
+      { to: "/journal", label: "Journal de bord", icon: BookOpen, roles: ALL },
+    ],
+  },
+  {
+    section: "Supervision",
+    items: [
+      { to: "/archivage", label: "Archivage", icon: Archive, roles: ["supervisor"] },
+      { to: "/audit", label: "Audit", icon: ShieldCheck, roles: ["supervisor"] },
+    ],
+  },
 ];
 
 const AGENTS: { role: Role; label: string; sub: string; av: string }[] = [
@@ -46,111 +84,69 @@ const AGENTS: { role: Role; label: string; sub: string; av: string }[] = [
   { role: "supervisor", label: "Superviseur", sub: "Site", av: "av4" },
 ];
 
-interface SidebarProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-export default function Sidebar({ open, onClose }: SidebarProps) {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { user, switchRole, logout } = useAuth();
   if (!user) return null;
 
-  const items = NAV.filter((n) => n.roles.includes(user.role));
-  // 4 premiers items pour la bottom nav mobile
-  const bottomNavItems = items.slice(0, 4);
-
   return (
-    <>
-      {/* Overlay sombre sur mobile quand sidebar ouverte */}
-      {open && (
-        <div
-          className="sidebar-overlay"
-          onClick={onClose}
-          aria-hidden="true"
-        />
+    <aside className="sidebar">
+      {onClose && (
+        <div className="sidebar-mobile-head">
+          <span style={{ fontFamily: "var(--font-head)", color: "var(--accent)", letterSpacing: 2 }}>MENU</span>
+          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
       )}
 
-      {/* Sidebar principale */}
-      <aside className={`sidebar${open ? " sidebar-open" : ""}`}>
-        {/* Header sidebar mobile */}
-        <div className="sidebar-mobile-header">
-          <span className="sidebar-mobile-title">MENU</span>
-          <button className="sidebar-close-btn" onClick={onClose} aria-label="Fermer">
-            <X size={16} />
-          </button>
-        </div>
+      {NAV.map((group) => {
+        const items = group.items.filter((n) => n.roles.includes(user.role));
+        if (items.length === 0) return null;
+        return (
+          <div key={group.section}>
+            <div className="sidebar-section">{group.section}</div>
+            {items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onClose}
+                  className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+                >
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                  {item.dot && <span className={`nav-dot dot-${item.dot}`} />}
+                </NavLink>
+              );
+            })}
+          </div>
+        );
+      })}
 
-        {/* Navigation */}
-        <div className="sidebar-section">Navigation</div>
-        <nav className="sidebar-nav">
-          {items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
-                onClick={onClose}
-              >
-                <span className="nav-item-icon">
-                  <Icon size={15} />
-                </span>
-                <span className="nav-item-label">{item.label}</span>
-                {item.dot && <span className={`nav-dot dot-${item.dot}`} />}
-              </NavLink>
-            );
-          })}
-        </nav>
-
-        {/* Équipe / Switcher */}
-        <div className="sidebar-section" style={{ marginTop: 14 }}>Équipe poste</div>
-        <div className="sidebar-team">
-          <div className="switcher-label">CHANGER DE PROFIL (DÉMO)</div>
-          {AGENTS.map((a) => (
-            <button
-              key={a.role}
-              className={`agent-btn${user.role === a.role ? " current" : ""}`}
-              onClick={() => { switchRole(a.role); onClose(); }}
-            >
-              <span className={`agent-avatar ${a.av}`}>
-                {a.role === "supervisor" ? "SV" : a.role.slice(-2).padStart(2, "0")}
-              </span>
-              <div className="agent-btn-info">
-                <div className="agent-btn-name">{a.label}</div>
-                <div className="agent-btn-sub">{a.sub}</div>
-              </div>
-              {user.role === a.role && <span className="agent-active-indicator" />}
-            </button>
-          ))}
+      <div className="sidebar-section" style={{ marginTop: 14 }}>Équipe poste</div>
+      <div className="sidebar-team">
+        <div className="switcher-label">CHANGER DE PROFIL (DÉMO)</div>
+        {AGENTS.map((a) => (
           <button
-            className="agent-btn logout-btn"
-            onClick={logout}
+            key={a.role}
+            className={`agent-btn${user.role === a.role ? " current" : ""}`}
+            onClick={() => { switchRole(a.role); onClose?.(); }}
           >
-            <LogOut size={14} />
-            Déconnexion
+            <span className={`agent-avatar ${a.av}`}>{a.role === "supervisor" ? "SV" : a.role.slice(-2).padStart(2, "0")}</span>
+            <div>
+              <div style={{ fontSize: "0.78rem", fontWeight: 700 }}>{a.label}</div>
+              <div style={{ fontSize: "0.65rem", color: "var(--text3)" }}>{a.sub}</div>
+            </div>
           </button>
-        </div>
-      </aside>
-
-      {/* Bottom Navigation — visible uniquement mobile */}
-      <nav className="bottom-nav" aria-label="Navigation principale">
-        {bottomNavItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `bottom-nav-item${isActive ? " active" : ""}`}
-            >
-              <span className="bottom-nav-icon">
-                <Icon size={18} />
-                {item.dot && <span className={`bottom-nav-dot dot-${item.dot}`} />}
-              </span>
-              <span className="bottom-nav-label">{item.label.split(" ")[0]}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-    </>
+        ))}
+        <button
+          className="agent-btn"
+          onClick={() => { logout(); onClose?.(); }}
+          style={{ marginTop: 6, color: "var(--red)" }}
+        >
+          <LogOut size={14} />
+          Déconnexion
+        </button>
+      </div>
+    </aside>
   );
 }

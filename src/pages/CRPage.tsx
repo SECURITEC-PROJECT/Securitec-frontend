@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { FileText, Send, PenLine, Download } from "lucide-react";
-import PageHeader from "../components/ui/PageHeader";
 import Panel from "../components/ui/Panel";
-import { CHECKPOINTS, JOURNAL, VISITORS } from "../data/mock";
+import PageHeader from "../components/ui/PageHeader";
+import { JOURNAL, VISITORS, CHECKPOINTS } from "../data/mock";
 import { useAuth } from "../context/AuthContext";
 
 export default function CRPage() {
