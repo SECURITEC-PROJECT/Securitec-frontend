@@ -91,6 +91,46 @@ export interface CameraFeed {
   status: "live" | "alerte";
 }
 
+export interface CameraExtraction {
+  id: string;
+  cameraId: string;
+  cameraLabel: string;
+  requestedBy: string;
+  requestedAt: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  status: "ready" | "processing" | "failed";
+  playbackUrl?: string | null;
+  message?: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  time: string;
+  date?: string | null;
+  actor: string;
+  action: string;
+  level: "info" | "warn" | "alert";
+}
+
+export interface ArchiveEntry {
+  id: string;
+  date: string;
+  shift: "jour" | "nuit";
+  outgoingAgent: string;
+  incomingAgent: string;
+  summary: string;
+  remarks: string;
+  pendingItems: string;
+  signedOut: boolean;
+  signedIn: boolean;
+  status: "en-cours" | "transmise" | "validee";
+  eventCount: number;
+  incidentCount: number;
+  accessCount: number;
+}
+
 /* ====== Nouveaux modules CDC ====== */
 
 export type BadgeColor = "VERT" | "ORANGE" | "BLEU" | "ROUGE";

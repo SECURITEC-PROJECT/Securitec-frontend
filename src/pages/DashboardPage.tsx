@@ -9,11 +9,12 @@ import { useData } from "../context/DataContext";
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { journal, rondes, consignes, visitors, accessLogs, persons, vehicles } = useData();
+  const { journal, rondes, consignes, visitors, accessLogs, persons, vehicles, addNotification } = useData();
   const [sosSent, setSosSent] = useState(false);
+
   if (!user) return null;
 
-  const allCheckpoints = rondes.flatMap(r => r.checkpoints);
+  const allCheckpoints = rondes.flatMap((r) => r.checkpoints);
   const doneCp = allCheckpoints.filter((c) => c.status === "done").length;
   const missedCp = allCheckpoints.filter((c) => c.status === "missed").length;
   const unreadConsignes = consignes.filter((c) => c.unread).length;
@@ -24,11 +25,30 @@ export default function DashboardPage() {
   const userName = user.name.split(" ")[0];
   const aiSummary = `Résumé opérationnel : ${alertCount} alerte(s) active(s), ${missedCp} ronde(s) à corriger et ${activeVisitors} visiteur(s) présents.`;
 
+  const nowTime = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+  const sendSos = async () => {
+    await addNotification({
+      text: `SOS urgence émis par ${user.name} - intervention requise.`,
+      time: nowTime(),
+      type: "alert",
+    });
+    setSosSent(true);
+  };
+
+  const sendPush = async () => {
+    await addNotification({
+      text: `Notification push envoyée par ${user.name}.`,
+      time: nowTime(),
+      type: "info",
+    });
+  };
+
   return (
     <>
       <PageHeader
         title="Tableau de bord"
-        subtitle={`Bonjour ${userName} — session sécurisée, données chargées depuis MySQL.`}
+        subtitle={`Bonjour ${userName} - session sécurisée, données chargées depuis MySQL.`}
       />
 
       <div className="status-bar">
@@ -45,10 +65,10 @@ export default function DashboardPage() {
           badge={{ label: "NOUVEAU", tone: "green" }}
         >
           <div className="quick-grid">
-            <button className="btn-danger" onClick={() => setSosSent(true)}>
+            <button className="btn-danger" type="button" onClick={sendSos}>
               <ShieldAlert size={14} /> SOS urgence
             </button>
-            <button className="btn-secondary">
+            <button className="btn-secondary" type="button" onClick={sendPush}>
               <BellRing size={14} /> Notification push
             </button>
           </div>
@@ -57,7 +77,7 @@ export default function DashboardPage() {
           </p>
           {sosSent && (
             <div className="login-error" style={{ marginTop: 10 }}>
-              Alerte SOS transmise au superviseur — géolocalisation et contexte d’intervention ajoutés.
+              Alerte SOS transmise au superviseur - géolocalisation et contexte d'intervention ajoutés.
             </div>
           )}
         </Panel>
@@ -154,7 +174,7 @@ export default function DashboardPage() {
                   <span className="ci-time">{c.time}</span>
                 </div>
                 <div className="ci-text">{c.text}</div>
-                <div className="ci-from">— {c.from}</div>
+                <div className="ci-from">- {c.from}</div>
               </li>
             ))}
           </ul>

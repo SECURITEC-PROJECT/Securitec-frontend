@@ -3,6 +3,7 @@ import { CheckCircle2, Send, PenLine } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
 import { useAuth } from "../context/AuthContext";
+import { useData } from "../context/DataContext";
 
 const EQUIPMENTS = [
   "Tablette agent",
@@ -15,13 +16,59 @@ const EQUIPMENTS = [
 
 export default function PriseDePostePage() {
   const { user } = useAuth();
-  const [vacation, setVacation] = useState("Matin 06h–18h");
+  const { addLog, addNotification } = useData();
+  const [vacation, setVacation] = useState("Matin 06h-18h");
   const [effectif, setEffectif] = useState("3");
-  const [etat, setEtat] = useState("RAS — Site sécurisé, tous accès opérationnels.");
+  const [etat, setEtat] = useState("RAS - Site sécurisé, tous accès opérationnels.");
   const [checks, setChecks] = useState<Record<string, boolean>>(
     Object.fromEntries(EQUIPMENTS.map((e) => [e, true])),
   );
   const [signed, setSigned] = useState(false);
+  const [transmitted, setTransmitted] = useState(false);
+
+  const checkedCount = Object.values(checks).filter(Boolean).length;
+  const hasIssues = checkedCount !== EQUIPMENTS.length;
+
+  const transmit = async () => {
+    if (!signed || transmitted) return;
+
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const time = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const agent = user?.name ?? "Agent";
+
+    await addLog({
+      date,
+      time,
+      category: hasIssues ? "alerte" : "intervention",
+      zone: "POSTE D'ACCUEIL",
+      description: `Prise de poste transmise par ${agent}. Vacation ${vacation}, effectif ${effectif}. Équipements: ${checkedCount}/${EQUIPMENTS.length} OK. État: ${etat}`,
+      severity: hasIssues ? "majeur" : "info",
+      agent,
+    });
+
+    await addNotification({
+      text: `Prise de poste de ${agent} transmise au superviseur.`,
+      time,
+      type: hasIssues ? "warn" : "info",
+    });
+
+    setTransmitted(true);
+  };
+
+  const signPoste = async () => {
+    if (signed) return;
+
+    const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+    await addNotification({
+      text: `Prise de poste signée par ${user?.name ?? "Agent"}.`,
+      time,
+      type: "info",
+    });
+
+    setSigned(true);
+  };
 
   return (
     <>
@@ -50,9 +97,9 @@ export default function PriseDePostePage() {
             <div className="form-group">
               <label className="form-label">Vacation</label>
               <select className="form-select" value={vacation} onChange={(e) => setVacation(e.target.value)}>
-                <option>Matin 06h–18h</option>
-                <option>Nuit 18h–06h</option>
-                <option>Renfort 12h–20h</option>
+                <option>Matin 06h-18h</option>
+                <option>Nuit 18h-06h</option>
+                <option>Renfort 12h-20h</option>
               </select>
             </div>
             <div className="form-group">
@@ -71,7 +118,10 @@ export default function PriseDePostePage() {
         <ul className="grid grid-cols-2 gap-2">
           {EQUIPMENTS.map((e) => (
             <li key={e}>
-              <label className="flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer" style={{ background: "var(--surface2)", border: "1px solid var(--border)" }}>
+              <label
+                className="flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer"
+                style={{ background: "var(--surface2)", border: "1px solid var(--border)" }}
+              >
                 <input
                   type="checkbox"
                   checked={checks[e]}
@@ -90,14 +140,16 @@ export default function PriseDePostePage() {
 
       <Panel title="Signature & transmission" icon={<Send size={16} color="var(--accent)" />}>
         <div className={`sig-pad ${signed ? "signed" : ""}`}>
-          {signed ? `Signé électroniquement par ${user?.name} le ${new Date().toLocaleString("fr-FR")}` : "Zone de signature — touchez ou cliquez pour signer"}
+          {signed
+            ? `Signé électroniquement par ${user?.name} le ${new Date().toLocaleString("fr-FR")}`
+            : "Zone de signature - touchez ou cliquez pour signer"}
         </div>
         <div className="btn-row mt-4">
-          <button className="btn-primary" onClick={() => setSigned(true)} disabled={signed}>
+          <button className="btn-primary" type="button" onClick={signPoste} disabled={signed}>
             <PenLine size={14} /> Signer la prise de poste
           </button>
-          <button className="btn-secondary" onClick={() => alert("Prise de poste transmise au superviseur (simulation)")} disabled={!signed}>
-            <Send size={14} /> Envoyer au superviseur
+          <button className="btn-secondary" type="button" onClick={transmit} disabled={!signed || transmitted}>
+            <Send size={14} /> {transmitted ? "Transmise" : "Envoyer au superviseur"}
           </button>
         </div>
       </Panel>
