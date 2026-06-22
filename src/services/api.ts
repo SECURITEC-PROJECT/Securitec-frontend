@@ -38,6 +38,7 @@ export const apiFetch = async (
   options: RequestInit = {}
 ): Promise<any> => {
   const url = `${API_URL}${endpoint}`;
+  const isAuthEndpoint = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/refresh');
   
   // Set credentials for cookies
   options.credentials = 'include';
@@ -56,7 +57,7 @@ export const apiFetch = async (
   let response = await fetch(url, options);
 
   // If unauthorized, token might be expired
-  if (response.status === 401) {
+  if (response.status === 401 && !isAuthEndpoint) {
     // Prevent multiple parallel refresh calls
     if (!refreshPromise) {
       refreshPromise = refreshTokens().finally(() => {
@@ -77,6 +78,11 @@ export const apiFetch = async (
       window.dispatchEvent(new Event('auth-logout'));
       throw new Error('Session expirée. Veuillez vous reconnecter.');
     }
+  }
+
+  if (!response.ok && isAuthEndpoint) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Erreur serveur (${response.status})`);
   }
 
   if (!response.ok) {
