@@ -11,6 +11,16 @@ export interface User {
   avatar: string;
 }
 
+export interface UserAdmin {
+  id: string;
+  username: string;
+  name: string;
+  role: Role;
+  roleLabel: string;
+  vacation: string;
+  avatar: string;
+}
+
 export interface AccessLog {
   id: string;
   name: string;

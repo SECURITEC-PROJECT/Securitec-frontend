@@ -5,31 +5,37 @@ import StatCard from "../components/ui/StatCard";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
 import AccessLogList from "../components/blocks/AccessLogList";
-import { JOURNAL, CHECKPOINTS, CONSIGNES, VISITORS } from "../data/mock";
+import { useData } from "../context/DataContext";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { journal, rondes, consignes, visitors, accessLogs, persons, vehicles } = useData();
   const [sosSent, setSosSent] = useState(false);
   if (!user) return null;
 
-  const doneCp = CHECKPOINTS.filter((c) => c.status === "done").length;
-  const missedCp = CHECKPOINTS.filter((c) => c.status === "missed").length;
-  const unreadConsignes = CONSIGNES.filter((c) => c.unread).length;
-  const activeVisitors = VISITORS.filter((v) => v.status === "actif").length;
-  const aiSummary = `Résumé IA : ${JOURNAL.filter((j) => j.type === "alerte").length} incident(s) à surveiller, ${missedCp} ronde(s) à valider et ${activeVisitors} visiteur(s) présents.`;
+  const allCheckpoints = rondes.flatMap(r => r.checkpoints);
+  const doneCp = allCheckpoints.filter((c) => c.status === "done").length;
+  const missedCp = allCheckpoints.filter((c) => c.status === "missed").length;
+  const unreadConsignes = consignes.filter((c) => c.unread).length;
+  const activeVisitors = visitors.filter((v) => v.status === "actif").length;
+  const alertCount = journal.filter((j) => j.type === "alerte").length + missedCp + unreadConsignes;
+  const accessCount = accessLogs.length;
+  const movementCount = persons.length + vehicles.length;
+  const userName = user.name.split(" ")[0];
+  const aiSummary = `Résumé opérationnel : ${alertCount} alerte(s) active(s), ${missedCp} ronde(s) à corriger et ${activeVisitors} visiteur(s) présents.`;
 
   return (
     <>
       <PageHeader
         title="Tableau de bord"
-        subtitle={`Bonjour ${user.name.split(" ")[0]} — vacation en cours, tout est sous contrôle.`}
+        subtitle={`Bonjour ${userName} — session sécurisée, données chargées depuis MySQL.`}
       />
 
       <div className="status-bar">
-        <StatCard label="Passages aujourd'hui" value={47} sub="+8 depuis 1h" tone="blue" icon={<Activity size={22} />} />
-        <StatCard label="Badges verts actifs" value={39} sub="Personnel permanent" tone="green" icon={<BadgeCheck size={22} />} />
+        <StatCard label="Logs d'accès" value={accessCount} sub="Flux réel du backend" tone="blue" icon={<Activity size={22} />} />
+        <StatCard label="Mouvements enregistrés" value={movementCount} sub="Personnes et véhicules" tone="green" icon={<BadgeCheck size={22} />} />
         <StatCard label="Visiteurs actifs" value={activeVisitors} sub="Badges orange en site" tone="orange" icon={<Users size={22} />} />
-        <StatCard label="Accès refusés" value={2} sub="Alerte superviseur émise" tone="red" icon={<AlertTriangle size={22} />} />
+        <StatCard label="Alertes à traiter" value={alertCount} sub="Rondes, consignes, journal" tone="red" icon={<AlertTriangle size={22} />} />
       </div>
 
       <div className="row2">
@@ -63,7 +69,7 @@ export default function DashboardPage() {
         >
           <p className="ci-text">{aiSummary}</p>
           <div className="vacation-card" style={{ marginTop: 10 }}>
-            <div className="vac-block"><b>Suggestion :</b> prioriser la zone Parking et la ronde CP4 avant la fin de vacation.</div>
+            <div className="vac-block"><b>Suggestion :</b> traiter les alertes ouvertes et valider CP4 avant la fin de vacation.</div>
           </div>
         </Panel>
       </div>
@@ -87,17 +93,17 @@ export default function DashboardPage() {
               <div
                 className="h-full"
                 style={{
-                  width: `${Math.round((doneCp / CHECKPOINTS.length) * 100)}%`,
+                  width: `${allCheckpoints.length > 0 ? Math.round((doneCp / allCheckpoints.length) * 100) : 0}%`,
                   background: "linear-gradient(90deg, var(--accent), var(--green))",
                 }}
               />
             </div>
             <span className="text-sm font-bold" style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
-              {doneCp}/{CHECKPOINTS.length}
+              {doneCp}/{allCheckpoints.length}
             </span>
           </div>
           <ul className="flex flex-col gap-2">
-            {CHECKPOINTS.slice(0, 5).map((cp) => (
+            {allCheckpoints.slice(0, 5).map((cp) => (
               <li key={cp.id} className="flex items-center gap-2 text-sm">
                 <span
                   className={`pill ${cp.status === "done" ? "pill-green" : cp.status === "missed" ? "pill-red" : "pill-muted"}`}
@@ -121,7 +127,7 @@ export default function DashboardPage() {
           badge={{ label: "JOURNAL", tone: "blue" }}
         >
           <ul className="flex flex-col gap-2">
-            {JOURNAL.slice(0, 7).map((j) => (
+            {journal.slice(0, 7).map((j) => (
               <li key={j.id} className="flex items-center gap-3 text-sm py-1">
                 <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "0.72rem", minWidth: 44 }}>
                   {j.time}
@@ -141,7 +147,7 @@ export default function DashboardPage() {
           badge={{ label: `${unreadConsignes} NON LUES`, tone: "orange" }}
         >
           <ul className="consigne-list">
-            {CONSIGNES.slice(0, 3).map((c) => (
+            {consignes.slice(0, 3).map((c) => (
               <li key={c.id} className={`consigne-item${c.unread ? " unread" : ""}`}>
                 <div className="ci-meta">
                   <span className={`ci-priority prio-${c.priority}`}>{c.priority.toUpperCase()}</span>

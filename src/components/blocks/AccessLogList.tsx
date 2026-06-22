@@ -1,4 +1,4 @@
-import { ACCESS_LOG } from "../../data/mock";
+import { useData } from "../../context/DataContext";
 import type { AccessLog } from "../../types";
 
 function toneFor(type: AccessLog["type"]) {
@@ -8,9 +8,10 @@ function toneFor(type: AccessLog["type"]) {
 }
 
 export default function AccessLogList({ limit = 6 }: { limit?: number }) {
+  const { accessLogs } = useData();
   return (
     <div className="access-log">
-      {ACCESS_LOG.slice(0, limit).map((e) => {
+      {accessLogs.slice(0, limit).map((e) => {
         const t = toneFor(e.type);
         return (
           <div key={e.id} className={`access-entry ${t.ae}`}>

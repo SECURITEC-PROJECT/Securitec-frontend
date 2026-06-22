@@ -1,52 +1,86 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Role, User } from "../types";
-import { USERS } from "../data/mock";
+import { api, setAccessToken } from "../services/api";
 
 interface AuthContextValue {
   user: User | null;
-  login: (username: string, password: string) => { ok: boolean; error?: string };
-  logout: () => void;
-  switchRole: (role: Role) => void;
+  loading: boolean;
+  login: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => Promise<void>;
   hasRole: (...roles: Role[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const STORAGE_KEY = "securitec.role";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // Try to load user profile on startup (by first calling refresh or me)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Role | null;
-      if (stored && USERS[stored]) setUser(USERS[stored]);
-    } catch { /* ignore */ }
+    const initAuth = async () => {
+      try {
+        // Calling /auth/me will trigger apiFetch's interceptor to call /auth/refresh if access token is null/expired
+        const data = await api.get("/auth/me");
+        setUser(data.user);
+      } catch (err) {
+        // Not logged in or expired refresh token
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Listen to global logout events from api client
+    const handleGlobalLogout = () => {
+      setUser(null);
+    };
+
+    window.addEventListener("auth-logout", handleGlobalLogout);
+    return () => {
+      window.removeEventListener("auth-logout", handleGlobalLogout);
+    };
   }, []);
 
-  const persist = (u: User | null) => {
+  const login = async (username: string, password: string) => {
     try {
-      if (u) localStorage.setItem(STORAGE_KEY, u.role);
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch { /* ignore */ }
+      const data = await api.post("/auth/login", { username, password });
+      setAccessToken(data.accessToken);
+      setUser(data.user);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err.message || "Erreur de connexion" };
+    }
   };
+
+  const logout = async () => {
+    try {
+      await api.post("/auth/logout", {});
+    } catch (err) {
+      console.error("Logout request failed:", err);
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+    }
+  };
+
+  const hasRole = (...roles: Role[]) => !!user && roles.includes(user.role);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
-    login: (username, password) => {
-      const found = Object.values(USERS).find(
-        (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password,
-      );
-      if (!found) return { ok: false, error: "Identifiant ou mot de passe incorrect." };
-      setUser(found);
-      persist(found);
-      return { ok: true };
-    },
-    switchRole: (role) => { setUser(USERS[role]); persist(USERS[role]); },
-    logout: () => { setUser(null); persist(null); },
-    hasRole: (...roles) => !!user && roles.includes(user.role),
-  }), [user]);
+    loading,
+    login,
+    logout,
+    hasRole,
+  }), [user, loading]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

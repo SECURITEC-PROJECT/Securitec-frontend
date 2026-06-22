@@ -2,24 +2,21 @@ import { useState } from "react";
 import { Footprints, Play, Check, X, MapPin } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
-import { CHECKPOINTS } from "../data/mock";
-import type { Checkpoint } from "../types";
+import { useData } from "../context/DataContext";
 
 export default function RondesPage() {
   const [circuit, setCircuit] = useState("Circuit Nuit");
-  const [points, setPoints] = useState<Checkpoint[]>(CHECKPOINTS);
+  const { rondes, updateCheckpoint } = useData();
+
+  const activeRonde = rondes.find((r) => r.status === "encours") || rondes[0];
+  const points = activeRonde ? activeRonde.checkpoints : [];
 
   const validate = (id: string) => {
-    setPoints((p) =>
-      p.map((c) =>
-        c.id === id
-          ? { ...c, status: "done", time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) }
-          : c,
-      ),
-    );
+    updateCheckpoint(id, "done", new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
   };
+  
   const skip = (id: string) => {
-    setPoints((p) => p.map((c) => (c.id === id ? { ...c, status: "missed" } : c)));
+    updateCheckpoint(id, "missed");
   };
 
   const done = points.filter((c) => c.status === "done").length;

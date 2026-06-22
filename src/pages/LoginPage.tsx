@@ -1,16 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, LogIn, User as UserIcon, KeyRound, AlertCircle } from "lucide-react";
+import { Shield, LogIn, User as UserIcon, KeyRound, AlertCircle, Lock } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { USERS } from "../data/mock";
-import type { Role } from "../types";
-
-const ROLES: { role: Role; sub: string }[] = [
-  { role: "agent1", sub: "Accueil & Admin" },
-  { role: "agent2", sub: "NFC & Rondes" },
-  { role: "agent3", sub: "Surveillance & CR" },
-  { role: "supervisor", sub: "Superviseur" },
-];
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -18,22 +9,16 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = login(username, password);
+    setLoading(true);
+    const res = await login(username, password);
+    setLoading(false);
     if (!res.ok) { setError(res.error ?? "Erreur de connexion"); return; }
     setError(null);
     navigate("/dashboard");
-  };
-
-  const quick = (r: Role) => {
-    const u = USERS[r];
-    setUsername(u.username);
-    setPassword(u.password);
-    setError(null);
-    const res = login(u.username, u.password);
-    if (res.ok) navigate("/dashboard");
   };
 
   return (
@@ -81,34 +66,22 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button type="submit" className="btn-primary w-full justify-center">
-            <LogIn size={14} /> Connexion
+          <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
+            <LogIn size={14} /> {loading ? "Connexion..." : "Connexion"}
           </button>
         </form>
 
-        <div className="login-divider"><span>OU CONNEXION RAPIDE DÉMO</span></div>
+        <div className="login-divider"><span>ACCÈS SÉCURISÉ</span></div>
 
-        <div className="quick-grid">
-          {ROLES.map((r) => {
-            const u = USERS[r.role];
-            return (
-              <button key={r.role} className="role-card" onClick={() => quick(r.role)} type="button">
-                <span className={`agent-avatar ${
-                  r.role === "agent1" ? "av1" : r.role === "agent2" ? "av2" : r.role === "agent3" ? "av3" : "av4"
-                }`} style={{ width: 34, height: 34, fontSize: "0.75rem" }}>
-                  {r.role === "supervisor" ? "SV" : r.role.slice(-2).padStart(2, "0")}
-                </span>
-                <div className="flex-1">
-                  <div className="role-card-title" style={{ fontSize: "0.82rem" }}>{u.name}</div>
-                  <div className="role-card-sub">{r.sub} · <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{u.username}/{u.password}</span></div>
-                </div>
-              </button>
-            );
-          })}
+        <div className="vacation-card" style={{ marginTop: 10 }}>
+          <div className="vac-block" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Lock size={14} />
+            Aucun accès rapide n'est affiché. Utilisez un identifiant réel créé dans la gestion des utilisateurs.
+          </div>
         </div>
 
         <div className="text-xs mt-5 text-center" style={{ color: "var(--text3)", fontFamily: "var(--font-mono)", letterSpacing: "1.5px" }}>
-          MAQUETTE DÉMO · DONNÉES SIMULÉES · v0.2
+          SECURITEC · BACKEND MYSQL · v2.0
         </div>
       </div>
     </div>

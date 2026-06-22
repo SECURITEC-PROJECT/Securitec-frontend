@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell, Menu, Shield } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { NOTIFICATIONS } from "../../data/mock";
+import { useData } from "../../context/DataContext";
 
 const DAYS = ["DIM", "LUN", "MAR", "MER", "JEU", "VEN", "SAM"];
 const MONTHS = ["JAN", "FEV", "MAR", "AVR", "MAI", "JUIN", "JUIL", "AOU", "SEP", "OCT", "NOV", "DEC"];
@@ -13,6 +13,7 @@ const formatDate = (d: Date) =>
 
 export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user } = useAuth();
+  const { notifications } = useData();
   const [now, setNow] = useState(new Date());
   const [openNotif, setOpenNotif] = useState(false);
 
@@ -48,7 +49,7 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <div className="relative">
           <button className="alert-btn" onClick={() => setOpenNotif((v) => !v)} aria-label="Notifications">
             <Bell size={16} />
-            {NOTIFICATIONS.length > 0 && <span className="alert-count">{NOTIFICATIONS.length}</span>}
+            {notifications.length > 0 && <span className="alert-count">{notifications.length}</span>}
           </button>
           {openNotif && (
             <div
@@ -61,7 +62,7 @@ export default function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 </div>
               </div>
               <ul className="max-h-80 overflow-y-auto">
-                {NOTIFICATIONS.map((n) => (
+                {notifications.map((n) => (
                   <li key={n.id} className="px-4 py-3 border-b text-sm" style={{ borderColor: "var(--border)", color: "var(--text)" }}>
                     <div>{n.text}</div>
                     <div className="text-xs mt-1" style={{ color: "var(--text3)", fontFamily: "var(--font-mono)" }}>

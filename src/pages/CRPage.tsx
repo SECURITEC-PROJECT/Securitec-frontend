@@ -2,18 +2,22 @@ import { useState } from "react";
 import { FileText, Send, PenLine, Download } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
-import { JOURNAL, VISITORS, CHECKPOINTS } from "../data/mock";
+import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 
 export default function CRPage() {
   const { user } = useAuth();
+  const { journal, visitors, rondes } = useData();
   const [comment, setComment] = useState("Vacation calme. Une alerte mineure refus NFC traitée en interne. RAS sur les rondes hormis CP4 reporté.");
   const [signed, setSigned] = useState(false);
 
-  const events = JOURNAL.slice(0, 6);
-  const visiteurs = VISITORS.length;
-  const incidents = JOURNAL.filter((j) => j.type === "alerte").length;
-  const rondesOk = CHECKPOINTS.filter((c) => c.status === "done").length;
+  const events = journal.slice(0, 6);
+  const visiteurs = visitors.length;
+  const incidents = journal.filter((j) => j.type === "alerte").length;
+  
+  const allCheckpoints = rondes.flatMap(r => r.checkpoints);
+  const rondesOk = allCheckpoints.filter((c) => c.status === "done").length;
+  const checkpointsCount = allCheckpoints.length;
 
   return (
     <>
@@ -54,7 +58,7 @@ export default function CRPage() {
 
         <Panel title="Synthèse rondes & visiteurs">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Rondes effectuées" value={`${rondesOk}/${CHECKPOINTS.length} points`} />
+            <Field label="Rondes effectuées" value={`${rondesOk}/${checkpointsCount} points`} />
             <Field label="Refus NFC" value="2" />
             <Field label="Visiteurs reçus" value={String(visiteurs)} />
             <Field label="Alertes vidéo" value="1" />

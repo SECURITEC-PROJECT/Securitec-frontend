@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Video, ZoomIn, Download, AlertTriangle } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
-import { CAMERAS } from "../data/mock";
+import { useData } from "../context/DataContext";
 
 export default function CamerasPage() {
-  const [selected, setSelected] = useState(CAMERAS[0].id);
+  const { cameras } = useData();
+  const [selected, setSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cameras.length > 0 && !selected) {
+      setSelected(cameras[0].id);
+    }
+  }, [cameras, selected]);
 
   return (
     <>
@@ -22,7 +29,7 @@ export default function CamerasPage() {
 
       <Panel title="Flux temps réel" icon={<Video size={16} color="var(--accent)" />} badge={{ label: "4/4 LIVE", tone: "green" }}>
         <div className="cam-grid">
-          {CAMERAS.map((c) => (
+          {cameras.map((c) => (
             <button
               key={c.id}
               className={`cam-feed ${c.status === "alerte" ? "alert-cam" : ""} ${selected === c.id ? "" : ""}`}

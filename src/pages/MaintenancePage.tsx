@@ -7,7 +7,7 @@ const assets = [
   { name: "Lecteurs NFC", state: "VIGILANCE", next: "Calibration lecteur CP4" },
   { name: "Tablettes accueil", state: "OK", next: "Mise à jour 18h" },
   { name: "Réseau LAN", state: "ALERTE", next: "Redondance 4G à valider" },
-  { name: "Onduleurs", state: "OK", next: "Test batterie demain" },
+  { name: "Onduleurs", state: "OK", next: "Contrôle batterie demain" },
 ];
 
 const documents = [

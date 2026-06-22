@@ -20,6 +20,7 @@ import {
   X,
   MapPinned,
   Wrench,
+  UsersRound,
 } from "lucide-react";
 import type { Role } from "../../types";
 import { useAuth } from "../../context/AuthContext";
@@ -74,6 +75,7 @@ const NAV: { section: string; items: NavConfig[] }[] = [
     section: "Supervision",
     items: [
       { to: "/supervision", label: "Carte de supervision", icon: MapPinned, roles: ["supervisor", "agent2", "agent3"], dot: "green" },
+      { to: "/utilisateurs", label: "Gestion utilisateurs", icon: UsersRound, roles: ["supervisor"] },
       { to: "/maintenance", label: "Maintenance", icon: Wrench, roles: ["supervisor", "agent2", "agent3"], dot: "orange" },
       { to: "/archivage", label: "Archivage", icon: Archive, roles: ["supervisor"] },
       { to: "/audit", label: "Audit", icon: ShieldCheck, roles: ["supervisor"] },
@@ -81,15 +83,8 @@ const NAV: { section: string; items: NavConfig[] }[] = [
   },
 ];
 
-const AGENTS: { role: Role; label: string; sub: string; av: string }[] = [
-  { role: "agent1", label: "Agent 01", sub: "Accueil & Admin", av: "av1" },
-  { role: "agent2", label: "Agent 02", sub: "NFC & Rondes", av: "av2" },
-  { role: "agent3", label: "Agent 03", sub: "Caméras & CR", av: "av3" },
-  { role: "supervisor", label: "Superviseur", sub: "Site", av: "av4" },
-];
-
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
-  const { user, switchRole, logout } = useAuth();
+  const { user, logout } = useAuth();
   if (!user) return null;
 
   return (
@@ -126,22 +121,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         );
       })}
 
-      <div className="sidebar-section" style={{ marginTop: 14 }}>Équipe poste</div>
+      <div className="sidebar-section" style={{ marginTop: 14 }}>Compte</div>
       <div className="sidebar-team">
-        <div className="switcher-label">CHANGER DE PROFIL (DÉMO)</div>
-        {AGENTS.map((a) => (
-          <button
-            key={a.role}
-            className={`agent-btn${user.role === a.role ? " current" : ""}`}
-            onClick={() => { switchRole(a.role); onClose?.(); }}
-          >
-            <span className={`agent-avatar ${a.av}`}>{a.role === "supervisor" ? "SV" : a.role.slice(-2).padStart(2, "0")}</span>
-            <div>
-              <div style={{ fontSize: "0.78rem", fontWeight: 700 }}>{a.label}</div>
-              <div style={{ fontSize: "0.65rem", color: "var(--text3)" }}>{a.sub}</div>
-            </div>
-          </button>
-        ))}
         <button
           className="agent-btn"
           onClick={() => { logout(); onClose?.(); }}

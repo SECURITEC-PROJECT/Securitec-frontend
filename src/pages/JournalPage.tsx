@@ -2,22 +2,23 @@ import { useMemo, useState } from "react";
 import { Search, Download, FileText } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
-import { JOURNAL } from "../data/mock";
+import { useData } from "../context/DataContext";
 import type { JournalEntry } from "../types";
 
 const TYPES: JournalEntry["type"][] = ["info", "acces", "ronde", "visiteur", "alerte", "cr"];
 
 export default function JournalPage() {
+  const { journal } = useData();
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState<string>("all");
 
   const list = useMemo(() => {
-    return JOURNAL.filter((j) => {
+    return journal.filter((j) => {
       if (typeF !== "all" && j.type !== typeF) return false;
       if (q && !j.message.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [q, typeF]);
+  }, [journal, q, typeF]);
 
   return (
     <>

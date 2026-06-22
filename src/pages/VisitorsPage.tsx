@@ -2,20 +2,17 @@ import { useState } from "react";
 import { UserPlus, Users, LogOut } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
-import { VISITORS } from "../data/mock";
-import type { Visitor } from "../types";
+import { useData } from "../context/DataContext";
 
 export default function VisitorsPage() {
-  const [list, setList] = useState<Visitor[]>(VISITORS);
+  const { visitors, addVisitor, updateVisitor } = useData();
   const [form, setForm] = useState({ name: "", company: "", motif: "", host: "", duration: "1h" });
   const [qrCode, setQrCode] = useState("SECURITEC-QR-001");
 
   const create = () => {
     if (!form.name) return;
-    const id = `V${Date.now()}`;
-    const num = String(list.length + 5).padStart(4, "0");
-    const v: Visitor = {
-      id,
+    const num = String(visitors.length + 5).padStart(4, "0");
+    addVisitor({
       name: form.name,
       company: form.company,
       motif: form.motif,
@@ -24,17 +21,16 @@ export default function VisitorsPage() {
       arrival: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       expectedDuration: form.duration,
       status: "actif",
-    };
-    setList([v, ...list]);
+    });
     setQrCode(`SEC-${Date.now().toString().slice(-6)}`);
     setForm({ name: "", company: "", motif: "", host: "", duration: "1h" });
   };
 
   const closeVisit = (id: string) => {
-    setList((l) => l.map((v) => (v.id === id ? { ...v, status: "sorti" } : v)));
+    updateVisitor(id, { status: "sorti" });
   };
 
-  const active = list.filter((v) => v.status === "actif");
+  const active = visitors.filter((v) => v.status === "actif");
 
   return (
     <>
@@ -74,7 +70,7 @@ export default function VisitorsPage() {
             </div>
             <div className="form-group">
               <label className="form-label">Badge attribué</label>
-              <input className="form-input" value={`V-${String(list.length + 5).padStart(4, "0")} (auto)`} readOnly />
+              <input className="form-input" value={`V-${String(visitors.length + 5).padStart(4, "0")} (auto)`} readOnly />
             </div>
           </div>
           <div className="btn-row">
@@ -117,7 +113,7 @@ export default function VisitorsPage() {
               </tr>
             </thead>
             <tbody>
-              {list.map((v) => (
+              {visitors.map((v) => (
                 <tr key={v.id}>
                   <td><span className="pill pill-orange">{v.badge}</span></td>
                   <td><strong>{v.name}</strong></td>
@@ -128,7 +124,7 @@ export default function VisitorsPage() {
                   <td>{v.expectedDuration}</td>
                   <td>
                     {v.status === "actif" ? (
-                      <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: "0.7rem" }} onClick={() => closeVisit(v.id)}>
+                       <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: "0.7rem" }} onClick={() => closeVisit(v.id)}>
                         <LogOut size={12} /> Sortie
                       </button>
                     ) : (

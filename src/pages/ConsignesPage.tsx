@@ -2,33 +2,31 @@ import { useState } from "react";
 import { Mail, CheckCheck, Plus } from "lucide-react";
 import Panel from "../components/ui/Panel";
 import PageHeader from "../components/ui/PageHeader";
-import { CONSIGNES } from "../data/mock";
+import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import type { Consigne } from "../types";
 
 export default function ConsignesPage() {
   const { user } = useAuth();
-  const [list, setList] = useState<Consigne[]>(CONSIGNES);
+  const { consignes, addConsigne, markConsigneAsRead } = useData();
   const [draft, setDraft] = useState({ text: "", priority: "med" as Consigne["priority"] });
 
   const isSupervisor = user?.role === "supervisor";
 
   const send = () => {
     if (!draft.text) return;
-    const c: Consigne = {
-      id: `C${Date.now()}`,
+    addConsigne({
       from: user?.name ?? "Superviseur",
       text: draft.text,
       priority: draft.priority,
       time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       unread: true,
       target: "all",
-    };
-    setList([c, ...list]);
+    });
     setDraft({ text: "", priority: "med" });
   };
 
-  const ack = (id: string) => setList((l) => l.map((c) => (c.id === id ? { ...c, unread: false } : c)));
+  const ack = (id: string) => markConsigneAsRead(id);
 
   return (
     <>
@@ -65,9 +63,9 @@ export default function ConsignesPage() {
         </Panel>
       )}
 
-      <Panel title="Boîte de réception" icon={<Mail size={16} color="var(--accent)" />} badge={{ label: `${list.filter((c) => c.unread).length} NON LUES`, tone: "orange" }}>
+      <Panel title="Boîte de réception" icon={<Mail size={16} color="var(--accent)" />} badge={{ label: `${consignes.filter((c) => c.unread).length} NON LUES`, tone: "orange" }}>
         <ul className="consigne-list">
-          {list.map((c) => (
+          {consignes.map((c) => (
             <li key={c.id} className={`consigne-item${c.unread ? " unread" : ""}`}>
               <div className="ci-meta">
                 <span className={`ci-priority prio-${c.priority}`}>{c.priority.toUpperCase()}</span>
