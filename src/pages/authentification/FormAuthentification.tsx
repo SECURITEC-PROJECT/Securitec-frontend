@@ -1,4 +1,4 @@
-
+﻿
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,11 +9,6 @@ import {
 } from "lucide-react";
 import type { FormEvent } from "react";
 
-const demoAccounts = [
-  { id: 1, username: "kbenali", label: "Agent Principal" },
-  { id: 2, username: "mdupont", label: "Agent de Sécurité" },
-];
-
 interface FormAuthentificationProps {
   identifier: string;
   setIdentifier: (val: string) => void;
@@ -22,6 +17,7 @@ interface FormAuthentificationProps {
   error: string;
   setError: (val: string) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  loading: boolean;
 }
 
 export default function FormAuthentification({
@@ -32,6 +28,7 @@ export default function FormAuthentification({
   error,
   setError,
   onSubmit,
+  loading,
 }: FormAuthentificationProps) {
   return (
     <section className="auth-form-area">
@@ -43,7 +40,7 @@ export default function FormAuthentification({
 
           <span className="flex items-center gap-1.5 rounded border border-success/25 bg-success/10 px-2 py-1 text-[10px] font-medium text-success">
             <Radio className="h-3 w-3" />
-            Mode local
+            Session sécurisée
           </span>
         </div>
 
@@ -65,7 +62,7 @@ export default function FormAuthentification({
               setIdentifier(e.target.value);
               setError("");
             }}
-            placeholder="ex. kbenali"
+            placeholder="Votre identifiant"
             className="mt-2 h-11"
             autoComplete="username"
             required
@@ -166,34 +163,19 @@ export default function FormAuthentification({
 
           <Button
             type="submit"
-            disabled={!identifier.trim() || pin.length !== 6}
+            disabled={loading || !identifier.trim() || pin.length !== 6}
             className="h-12 w-full bg-login-accent text-login-ink hover:bg-login-accent/85"
           >
             <LockKeyhole className="h-4 w-4" />
-            Accéder au poste
+            {loading ? "Connexion…" : "Accéder au poste"}
             <ArrowRight className="ml-auto h-4 w-4" />
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-[11px] text-muted-foreground">
-          Maquette · Connexion simulée, sans protection réelle
-        </p>
+        <p className="mt-5 text-center text-[11px] text-muted-foreground">Connexion vérifiée par le serveur Securitec</p>
 
-        <div className="mt-6 grid grid-cols-2 gap-2 border-t pt-4 lg:hidden">
-          {demoAccounts.map((account) => (
-            <span
-              key={account.id}
-              className="font-mono text-[10px] text-muted-foreground"
-            >
-              {account.username} · {account.label}
-            </span>
-          ))}
-
-          <p className="col-span-2 text-xs font-medium">
-            PIN de démonstration : 123456
-          </p>
-        </div>
       </div>
     </section>
   );
 }
+

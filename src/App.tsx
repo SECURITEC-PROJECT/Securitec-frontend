@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import Administration from '@/pages/administration/Administration';
@@ -16,21 +16,33 @@ import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
-
-// 👇 Type du user (adapter selon ce qu'envoie le composant Authentification)
-type User = {
-  nom: string;
-  pin: string;
-};
+import { clearSession, restoreSession, type AuthenticatedUser } from '@/lib/auth-api';
 
 export default function App() {
-  // 👇 Typage explicite : User | null
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [sessionChecking, setSessionChecking] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    restoreSession()
+      .then((restoredUser) => {
+        if (active) setUser(restoredUser);
+      })
+      .finally(() => {
+        if (active) setSessionChecking(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const handleLogout = () => {
+    clearSession();
+    setUser(null);
+  };
 
   return (
     <BrowserRouter>
       <Toaster richColors position="top-right" />
-      <Routes>
+      {sessionChecking ? <div className="min-h-screen" aria-label="Vérification de la session" /> : <Routes>
         {/* page connexion */}
         <Route
           path="/login"
@@ -51,7 +63,7 @@ export default function App() {
           path="/dashboard"
           element={
             user ? (
-              <LayoutPrincipal user={user} onLogout={() => setUser(null)} />
+              <LayoutPrincipal user={user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/login" replace />
             )
@@ -80,7 +92,7 @@ export default function App() {
           path="*"
           element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
         />
-      </Routes>
+      </Routes>}
     </BrowserRouter>
   );
 }

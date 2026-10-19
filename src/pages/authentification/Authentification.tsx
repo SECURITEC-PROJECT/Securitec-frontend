@@ -1,35 +1,29 @@
 import { useState, type FormEvent } from "react";
 import FormAuthentification from "./FormAuthentification";
 import MarqueAuthentification from "./MarqueAuthentification";
+import { login, type AuthenticatedUser } from "@/lib/auth-api";
 
 interface AuthentificationProps {
-  onLoginSuccess?: (user: { nom: string; pin: string }) => void;
+  onLoginSuccess: (user: AuthenticatedUser) => void;
 }
 
 export default function Authentification({ onLoginSuccess }: AuthentificationProps) {
   const [identifier, setIdentifier] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-
-    const essaie = [
-      { nom: "kbenali", pin: "123456" },
-      { nom: "dupont", pin: "123456" }
-    ];
-
-    const utilisateurTrouve = essaie.find(
-      (user) => user.nom.toLowerCase() === identifier.trim().toLowerCase() && user.pin === pin
-    );
-
-    if (utilisateurTrouve) {
-      if (onLoginSuccess) {
-        onLoginSuccess(utilisateurTrouve);
-      }
-    } else {
-      setError("Nom ou PIN incorrect");
+    setLoading(true);
+    try {
+      const user = await login(identifier, pin);
+      onLoginSuccess(user);
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Connexion impossible.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -44,6 +38,7 @@ export default function Authentification({ onLoginSuccess }: AuthentificationPro
         error={error}
         setError={setError}
         onSubmit={handleSubmit}
+        loading={loading}
       />
     </main>
   );
