@@ -1,81 +1,86 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Toaster } from '@/components/ui/sonner';
+import Administration from '@/pages/administration/Administration';
+import AgentAccueil from '@/pages/agentAccueil/AgentAccueil';
+import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
+import Rondes from '@/pages/agentControle/ronde/Rondes';
+import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
+import MainCourante from '@/pages/agentSupVideo/mainCourante/MainCourante';
+import Authentification from '@/pages/authentification/Authentification';
+import CompteRendu from '@/pages/compteRendu/CompteRendu';
+import Dashboard from '@/pages/dashboard/Dashboard';
+import Documents from '@/pages/documentation/Documentation';
+import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
+import Messagerie from '@/pages/messagerie/Messagerie';
+import Passation from '@/pages/passation/Passation';
+import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
+import Statistiques from '@/pages/statistique/Statistique';
 
-import { AuthProvider, useAuth } from "./context/AuthContext";
-import { DataProvider } from "./context/DataContext";
-import AppLayout from "./components/layout/AppLayout";
-import type { Role } from "./types";
-import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import PriseDePostePage from "./pages/PriseDePostePage";
-import JournalPage from "./pages/JournalPage";
-import NFCPage from "./pages/NFCPage";
-import VisitorsPage from "./pages/VisitorsPage";
-import EntreesSortiesPage from "./pages/EntreesSorties";
-import VehiculesPage from "./pages/VehiculesPage";
-import MainCourantePage from "./pages/MainCourantePage";
-import PassationsPage from "./pages/PassationsPage";
-import RondesPage from "./pages/RondesPage";
-import CamerasPage from "./pages/CamerasPage";
-import CRPage from "./pages/CRPage";
-import ConsignesPage from "./pages/ConsignesPage";
-import BadgesPage from "./pages/BadgePage";
-import ReglementPage from "./pages/ReglementPage";
-import ArchivagePage from "./pages/ArchivagePage";
-import AuditPage from "./pages/AuditPage";
-import SupervisionPage from "./pages/SupervisionPage";
-import MaintenancePage from "./pages/MaintenancePage";
-import UsersPage from "./pages/UsersPage";
-
-function Protected({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
-  return <AppLayout>{children}</AppLayout>;
-}
-
-function PublicOnly({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (user) return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
-}
-
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
-      <Route path="/dashboard" element={<Protected><DashboardPage /></Protected>} />
-      <Route path="/prise-de-poste" element={<Protected roles={["agent1"]}><PriseDePostePage /></Protected>} />
-      <Route path="/journal" element={<Protected><JournalPage /></Protected>} />
-      <Route path="/nfc" element={<Protected roles={["agent2", "supervisor"]}><NFCPage /></Protected>} />
-      <Route path="/visiteurs" element={<Protected roles={["agent1", "supervisor"]}><VisitorsPage /></Protected>} />
-      <Route path="/entrees-sorties" element={<Protected roles={["agent1", "agent2", "supervisor"]}><EntreesSortiesPage /></Protected>} />
-      <Route path="/vehicules" element={<Protected roles={["agent1", "agent2", "supervisor"]}><VehiculesPage /></Protected>} />
-      <Route path="/main-courante" element={<Protected><MainCourantePage /></Protected>} />
-      <Route path="/passations" element={<Protected><PassationsPage /></Protected>} />
-      <Route path="/rondes" element={<Protected roles={["agent2", "supervisor"]}><RondesPage /></Protected>} />
-      <Route path="/cameras" element={<Protected roles={["agent3", "supervisor"]}><CamerasPage /></Protected>} />
-      <Route path="/cr" element={<Protected roles={["agent3", "supervisor"]}><CRPage /></Protected>} />
-      <Route path="/consignes" element={<Protected><ConsignesPage /></Protected>} />
-      <Route path="/supervision" element={<Protected roles={["supervisor", "agent2", "agent3"]}><SupervisionPage /></Protected>} />
-      <Route path="/utilisateurs" element={<Protected roles={["supervisor"]}><UsersPage /></Protected>} />
-      <Route path="/maintenance" element={<Protected roles={["supervisor", "agent2", "agent3"]}><MaintenancePage /></Protected>} />
-      <Route path="/badges" element={<Protected><BadgesPage /></Protected>} />
-      <Route path="/reglement" element={<Protected><ReglementPage /></Protected>} />
-      <Route path="/archivage" element={<Protected roles={["supervisor"]}><ArchivagePage /></Protected>} />
-      <Route path="/audit" element={<Protected roles={["supervisor"]}><AuditPage /></Protected>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
-  );
-}
+// 👇 Type du user (adapter selon ce qu'envoie le composant Authentification)
+type User = {
+  nom: string;
+  pin: string;
+};
 
 export default function App() {
+  // 👇 Typage explicite : User | null
+  const [user, setUser] = useState<User | null>(null);
+
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <DataProvider>
-          <AppRoutes />
-        </DataProvider>
-      </AuthProvider>
+      <Toaster richColors position="top-right" />
+      <Routes>
+        {/* page connexion */}
+        <Route
+          path="/login"
+          element={
+            !user ? (
+              <Authentification
+                onLoginSuccess={(userData) => setUser(userData)}
+              />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
+        <Route path="/auth" element={<Navigate to="/login" replace />} />
+
+        {/* page protégée (LayoutPrincipal) */}
+        <Route
+          path="/dashboard"
+          element={
+            user ? (
+              <LayoutPrincipal user={user} onLogout={() => setUser(null)} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          {/* Vue d'ensemble (Page principale) */}
+          <Route index element={<Dashboard />} />
+
+          {/* Les autres pages du menu */}
+          <Route path="statistiques" element={<Statistiques />} />
+          <Route path="prise-de-poste" element={<PriseDePoste />} />
+          <Route path="passation" element={<Passation />} />
+          <Route path="visiteurs" element={<AgentAccueil />} />
+          <Route path="controle-acces" element={<ControleAcces />} />
+          <Route path="rondes" element={<Rondes />} />
+          <Route path="cameras" element={<Cameras />} />
+          <Route path="main-courante" element={<MainCourante />} />
+          <Route path="comptes-rendus" element={<CompteRendu />} />
+          <Route path="messagerie" element={<Messagerie />} />
+          <Route path="documents" element={<Documents />} />
+          <Route path="administration" element={<Administration />} />
+        </Route>
+
+        {/* Redirection par défaut */}
+        <Route
+          path="*"
+          element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
+        />
+      </Routes>
     </BrowserRouter>
   );
 }
