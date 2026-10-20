@@ -13,6 +13,11 @@ import { toast } from "sonner";
 type Row = Record<string, string>;
 type Column = { key: string; label: string; type?: string; options?: string[] };
 const today = () => new Date().toLocaleDateString("en-CA");
+const dateKey = (value: string) => {
+  const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
+  return `${parts.find((part) => part.type === "year")?.value}-${parts.find((part) => part.type === "month")?.value}-${parts.find((part) => part.type === "day")?.value}`;
+};
+const timeKey = (value: string) => new Date(value).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const fields = (keys: string[]) => keys.map((key) => ({ key, label: key }));
 const KEY_COLS: Column[] = [
   { key: "lieu", label: "Lieu" }, { key: "perceptionMatin", label: "Perception matin · heure", type: "time" },
@@ -67,6 +72,7 @@ export default function FormCompteRendu({ existingReport, onSaved }: { existingR
   const [form, setForm] = useState<any>(fresh);
   const [saving, setSaving] = useState(false);
   const [importingRounds, setImportingRounds] = useState(false);
+  const [importingIncident, setImportingIncident] = useState<"ANOMALIE" | "VIOLATION_PROCEDURE" | null>(null);
   const [status, setStatus] = useState("BROUILLON");
   useEffect(() => {
     if (!existingReport) { setForm(fresh()); setStatus("BROUILLON"); return; }
@@ -86,12 +92,28 @@ export default function FormCompteRendu({ existingReport, onSaved }: { existingR
     try {
       const rows = await serviceApi.listPatrols();
       const date = form.reportDate;
-      const matches = rows.filter((row: any) => row.site_id === selectedSite?.id && String(row.started_at).slice(0, 10) === date && row.ended_at);
+      const matches = rows.filter((row: any) => (row.siteId || row.site_id) === selectedSite?.id && dateKey(row.started_at) === date && row.ended_at);
       if (!matches.length) { toast.message("Aucune ronde clôturée pour ce site et cette date."); return; }
-      setRows("rounds", matches.map((row: any) => ({ start: new Date(row.started_at).toTimeString().slice(0, 5), end: new Date(row.ended_at).toTimeString().slice(0, 5), observations: row.anomalies || "" })));
+      setRows("rounds", matches.map((row: any) => ({ start: timeKey(row.started_at), end: timeKey(row.ended_at), observations: row.anomalies || "" })));
       toast.success("Rondes importées dans le rapport.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Import des rondes impossible."); }
     finally { setImportingRounds(false); }
+  };
+  const importLogisticsEvents = async (type: "ANOMALIE" | "VIOLATION_PROCEDURE") => {
+    if (!selectedSite) { toast.error("Sélectionnez d’abord le site du rapport."); return; }
+    setImportingIncident(type);
+    try {
+      const rows = await serviceApi.listLogisticsEvents(selectedSite.id, type);
+      const matches = rows.filter((row: any) => String(row.date).slice(0, 10) === form.reportDate);
+      if (!matches.length) { toast.message("Aucun signalement pour ce site et cette date."); return; }
+      if (type === "ANOMALIE") {
+        setRows("anomalies", matches.map((row: any) => ({ dateTime: `${String(row.date).slice(0, 10)}T${row.time}`, truck: row.camion || "", transporter: row.transporteur || "", document: row.document || "", broken: row.broken || "", missing: row.missing || "", empty: row.empty || "", phn: row.phn || "", facts: row.facts || "" })));
+      } else {
+        setRows("violations", matches.map((row: any) => ({ time: row.time || "", person: row.person || "", staffType: "", company: "", observations: row.observations || "", measures: row.measures || "" })));
+      }
+      toast.success(type === "ANOMALIE" ? "Anomalies importées dans le rapport." : "Violations de procédure importées dans le rapport.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Import des signalements impossible."); }
+    finally { setImportingIncident(null); }
   };
   const save = async (submit = false) => {
     const agents = [...form.dayAgents.map((a: Row) => ({ ...a, shift: "JOUR" })), ...form.nightAgents.map((a: Row) => ({ ...a, shift: "NUIT" }))].filter((a: any) => a.name.trim() || a.matricule.trim());
@@ -123,10 +145,10 @@ export default function FormCompteRendu({ existingReport, onSaved }: { existingR
         <Section title="4 · Chargement"><RowsEditor title="Véhicules chargés" columns={TRUCK_COLS} rows={form.loading} onChange={(r) => setRows("loading", r)} /></Section>
         {form.siteType === "AGENCE" && <Section title="5 · Inventaire extérieur"><div className="grid gap-5 md:grid-cols-2">{[["Vides", "stockEmpty"], ["Pleins / eaux", "stockFull"]].map(([title, key]) => <div key={key} className="space-y-2"><h3 className="text-sm font-medium">{title}</h3>{form[key].map((item: any, i: number) => <div key={i} className="grid grid-cols-[1fr_120px] gap-2"><Label>{item.product}</Label><Input type="number" min="0" value={item.quantity} onChange={(e) => setForm((old: any) => ({ ...old, [key]: old[key].map((row: any, n: number) => n === i ? { ...row, quantity: e.target.value } : row) }))} /></div>)}</div>)}</div></Section>}
         <Section title={form.siteType === "AGENCE" ? "6 · Alcootests" : "5 · Alcootests"}><RowsEditor title="Contrôles" columns={[{ key: "time", label: "Heure", type: "time" }, { key: "person", label: "Personne" }, { key: "staffType", label: "STAR / NON STAR", options: ["STAR", "NON STAR"] }, { key: "requester", label: "Demandeur" }, { key: "requestType", label: "Type de demande", options: ["Test ordinaire (Entrée/Sortie)", "À la demande d'un service"] }, { key: "result", label: "Résultat", options: ["Positif", "Négatif"] }]} rows={form.breathTests} onChange={(r) => setRows("breathTests", r)} /></Section>
-        <Section title={form.siteType === "AGENCE" ? "7 · Patrouilles et rondes" : "6 · Patrouilles et rondes"}><Button type="button" variant="outline" size="sm" onClick={() => void importRounds()} disabled={importingRounds}>{importingRounds ? "Importation…" : "Importer les rondes clôturées"}</Button><RowsEditor title="Rondes" columns={ROUND_COLS} rows={form.rounds} onChange={(r) => setRows("rounds", r)} /></Section>
+        <Section title={form.siteType === "AGENCE" ? "7 · Patrouille ou ronde" : "6 · Patrouille ou ronde"}><Button type="button" variant="outline" size="sm" onClick={() => void importRounds()} disabled={importingRounds}>{importingRounds ? "Importation…" : "Importer les rondes clôturées"}</Button><RowsEditor title="Patrouille ou ronde" columns={ROUND_COLS} rows={form.rounds} onChange={(r) => setRows("rounds", r)} /></Section>
         <Section title={form.siteType === "AGENCE" ? "8 · Points de vigilance" : "7 · Points de vigilance"}><div className="grid gap-3 sm:grid-cols-2">{form.vigilance.map((item: any, i: number) => <div key={item.label} className="space-y-2 rounded border p-3"><Label>{item.label}</Label><select value={item.status} onChange={(e) => setForm((old: any) => ({ ...old, vigilance: old.vigilance.map((row: any, n: number) => n === i ? { ...row, status: e.target.value } : row) }))} className="h-10 w-full rounded-md border bg-background px-3 text-sm"><option>À contrôler</option><option>Conforme</option><option>Anomalie</option><option>Sans objet</option></select><Input placeholder="Observation" value={item.observation} onChange={(e) => setForm((old: any) => ({ ...old, vigilance: old.vigilance.map((row: any, n: number) => n === i ? { ...row, observation: e.target.value } : row) }))} /></div>)}</div></Section>
-        <Section title={form.siteType === "AGENCE" ? "9 · Anomalies" : "8 · Anomalies"}><RowsEditor title="Anomalies" columns={ANOMALY_COLS} rows={form.anomalies} onChange={(r) => setRows("anomalies", r)} /></Section>
-        <Section title={form.siteType === "AGENCE" ? "10 · Violations de procédure" : "9 · Violations de procédure"}><RowsEditor title="Violations" columns={PROCEDURE_COLS} rows={form.violations} onChange={(r) => setRows("violations", r)} /></Section>
+        <Section title={form.siteType === "AGENCE" ? "9 · Anomalies" : "8 · Anomalies"}><Button type="button" variant="outline" size="sm" onClick={() => void importLogisticsEvents("ANOMALIE")} disabled={importingIncident !== null}>{importingIncident === "ANOMALIE" ? "Importation…" : "Importer les anomalies du module logistique"}</Button><RowsEditor title="Anomalies" columns={ANOMALY_COLS} rows={form.anomalies} onChange={(r) => setRows("anomalies", r)} /></Section>
+        <Section title={form.siteType === "AGENCE" ? "10 · Violations de procédure" : "9 · Violations de procédure"}><Button type="button" variant="outline" size="sm" onClick={() => void importLogisticsEvents("VIOLATION_PROCEDURE")} disabled={importingIncident !== null}>{importingIncident === "VIOLATION_PROCEDURE" ? "Importation…" : "Importer les violations du module logistique"}</Button><RowsEditor title="Violations" columns={PROCEDURE_COLS} rows={form.violations} onChange={(r) => setRows("violations", r)} /></Section>
         <Section title={form.siteType === "AGENCE" ? "11 · Divers" : "10 · Divers"}><RowsEditor title="Divers" columns={OTHER_COLS} rows={form.miscellaneous} onChange={(r) => setRows("miscellaneous", r)} /></Section>
         <Section title="Observations générales"><Textarea rows={4} value={form.observations} onChange={(e) => setField("observations", e.target.value)} /></Section>
         <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving || status === "ENVOYE"}>Enregistrer le brouillon</Button><Button type="button" variant="outline" onClick={() => void save(true)} disabled={saving || status === "ENVOYE"}><Send className="mr-2 h-4 w-4" />Envoyer et verrouiller</Button></div>
