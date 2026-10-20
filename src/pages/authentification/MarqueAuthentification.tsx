@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+﻿import { ShieldCheck } from 'lucide-react';
 
 export default function MarqueAuthentification() {
   return (
@@ -18,7 +18,7 @@ export default function MarqueAuthentification() {
         <p className="mt-5 max-w-sm text-sm leading-relaxed text-login-muted">Vacations, visiteurs, véhicules, badges NFC, rondes, caméras et main courante.</p>
       </div>
       <div>
-        <p className="mb-3 font-mono text-[10px] text-login-muted">COMPTES DE DÉMONSTRATION · PIN 123456</p>
+        <p className="mb-3 font-mono text-[10px] text-login-muted">AUTHENTIFICATION SÉCURISÉE</p>
       </div>
     </aside>
   );
