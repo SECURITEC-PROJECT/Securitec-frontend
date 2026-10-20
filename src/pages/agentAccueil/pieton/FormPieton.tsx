@@ -2,7 +2,9 @@ import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { demo } from "@/lib/demo-store"; // <--- Import du store de démo
+import { serviceApi } from "@/lib/service-api";
+import SitePicker from "@/components/SitePicker";
+import type { SiteOption } from "@/hooks/useSites";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -19,47 +21,40 @@ const fields = [
   ["equipment", "Matériel apporté (PC, outillage...)"],
 ] as const;
 
-export default function FormPieton() {
+interface FormPietonProps {
+  onCreated: (visitor: any) => void;
+  sites: SiteOption[];
+  canCreateSite: boolean;
+  onAddSite: (name: string, type: SiteOption["type"]) => Promise<SiteOption>;
+}
+
+export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite }: FormPietonProps) {
   const [f, setF] = useState<Record<string, string>>({
-    full_name: "", company: "", id_document: "", host: "", 
+    full_name: "", company: "", id_document: "", host: "", site_name: "", site_type: "USINE",
     reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: ""
   });
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
-    // Enregistrement direct dans le store local (sans backend)
-    demo.add("visitors", {
-      full_name: f.full_name,
-      company: f.company,
-      id_document: f.id_document,
-      host: f.host,
-      reason: f.reason,
-      badge: f.badge || "V-000",
-      vehicle: f.vehicle,
-      zone: f.zone || "Accueil",
-      equipment: f.equipment,
-      entered_at: new Date().toISOString(),
-      exited_at: null,
-    });
-
-    // Ajout d'une trace dans la main courante
-    demo.add("logbook_entries", {
-      category: "Visiteur",
-      severity: "normal",
-      description: `Entrée de ${f.full_name} (${f.company || 'Visiteur libre'}) · ${f.reason}`
-    });
-
-    toast.success("Visiteur enregistré avec succès");
-    
-    // Réinitialisation du formulaire
-    setF({ full_name: "", company: "", id_document: "", host: "", reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: "" });
+    const badge = f.badge.trim();
+    setSaving(true);
+    try {
+      const visitor = await serviceApi.createVisitor({ ...f, badge, siteName: f.site_name, siteType: f.site_type });
+      onCreated(visitor);
+      toast.success("Entrée visiteur enregistrée dans la base de données");
+      setF({ full_name: "", company: "", id_document: "", host: "", site_name: "", site_type: "USINE", reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: "" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
+    } finally { setSaving(false); }
   };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
       <Panel title="Enregistrer une entrée">
         <form onSubmit={handleSubmit} className="space-y-3">
+          <SitePicker id="visitor-site" value={f.site_name} type={f.site_type as SiteOption["type"]} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setF((previous) => ({ ...previous, site_name: siteName, site_type: siteType }))} />
+          <div><Label htmlFor="visitor-site-type">Type de site</Label><select id="visitor-site-type" value={f.site_type} onChange={(e) => setF({ ...f, site_type: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="USINE">Usine</option><option value="AGENCE">Agence</option></select></div>
           {fields.map(([k, l]) => (
             <div key={k}>
               <Label htmlFor={k}>{l}</Label>
@@ -72,7 +67,7 @@ export default function FormPieton() {
               />
             </div>
           ))}
-          <Button type="submit" className="w-full">Valider l'entrée</Button>
+          <Button type="submit" disabled={saving} className="w-full">{saving ? "Enregistrement…" : "Valider l'entrée"}</Button>
         </form>
       </Panel>
     </div>

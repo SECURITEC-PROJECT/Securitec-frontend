@@ -2,14 +2,12 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { demo, useDemoTable } from "@/lib/demo-store";
-import { LogOut, PackageCheck } from "lucide-react";
 import { useState } from "react";
+import { LogOut, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import ModalSortieVisiteur from "./ModalSortieVisiteur";
 
-export default function ListPieton() {
-  const visitors = useDemoTable("visitors");
+export default function ListPieton({ visitors, onExit }: { visitors: any[]; onExit: (id: string, details: { equipmentOut: boolean; extraEquipment: string }) => Promise<void> }) {
   const [q, setQ] = useState("");
   const [selectedVisitor, setSelectedVisitor] = useState<any | null>(
     null
@@ -26,40 +24,18 @@ export default function ListPieton() {
   );
 
   // Enregistrer la sortie d'un visiteur
-  const handleConfirmExit = (
+  const handleConfirmExit = async (
     id: string | number,
     name: string,
-    details: {
-      equipmentOut: boolean;
-      extraEquipment: string;
-    }
+    details: { equipmentOut: boolean; extraEquipment: string }
   ) => {
-    const exitTime = new Date().toISOString();
-
-    demo.update("visitors", String(id), {
-      exited_at: exitTime,
-      exit_notes: `Sortie validée. Matériel d'origine sorti: ${
-        details.equipmentOut ? "Oui" : "Non"
-      }${
-        details.extraEquipment
-          ? ` · Autre matériel: ${details.extraEquipment}`
-          : ""
-      }`,
-    });
-
-    // Ajouter une entrée dans le journal
-    demo.add("logbook_entries", {
-      category: "Visiteur",
-      severity: details.extraEquipment ? "important" : "normal",
-      description: `Sortie de ${name}${
-        details.extraEquipment
-          ? ` — Autre matériel transporté : ${details.extraEquipment}`
-          : ""
-      }`,
-    });
-
-    toast.success(`Sortie enregistrée pour ${name}`);
-    setSelectedVisitor(null);
+    try {
+      await onExit(String(id), details);
+      toast.success(`Sortie enregistrée pour ${name}`);
+      setSelectedVisitor(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sortie impossible");
+    }
   };
 
   // Formater l'heure, même si la date est null ou absente

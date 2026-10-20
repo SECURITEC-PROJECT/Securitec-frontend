@@ -1,123 +1,81 @@
 
 import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import SitePicker from "@/components/SitePicker";
+import type { SiteOption } from "@/hooks/useSites";
 import { useState } from "react";
-
-const CHECKS = [
-  "Tenue réglementaire",
-  "Radio / talkie-walkie testé",
-  "Clés du site récupérées",
-  "Lampe torche",
-  "Téléphone de service chargé",
-  "Registre consulté",
-  "Vidéosurveillance opérationnelle",
-  "Système d'alarme vérifié",
-];
+import { toast } from "sonner";
 
 interface FormPriseDePosteProps {
-  mine: {
-    post_name: string;
-    started_at: string;
-  } | null | undefined;
   onStart: (
-    post: string,
-    checks: Record<string, boolean>,
+    details: { post: string; agent: string; matricule: string; prestataire: string; site: string; siteType: "USINE" | "AGENCE" },
     notes: string
-  ) => void;
-  onEnd: () => void;
-  fmt: (dateStr: string | null) => string;
+  ) => void | Promise<void>;
+  sites: SiteOption[];
+  canCreateSite: boolean;
+  canDeleteSite: boolean;
+  onAddSite: (name: string, type: SiteOption["type"]) => Promise<SiteOption>;
+  onArchiveSite: (id: string) => Promise<void>;
 }
 
 export default function FormPriseDePoste({
-  mine,
   onStart,
-  onEnd,
-  fmt,
+  sites,
+  canCreateSite,
+  canDeleteSite,
+  onAddSite,
+  onArchiveSite,
 }: FormPriseDePosteProps) {
-  const [post, setPost] = useState("Poste principal");
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
+  const [form, setForm] = useState({ post: "Poste principal", agent: "", matricule: "", prestataire: "", site: "", siteType: "USINE" as "USINE" | "AGENCE" });
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleCheck = (name: string, checked: boolean) => {
-    setChecks((previous) => ({
-      ...previous,
-      [name]: checked,
-    }));
-  };
-
-  const handleStart = () => {
-    if (!post.trim()) {
+  const handleStart = async () => {
+    if (!form.post.trim() || !form.agent.trim() || !form.matricule.trim() || !form.prestataire.trim() || !form.site.trim()) {
       return;
     }
 
-    onStart(post.trim(), checks, notes.trim());
-    setChecks({});
-    setNotes("");
+    setSaving(true);
+    try {
+      await onStart({ ...form, post: form.post.trim(), agent: form.agent.trim(), matricule: form.matricule.trim(), prestataire: form.prestataire.trim(), site: form.site.trim() }, notes.trim());
+      setNotes("");
+      setForm({ post: "Poste principal", agent: "", matricule: "", prestataire: "", site: "", siteType: "USINE" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
+    } finally {
+      setSaving(false);
+    }
   };
-
-  if (mine) {
-    return (
-      <Panel title="Service en cours">
-        <p className="text-lg font-semibold">{mine.post_name}</p>
-
-        <p className="text-sm text-muted-foreground">
-          Débuté à {fmt(mine.started_at)}
-        </p>
-
-        <Button
-          type="button"
-          variant="destructive"
-          className="mt-4"
-          onClick={onEnd}
-        >
-          Terminer le service
-        </Button>
-      </Panel>
-    );
-  }
 
   return (
     <Panel title="Nouvelle prise de poste">
       <div className="space-y-4">
         <div>
-          <Label htmlFor="post-name">Poste</Label>
+          <Label htmlFor="agent-name">Nom & prénom de l’agent de sécurité</Label>
+          <Input id="agent-name" value={form.agent} onChange={(e) => setForm({ ...form, agent: e.target.value })} className="mt-1" required placeholder="Nom et prénom" />
+        </div>
+        <div>
+          <Label htmlFor="agent-number">Matricule</Label>
+          <Input id="agent-number" value={form.matricule} onChange={(e) => setForm({ ...form, matricule: e.target.value })} className="mt-1" required placeholder="Matricule agent" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><Label htmlFor="provider">Prestataire</Label><Input id="provider" value={form.prestataire} onChange={(e) => setForm({ ...form, prestataire: e.target.value })} className="mt-1" required /></div>
+          <SitePicker id="site-name" value={form.site} type={form.siteType} sites={sites} canCreate={canCreateSite} canDelete={canDeleteSite} onAdd={onAddSite} onArchive={onArchiveSite} onChange={(site, siteType) => setForm((previous) => ({ ...previous, site, siteType }))} />
+        </div>
+        <div><Label htmlFor="site-kind">Type de site</Label><select id="site-kind" value={form.siteType} onChange={(e) => setForm({ ...form, siteType: e.target.value as "USINE" | "AGENCE" })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="USINE">Usine</option><option value="AGENCE">Agence</option></select></div>
+        <div>
+          <Label htmlFor="post-name">Poste / point de garde</Label>
           <Input
             id="post-name"
-            value={post}
-            onChange={(e) => setPost(e.target.value)}
+            value={form.post}
+            onChange={(e) => setForm({ ...form, post: e.target.value })}
             className="mt-1"
             placeholder="Nom du poste"
           />
         </div>
-
-        <div>
-          <Label className="mb-2 block">
-            Vérification des équipements et consignes
-          </Label>
-
-          <div className="space-y-2">
-            {CHECKS.map((check) => (
-              <label
-                key={check}
-                className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-muted/50"
-              >
-                <Checkbox
-                  checked={!!checks[check]}
-                  onCheckedChange={(value) =>
-                    handleCheck(check, value === true)
-                  }
-                />
-
-                <span>{check}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
         <div>
           <Label htmlFor="shift-notes">Observations</Label>
           <Textarea
@@ -132,10 +90,10 @@ export default function FormPriseDePoste({
         <Button
           type="button"
           className="w-full"
-          disabled={!post.trim()}
+          disabled={saving || !form.post.trim() || !form.agent.trim() || !form.matricule.trim() || !form.prestataire.trim() || !form.site.trim()}
           onClick={handleStart}
         >
-          Valider la prise de poste
+          {saving ? "Enregistrement…" : "Valider la prise de poste"}
         </Button>
       </div>
     </Panel>

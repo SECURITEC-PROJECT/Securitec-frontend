@@ -1,44 +1,53 @@
-import { PageHeader } from "@/components/PageHeader";
-import { useState } from "react";
+import { PageHeader, Panel } from "@/components/PageHeader";
+import { serviceApi } from "@/lib/service-api";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import FormPassation from "./FormPassation";
+import FormPassation, { type HandoverForm } from "./FormPassation";
 import ListPassation from "./ListPassation";
 
 export default function Passation() {
-  const [handovers, setHandovers] = useState([
-    {
-      id: 1,
-      agent_name: "Karim Benali",
-      incoming_agent: "Mickaël Rakoto",
-      equipment: "Radio n°2, trousseau A",
-      ongoing_events: "Livraison de colis prévue à 14h",
-      instructions: "Surveiller particulièrement l'accès arrière.",
-      created_at: new Date(Date.now() - 7200000).toISOString()
-    }
-  ]);
+  const [handovers, setHandovers] = useState<any[]>([]);
+  const [sites, setSites] = useState<{ id: string; name: string; type: "USINE" | "AGENCE" }[]>([]);
+  const [canCreateSite, setCanCreateSite] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const handleSave = (f: { incoming_agent: string; equipment: string; ongoing_events: string; instructions: string }) => {
-    const newHandover = {
-      id: Date.now(),
-      agent_name: "Karim Benali",
-      incoming_agent: f.incoming_agent,
-      equipment: f.equipment,
-      ongoing_events: f.ongoing_events,
-      instructions: f.instructions,
-      created_at: new Date().toISOString()
-    };
+  const refresh = () => serviceApi.listPassations().then(setHandovers);
+  useEffect(() => {
+    Promise.all([serviceApi.listPassations(), serviceApi.listSites()])
+      .then(([passations, siteData]) => {
+        setHandovers(passations);
+        setSites(siteData.sites);
+        setCanCreateSite(siteData.canCreate);
+      })
+      .catch((reason) => setError(reason.message))
+      .finally(() => setLoading(false));
+  }, []);
 
-    setHandovers([newHandover, ...handovers]);
-    toast.success("Passation enregistrée");
+  const handleAddSite = async (name: string, type: "USINE" | "AGENCE") => {
+    const site = await serviceApi.createSite({ name, type });
+    setSites((previous) => previous.some((item) => item.id === site.id) ? previous : [...previous, site].sort((a, b) => a.name.localeCompare(b.name)));
+    return site;
   };
 
-  return (
-    <div>
-      <PageHeader title="Passation" subtitle="Transmission des consignes à l'équipe montante" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <FormPassation onSubmit={handleSave} />
-        <ListPassation handovers={handovers} />
-      </div>
-    </div>
-  );
+  const handleSave = async (form: HandoverForm) => {
+    try {
+      await serviceApi.createPassation(form);
+      await refresh();
+      toast.success("Passation enregistrée dans la base de données");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Enregistrement impossible";
+      setError(message);
+      throw reason;
+    }
+  };
+
+  return <div>
+    <PageHeader title="Passation" subtitle="Relève entre agents, matériel remis, faits et consignes du rapport journalier." />
+    {error && <Panel title="Connexion backend"><p className="text-sm text-destructive">{error}</p></Panel>}
+    {loading ? <Panel title="Chargement"><p className="text-sm text-muted-foreground">Chargement des passations…</p></Panel> : <div className="grid gap-6 lg:grid-cols-2">
+      <FormPassation onSubmit={handleSave} sites={sites} canCreateSite={canCreateSite} onAddSite={handleAddSite} />
+      <ListPassation handovers={handovers} />
+    </div>}
+  </div>;
 }

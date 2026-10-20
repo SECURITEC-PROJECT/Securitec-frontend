@@ -1,149 +1,65 @@
-
-import { PageHeader } from "@/components/PageHeader";
-import { useState } from "react";
+import { PageHeader, Panel } from "@/components/PageHeader";
+import { serviceApi } from "@/lib/service-api";
+import { useSites } from "@/hooks/useSites";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import FormPriseDePoste from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste from "./ListHistoriquePriseDePoste";
 
 interface Shift {
-  id: number;
-  agent_id: number;
+  id: string;
   agent_name: string;
+  matricule: string;
+  prestataire: string;
+  site: string;
+  siteId: string | null;
+  shift: "JOUR" | "NUIT" | null;
   post_name: string;
   started_at: string;
   ended_at: string | null;
-  checklist: Record<string, boolean>;
-  notes: string;
+  notes: string | null;
 }
 
-const initialChecklist: Record<string, boolean> = {
-  "Tenue réglementaire": true,
-  "Radio / talkie-walkie testé": true,
-  "Clés du site récupérées": true,
-  "Lampe torche": true,
-  "Téléphone de service chargé": true,
-  "Registre consulté": true,
-  "Vidéosurveillance opérationnelle": true,
-  "Système d'alarme vérifié": true,
-};
-
 export default function PriseDePoste() {
-  const [shifts, setShifts] = useState<Shift[]>([
-    {
-      id: 1,
-      agent_id: 1,
-      agent_name: "Karim Benali",
-      post_name: "Poste principal",
-      started_at: new Date(Date.now() - 3600000).toISOString(),
-      ended_at: null,
-      checklist: { ...initialChecklist },
-      notes: "RAS au démarrage.",
-    },
-  ]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const { sites, canCreateSite, canDeleteSite, siteError, addSite, archiveSite } = useSites();
 
-  const me = {
-    id: 1,
-    name: "Karim Benali",
+  useEffect(() => {
+    serviceApi.listShifts().then(setShifts).catch((error) => setLoadError(error.message)).finally(() => setLoading(false));
+  }, []);
+
+  const start = async (details: { post: string; agent: string; matricule: string; prestataire: string; site: string; siteType: "USINE" | "AGENCE" }, notes: string) => {
+    try {
+      const shift = await serviceApi.startShift({ agentName: details.agent, matricule: details.matricule, providerName: details.prestataire, siteName: details.site, siteType: details.siteType, postName: details.post, observations: notes });
+      setShifts((previous) => [shift, ...previous]);
+      toast.success("Prise de poste enregistrée dans la base de données");
+    } catch (error) {
+      throw error;
+    }
   };
 
-  // Recherche le service actuellement en cours pour cet agent.
-  const mine = shifts.find(
-    (shift) =>
-      shift.agent_id === me.id && shift.ended_at === null
-  );
-
-  // Enregistre une nouvelle prise de poste.
-  const start = (
-    post: string,
-    checks: Record<string, boolean>,
-    notes: string
-  ) => {
-    if (!post.trim()) {
-      toast.error("Veuillez saisir le nom du poste.");
-      return;
+  const end = async (id: string) => {
+    const target = shifts.find((shift) => shift.id === id);
+    if (!target || target.ended_at) return;
+    try {
+      const result = await serviceApi.endShift(id);
+      setShifts((previous) => previous.map((shift) => shift.id === id ? { ...shift, ended_at: result.ended_at } : shift));
+      toast.success("Fin de service enregistrée dans la base de données");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Clôture impossible");
     }
-
-    // Conserve les huit contrôles du formulaire.
-    const checklist: Record<string, boolean> = {
-      ...initialChecklist,
-      ...checks,
-    };
-
-    const newShift: Shift = {
-      id: Date.now(),
-      agent_id: me.id,
-      agent_name: me.name,
-      post_name: post.trim(),
-      started_at: new Date().toISOString(),
-      ended_at: null,
-      checklist,
-      notes: notes.trim(),
-    };
-
-    setShifts((previous) => [newShift, ...previous]);
-
-    toast.success("Prise de poste enregistrée");
   };
 
-  // Enregistre la fin du service en cours.
-  const end = () => {
-    if (!mine) {
-      toast.error("Aucun service en cours.");
-      return;
-    }
+  const fmt = (dateStr: string | null) => dateStr ? new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "En cours";
 
-    setShifts((previous) =>
-      previous.map((shift) =>
-        shift.id === mine.id
-          ? {
-              ...shift,
-              ended_at: new Date().toISOString(),
-            }
-          : shift
-      )
-    );
-
-    toast.success("Fin de service enregistrée");
-  };
-
-  // Formate une date pour afficher l'heure.
-  const fmt = (dateStr: string | null) => {
-    if (!dateStr) {
-      return "En cours";
-    }
-
-    const date = new Date(dateStr);
-
-    if (Number.isNaN(date.getTime())) {
-      return "—";
-    }
-
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  return (
-    <div>
-      <PageHeader
-        title="Prise de poste"
-        subtitle="Contrôle de l'équipement et ouverture du service"
-      />
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <FormPriseDePoste
-          mine={mine}
-          onStart={start}
-          onEnd={end}
-          fmt={fmt}
-        />
-
-        <ListHistoriquePriseDePoste
-          shifts={shifts}
-          fmt={fmt}
-        />
-      </div>
-    </div>
-  );
+  return <div>
+    <PageHeader title="Prise de poste" subtitle="Informations de l’agent, poste et contrôles du rapport journalier." />
+    {(loadError || siteError) && <Panel title="Connexion backend"><p className="text-sm text-destructive">{loadError || siteError}</p></Panel>}
+    {loading ? <Panel title="Chargement"><p className="text-sm text-muted-foreground">Chargement des vacations…</p></Panel> : <div className="grid gap-6 lg:grid-cols-2">
+      <FormPriseDePoste onStart={start} sites={sites} canCreateSite={canCreateSite} canDeleteSite={canDeleteSite} onAddSite={addSite} onArchiveSite={archiveSite} />
+      <ListHistoriquePriseDePoste shifts={shifts} fmt={fmt} onEnd={(id) => void end(id)} />
+    </div>}
+  </div>;
 }

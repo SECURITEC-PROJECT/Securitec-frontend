@@ -14,6 +14,7 @@ import Documents from '@/pages/documentation/Documentation';
 import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
+import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import { clearSession, restoreSession, type AuthenticatedUser } from '@/lib/auth-api';
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="passation" element={<Passation />} />
           <Route path="visiteurs" element={<AgentAccueil />} />
           <Route path="controle-acces" element={<ControleAcces />} />
+          <Route path="flux-logistiques" element={<FluxLogistique />} />
           <Route path="rondes" element={<Rondes />} />
           <Route path="cameras" element={<Cameras />} />
           <Route path="main-courante" element={<MainCourante />} />
