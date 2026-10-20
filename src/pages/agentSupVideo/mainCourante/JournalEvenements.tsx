@@ -1,6 +1,5 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useProfiles, fmt } from "@/lib/security";
 import { useState } from "react";
 
 const CATS = ["Information", "Incident", "Intervention", "Alarme", "Livraison", "Appel", "Anomalie technique", "Visiteur", "Prise de poste", "Passation", "Ronde", "Fin de service"];
@@ -16,12 +15,11 @@ interface JournalEvenementsProps {
 }
 
 export default function JournalEvenements({ data }: JournalEvenementsProps) {
-  const name = useProfiles();
   const [filter, setFilter] = useState("Toutes");
   const list = filter === "Toutes" ? data : data.filter((d) => d.category === filter);
 
   return (
-    <Panel title="Journal">
+    <Panel title="Journal Chronologique Main Courante">
       <Select value={filter} onValueChange={setFilter}>
         <SelectTrigger className="mb-3 w-56"><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -31,22 +29,40 @@ export default function JournalEvenements({ data }: JournalEvenementsProps) {
       </Select>
 
       {list.length ? (
-        <ol className="divide-y">
+        <ol className="divide-y text-xs">
           {list.map((l) => (
-            <li key={l.id} className="grid grid-cols-[90px_1fr] gap-3 py-3 text-sm">
-              <span className="font-mono text-xs text-muted-foreground">{fmt(l.created_at)}</span>
-              <div>
+            <li key={l.id} className="grid grid-cols-[80px_1fr] gap-3 py-3">
+              <span className="font-mono text-muted-foreground">{l.heure || "—"}</span>
+              <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{l.category}</span>
-                  {l.severity !== "normal" && <span className={`rounded px-1.5 py-0.5 text-xs ${SEV[l.severity]}`}>{l.severity}</span>}
-                  <span className="text-xs text-muted-foreground">par {name(l.agent_id)}</span>
+                  <span className="font-semibold text-primary">{l.category}</span>
+                  {l.typeEntree && (
+                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded uppercase font-mono">
+                      {l.typeEntree}
+                    </span>
+                  )}
+                  {l.severity && l.severity !== "normal" && (
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${SEV[l.severity]}`}>
+                      {l.severity}
+                    </span>
+                  )}
+                  {l.people && <span className="font-medium text-foreground">({l.people})</span>}
                 </div>
-                <p className="mt-0.5 whitespace-pre-wrap">{l.description}</p>
+                
+                {/* Description / Faits */}
+                <p className="whitespace-pre-wrap text-muted-foreground">{l.description}</p>
+                
+                {/* Mesures prises */}
+                {l.mesuresPrises && (
+                  <p className="text-primary font-medium text-[11px] bg-primary/5 p-1.5 rounded border border-primary/10 mt-1">
+                     <strong>Mesures prises :</strong> {l.mesuresPrises}
+                  </p>
+                )}
               </div>
             </li>
           ))}
         </ol>
-      ) : <Empty text="Aucun événement" />}
+      ) : <Empty text="Aucun événement consigné" />}
     </Panel>
   );
 }

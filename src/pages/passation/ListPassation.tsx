@@ -2,8 +2,10 @@ import { Empty, Panel } from "@/components/PageHeader";
 
 interface Handover {
   id: number;
-  agent_name: string;
-  incoming_agent: string;
+  agent_sortant_nom: string;
+  agent_sortant_prenom: string;
+  incoming_nom: string;
+  incoming_prenom: string;
   equipment: string;
   ongoing_events: string;
   instructions: string;
@@ -15,8 +17,9 @@ interface ListPassationProps {
 }
 
 export default function ListPassation({ handovers }: ListPassationProps) {
-  const fmt = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const fmtDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${date.toLocaleDateString()} à ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   };
 
   return (
@@ -26,8 +29,10 @@ export default function ListPassation({ handovers }: ListPassationProps) {
           {handovers.map((h) => (
             <li key={h.id} className="rounded-md border p-3 text-sm space-y-1">
               <div className="flex justify-between font-medium">
-                <span>{h.agent_name} → {h.incoming_agent}</span>
-                <span className="font-mono text-xs text-muted-foreground">{fmt(h.created_at)}</span>
+                <span>
+                  {h.agent_sortant_nom} {h.agent_sortant_prenom} → {h.incoming_nom} {h.incoming_prenom}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">{fmtDate(h.created_at)}</span>
               </div>
               {h.equipment && <p className="mt-1"><span className="text-muted-foreground">Matériel :</span> {h.equipment}</p>}
               {h.ongoing_events && <p><span className="text-muted-foreground">En cours :</span> {h.ongoing_events}</p>}

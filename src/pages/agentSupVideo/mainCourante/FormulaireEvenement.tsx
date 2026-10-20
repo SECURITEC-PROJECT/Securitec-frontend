@@ -4,35 +4,58 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { demo } from "@/lib/demo-store";
 import { useState } from "react";
 import { toast } from "sonner";
 
+const API_URL = "http://localhost:5000/api";
 const CATS = ["Information", "Incident", "Intervention", "Alarme", "Livraison", "Appel", "Anomalie technique", "Visiteur", "Prise de poste", "Passation", "Ronde", "Fin de service"];
 
-export default function FormulaireEvenement() {
+interface FormProps {
+  onRefresh?: () => void;
+}
+
+export default function FormulaireEvenement({ onRefresh }: FormProps) {
   const [cat, setCat] = useState("Information");
   const [sev, setSev] = useState("normal");
   const [desc, setDesc] = useState("");
+  const [mesuresPrises, setMesuresPrises] = useState("");
   const [zone, setZone] = useState("");
   const [people, setPeople] = useState("");
 
-  const add = (e: React.FormEvent) => {
+  const add = async (e: React.FormEvent) => {
     e.preventDefault();
-    demo.add("logbook_entries", { 
-      category: cat, 
-      severity: sev, 
-      description: `${zone ? zone + " · " : ""}${desc}${people ? " — Personnes : " + people : ""}` 
-    });
-    setDesc("");
-    setZone("");
-    setPeople("");
-    toast.success("Événement consigné");
+    try {
+      const response = await fetch(`${API_URL}/main-courante`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeEntree: "STANDARD",
+          category: cat,
+          severity: sev,
+          zone,
+          people,
+          description: desc,
+          mesuresPrises,
+          heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erreur enregistrement");
+
+      toast.success("Événement consigné dans la main courante !");
+      setDesc("");
+      setMesuresPrises("");
+      setZone("");
+      setPeople("");
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      toast.error("Erreur lors de l'enregistrement.");
+    }
   };
 
   return (
     <Panel title="Consigner un événement">
-      <form onSubmit={add} className="space-y-3">
+      <form onSubmit={add} className="space-y-3 text-xs">
         <div>
           <Label>Catégorie</Label>
           <Select value={cat} onValueChange={setCat}>
@@ -61,12 +84,12 @@ export default function FormulaireEvenement() {
           <Input id="event-people" value={people} onChange={(e) => setPeople(e.target.value)} placeholder="Noms ou société..." />
         </div>
         <div>
-          <Label htmlFor="event-photo">Pièce jointe</Label>
-          <Input id="event-photo" type="file" accept="image/*" />
+          <Label>Description / Faits constatés</Label>
+          <Textarea required rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Faits constatés..." />
         </div>
         <div>
-          <Label>Description</Label>
-          <Textarea required rows={5} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Faits constatés, lieu, personnes, mesures prises…" />
+          <Label>Mesures prises / Actions conservatoires</Label>
+          <Input value={mesuresPrises} onChange={(e) => setMesuresPrises(e.target.value)} placeholder="ex. Ronde effectuée, zone isolée..." />
         </div>
         <Button className="w-full">Enregistrer</Button>
       </form>
