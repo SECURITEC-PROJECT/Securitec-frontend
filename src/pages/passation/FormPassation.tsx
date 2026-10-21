@@ -32,6 +32,8 @@ export default function FormPassation({
   const [equipment, setEquipment] = useState("");
   const [ongoingEvents, setOngoingEvents] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [outgoingSigned, setOutgoingSigned] = useState(false);
+  const [incomingSigned, setIncomingSigned] = useState(false);
 
   useEffect(() => {
     if (initialNomMontant) setNomMontant(initialNomMontant);
@@ -128,8 +130,8 @@ export default function FormPassation({
           />
         </div>
 
-        <SignaturePad label="Signature de l’agent sortant" />
-        <SignaturePad label="Signature de l’agent entrant" />
+        <SignaturePad label="Signature de l’agent sortant" signed={outgoingSigned} onSignedChange={setOutgoingSigned} />
+        <SignaturePad label="Signature de l’agent entrant" signed={incomingSigned} onSignedChange={setIncomingSigned} />
 
         {/* Le bouton est grisé et non cliquable si l'agent sortant ou montant est vide */}
         <Button type="submit" className="w-full" disabled={!isFormValid}>

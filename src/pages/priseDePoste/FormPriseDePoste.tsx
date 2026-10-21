@@ -51,7 +51,7 @@ export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFor
     event.preventDefault();
     if (!employee || !employee.active || !employee.siteId || !employee.siteActive) { toast.error("Cet employé doit être actif et affecté à un site actif."); return; }
     const saved = await onStart({ matricule: employee.matricule, nom: employee.lastName, prenom: employee.firstName,
-      prestataire: employee.provider, site_de_travail: employee.siteName, checks, notes: notes.trim() });
+      prestataire: employee.provider, site_de_travail: employee.siteName ?? "", checks, notes: notes.trim() });
     if (saved) { setMatricule(""); setEmployee(null); setChecks({}); setNotes(""); }
   };
 
