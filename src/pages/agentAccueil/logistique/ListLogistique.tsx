@@ -1,3 +1,4 @@
+import { API_URL } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import axios from 'axios';
 import { useEffect, useState } from 'react';
@@ -11,7 +12,7 @@ export default function ListLogistique({ refreshKey }: ListProps) {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    axios.get("http://localhost:5000/api/flux")
+    axios.get(`${API_URL}/flux`)
       .then(res => setData(res.data))
       .catch(err => console.error(err));
   }, [refreshKey]);

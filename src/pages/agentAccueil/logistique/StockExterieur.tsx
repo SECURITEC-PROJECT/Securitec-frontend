@@ -1,3 +1,4 @@
+import { API_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +22,7 @@ export default function StockExterieur({ onRefresh }: FormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    axios.post("http://localhost:5000/api/flux", form)
+    axios.post(`${API_URL}/flux`, form)
       .then(() => {
         toast.success("Inventaire du stock extérieur enregistré avec succès !");
         setForm({

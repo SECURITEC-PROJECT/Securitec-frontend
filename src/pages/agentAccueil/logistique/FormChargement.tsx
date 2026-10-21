@@ -1,3 +1,4 @@
+import { API_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +37,7 @@ export default function FormChargement({ onRefresh }: FormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const fullDocRef = `${form.documentType}-${form.documentRef}`;
-    axios.post("http://localhost:5000/api/flux", { ...form, documentRef: fullDocRef, anomalie: 'Aucune' })
+    axios.post(`${API_URL}/flux`, { ...form, documentRef: fullDocRef, anomalie: 'Aucune' })
       .then(() => {
         toast.success("Chargement enregistré avec succès !");
         setForm({

@@ -5,7 +5,7 @@ import JournalEvenements from "./JournalEvenements";
 import ModuleQQOQCP from "./ModuleQQOQCP";
 import ViolationsProcedure from "./ViolationsProcedure";
 
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "@/lib/api";
 
 export default function MainCourante() {
   const [data, setData] = useState<any[]>([]);

@@ -6,7 +6,7 @@ import { ScanLine } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "@/lib/api";
 
 export default function BadgeScannerPanel() {
   const [uid, setUid] = useState("V-014");

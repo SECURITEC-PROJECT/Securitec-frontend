@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 
 // 💡 EXPORT OBLIGATOIRE DE L'INTERFACE SHIFT
 export interface Shift {
-  id: number;
+  id: string;
   nom: string;
   prenom: string;
   prestataire: string;

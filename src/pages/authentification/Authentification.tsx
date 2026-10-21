@@ -1,4 +1,4 @@
-import type { AuthenticatedUser } from "@/lib/auth-api";
+import { login, type AuthenticatedUser } from "@/lib/auth-api";
 import { useState, type FormEvent } from "react";
 import FormAuthentification from "./FormAuthentification";
 import MarqueAuthentification from "./MarqueAuthentification";
@@ -8,34 +8,21 @@ interface AuthentificationProps {
 }
 
 export default function Authentification({ onLoginSuccess }: AuthentificationProps) {
-  // Champs pré-remplis par défaut
-  const [identifier, setIdentifier] = useState("admin");
-  const [pin, setPin] = useState("123456");
+  const [identifier, setIdentifier] = useState("miora");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
-
     try {
-      // Simulation d'un utilisateur connecté pour les tests
-      const mockUser: AuthenticatedUser = {
-        id: 1,
-        nom: "Sahala",
-        identifiant: identifier || "admin",
-        role: "ADMIN",
-        siteNom: "Usine Antsirabe",
-      };
-
-      // Petite pause pour simuler un temps de réponse réseau
-      setTimeout(() => {
-        onLoginSuccess(mockUser);
-        setLoading(false);
-      }, 300);
-    } catch (err) {
-      setError("Erreur lors de la connexion fictive.");
+      const user = await login(identifier, pin);
+      onLoginSuccess(user);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Connexion impossible.");
+    } finally {
       setLoading(false);
     }
   };
@@ -43,7 +30,7 @@ export default function Authentification({ onLoginSuccess }: AuthentificationPro
   return (
     <main className="auth-layout">
       <MarqueAuthentification />
-      <FormAuthentification 
+      <FormAuthentification
         identifier={identifier}
         setIdentifier={setIdentifier}
         pin={pin}

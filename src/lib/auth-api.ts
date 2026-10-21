@@ -1,3 +1,5 @@
+import { API_URL } from "@/lib/api";
+
 export interface AuthenticatedUser {
   id: string;
   nom: string;
@@ -16,7 +18,6 @@ interface AuthResponse {
   error?: string;
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
 const tokenKey = "securitec-access-token";
 
 function withLabel(user: Omit<AuthenticatedUser, "label">): AuthenticatedUser {
@@ -30,7 +31,7 @@ async function readResponse(response: Response): Promise<AuthResponse> {
 export async function login(identifier: string, pin: string): Promise<AuthenticatedUser> {
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/auth/login`, {
+    response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier, pin }),
@@ -51,7 +52,7 @@ export async function restoreSession(): Promise<AuthenticatedUser | null> {
   const token = sessionStorage.getItem(tokenKey);
   if (!token) return null;
   try {
-    const response = await fetch(`${apiBaseUrl}/auth/me`, {
+    const response = await fetch(`${API_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const result = await readResponse(response);

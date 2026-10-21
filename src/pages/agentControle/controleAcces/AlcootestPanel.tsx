@@ -5,7 +5,7 @@ import { AlertCircle, ShieldAlert, TestTube2 } from "lucide-react";
 import React, { useState } from 'react';
 import { toast } from "sonner";
 
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "@/lib/api";
 
 export interface AlcootestEntry {
   id?: string;

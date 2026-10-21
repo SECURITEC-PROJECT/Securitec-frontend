@@ -20,7 +20,7 @@ const POINTS = [
 
 type Cp = { name: string; at: string | null };
 
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "@/lib/api";
 
 export default function Rondes() {
   const [activeTab, setActiveTab] = useState<"rondes" | "vigilance">("rondes");
