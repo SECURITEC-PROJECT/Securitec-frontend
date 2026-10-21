@@ -30,13 +30,14 @@ const VIGILANCE_SCHEMA = [
   },
 ];
 
-import { API_URL } from "@/lib/api";
+import { serviceApi } from "@/lib/service-api";
 
 interface FormVigilanceProps {
+  siteId?: string;
   onRefresh?: () => void;
 }
 
-export default function FormVigilance({ onRefresh }: FormVigilanceProps) {
+export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps) {
   // Initialisation dynamique basée sur la grille exacte du modèle CRJ
   const [items, setItems] = useState(() => {
     const list: any[] = [];
@@ -79,16 +80,11 @@ export default function FormVigilance({ onRefresh }: FormVigilanceProps) {
       ...it,
       agentNom,
       heure: currentTime,
+      siteId,
     }));
 
     try {
-      const response = await fetch(`${API_URL}/vigilance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) throw new Error("Erreur lors de l'enregistrement");
+      await serviceApi.createVigilance(payload);
 
       toast.success("Points de vigilance consignés avec succès dans le CRJ !");
       if (onRefresh) onRefresh();
@@ -162,7 +158,7 @@ export default function FormVigilance({ onRefresh }: FormVigilanceProps) {
           </table>
         </div>
 
-        <Button type="submit" className="w-full h-10 font-semibold">
+        <Button type="submit" disabled={!siteId} className="w-full h-10 font-semibold">
           <CheckCircle2 className="mr-2 h-4 w-4" /> Enregistrer le contrôle des Points de Vigilance
         </Button>
       </form>
