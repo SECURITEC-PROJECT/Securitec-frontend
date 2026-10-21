@@ -2,7 +2,6 @@ import { Toaster } from '@/components/ui/sonner';
 import { clearSession, restoreSession, type AuthenticatedUser } from '@/lib/auth-api';
 import Administration from '@/pages/administration/Administration';
 import AgentAccueil from '@/pages/agentAccueil/AgentAccueil';
-import Logistique from '@/pages/agentAccueil/logistique/Logistique';
 import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
 import Rondes from '@/pages/agentControle/ronde/Rondes';
 import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
@@ -14,6 +13,7 @@ import Documents from '@/pages/documentation/Documentation';
 import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
+import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import { useEffect, useState } from 'react';
@@ -78,8 +78,9 @@ export default function App() {
           <Route path="prise-de-poste" element={<PriseDePoste />} />
           <Route path="passation" element={<Passation />} />
           <Route path="visiteurs" element={<AgentAccueil />} />
-          <Route path="logistique" element={<Logistique />} />
+          <Route path="logistique" element={<FluxLogistique />} />
           <Route path="controle-acces" element={<ControleAcces />} />
+          <Route path="flux-logistiques" element={<FluxLogistique />} />
           <Route path="rondes" element={<Rondes />} />
           <Route path="cameras" element={<Cameras />} />
           <Route path="main-courante" element={<MainCourante />} />

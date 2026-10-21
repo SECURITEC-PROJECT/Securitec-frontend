@@ -4,14 +4,14 @@ import { Label } from "@/components/ui/label";
 import { AlertOctagon } from "lucide-react";
 import { useState } from 'react';
 import { toast } from "sonner";
-
-const API_URL = "http://localhost:5000/api";
+import { serviceApi } from "@/lib/service-api";
 
 interface ViolationsProps {
+  siteId: string;
   onRefresh?: () => void;
 }
 
-export default function ViolationsProcedure({ onRefresh }: ViolationsProps) {
+export default function ViolationsProcedure({ siteId, onRefresh }: ViolationsProps) {
   const [form, setForm] = useState({
     auteur: '',
     statutAuteur: 'Employé',
@@ -24,11 +24,9 @@ export default function ViolationsProcedure({ onRefresh }: ViolationsProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_URL}/main-courante`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await serviceApi.createMainCourante({
           typeEntree: "VIOLATION",
+          siteId,
           category: "Incident",
           severity: "grave",
           people: form.auteur,
@@ -37,10 +35,7 @@ export default function ViolationsProcedure({ onRefresh }: ViolationsProps) {
           description: form.description,
           mesuresPrises: form.mesuresPrises,
           heure: form.heure
-        }),
       });
-
-      if (!response.ok) throw new Error("Erreur enregistrement");
 
       toast.error("9 - VIOLATION DE PROCEDURE enregistrée dans le CRJ !");
       setForm({
@@ -53,7 +48,7 @@ export default function ViolationsProcedure({ onRefresh }: ViolationsProps) {
       });
       if (onRefresh) onRefresh();
     } catch (error) {
-      toast.error("Erreur lors de l'enregistrement de la violation.");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de l'enregistrement de la violation.");
     }
   };
 
@@ -107,7 +102,7 @@ export default function ViolationsProcedure({ onRefresh }: ViolationsProps) {
         <Input required value={form.mesuresPrises} onChange={e => setForm({ ...form, mesuresPrises: e.target.value })} placeholder="ex. Refus d'accès au site, alerte du Chef de Sécurité..." className="h-9 border-destructive/40" />
       </div>
 
-      <Button variant="destructive" className="w-full h-10 mt-2">
+      <Button variant="destructive" className="w-full h-10 mt-2" disabled={!siteId}>
         <AlertOctagon className="mr-2 h-4 w-4" /> Enregistrer la Violation
       </Button>
     </form>

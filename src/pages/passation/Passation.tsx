@@ -5,14 +5,14 @@ import { toast } from "sonner";
 import FormPassation from "./FormPassation";
 import ListPassation from "./ListPassation";
 
-const API_URL = "http://localhost:5000/api";
+import { API_URL, authHeaders } from "@/lib/api";
 
 export default function Passation() {
   const navigate = useNavigate();
   const location = useLocation();
 
   const routeState = location.state as {
-    agentSortant?: { id?: number; nom: string; prenom: string; site: string };
+    agentSortant?: { id?: string; nom: string; prenom: string; site: string };
   } | null;
 
   const agentSortantId = routeState?.agentSortant?.id;
@@ -22,7 +22,7 @@ export default function Passation() {
   const [handovers, setHandovers] = useState([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/handovers`)
+    fetch(`${API_URL}/handovers`, { headers: authHeaders() })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setHandovers(data);
@@ -41,10 +41,11 @@ export default function Passation() {
       // 1. Enregistrer la passation
       const responseHandover = await fetch(`${API_URL}/handovers`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           agent_sortant_nom: agentSortantNom,
           agent_sortant_prenom: agentSortantPrenom,
+          agent_sortant_id: agentSortantId,
           incoming_nom: f.incoming_nom,
           incoming_prenom: f.incoming_prenom,
           equipment: f.equipment,
@@ -65,13 +66,14 @@ export default function Passation() {
       if (agentSortantId) {
         await fetch(`${API_URL}/shifts/${agentSortantId}/end`, {
           method: "PUT",
+          headers: authHeaders(),
         });
       }
 
       // 3. OUVRIR AUTOMATIQUEMENT LE SERVICE DE L'AGENT MONTANT
       await fetch(`${API_URL}/shifts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           nom: f.incoming_nom,
           prenom: f.incoming_prenom,

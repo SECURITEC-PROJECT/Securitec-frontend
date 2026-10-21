@@ -15,7 +15,7 @@ export interface ShiftFormData {
   notes: string;
 }
 
-const API_URL = "http://localhost:5000/api";
+import { API_URL, authHeaders } from "@/lib/api";
 
 export default function PriseDePoste() {
   const navigate = useNavigate();
@@ -33,7 +33,7 @@ export default function PriseDePoste() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_URL}/shifts`)
+    fetch(`${API_URL}/shifts`, { headers: authHeaders() })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setShifts(data);
@@ -45,7 +45,7 @@ export default function PriseDePoste() {
     try {
       const response = await fetch(`${API_URL}/shifts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(data),
       });
 
@@ -99,10 +99,11 @@ export default function PriseDePoste() {
     toast.success(`Service terminé pour ${selectedShiftForEnd.nom} ${selectedShiftForEnd.prenom}`);
   };
 
-  const executeEndService = async (shiftId: number) => {
+  const executeEndService = async (shiftId: string) => {
     try {
       const response = await fetch(`${API_URL}/shifts/${shiftId}/end`, {
         method: "PUT",
+        headers: authHeaders(),
       });
       if (!response.ok) throw new Error("Erreur clôture");
       const updatedShift = await response.json();

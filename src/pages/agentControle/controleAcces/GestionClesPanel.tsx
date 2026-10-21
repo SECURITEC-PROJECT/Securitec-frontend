@@ -1,94 +1,128 @@
+import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { serviceApi } from "@/lib/service-api";
 import { KeyRound } from "lucide-react";
-import { useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-const API_URL = "http://localhost:5000/api";
+interface KeyTrackingEntry {
+  id: string;
+  date: string;
+  lieu: string;
+  perceptionMatin?: string | null;
+  responsablePerceptionMatin?: string | null;
+  reintegrationMatin?: string | null;
+  responsableReintegrationMatin?: string | null;
+  perceptionApresMidi?: string | null;
+  responsablePerceptionApresMidi?: string | null;
+  reintegrationApresMidi?: string | null;
+  responsableReintegrationApresMidi?: string | null;
+  observations?: string | null;
+}
+
+const localDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+
+const initialForm = () => ({
+  date: localDate(),
+  lieu: "",
+  perceptionMatin: "",
+  responsablePerceptionMatin: "",
+  reintegrationMatin: "",
+  responsableReintegrationMatin: "",
+  perceptionApresMidi: "",
+  responsablePerceptionApresMidi: "",
+  reintegrationApresMidi: "",
+  responsableReintegrationApresMidi: "",
+  observations: "",
+});
+
+const slots = [
+  ["perceptionMatin", "Perception matin", "responsablePerceptionMatin", "Personne ayant pris les clés"],
+  ["reintegrationMatin", "Réintégration matin", "responsableReintegrationMatin", "Personne ayant rendu les clés"],
+  ["perceptionApresMidi", "Perception après-midi", "responsablePerceptionApresMidi", "Personne ayant pris les clés"],
+  ["reintegrationApresMidi", "Réintégration après-midi", "responsableReintegrationApresMidi", "Personne ayant rendu les clés"],
+] as const;
 
 export default function GestionClesPanel() {
-  const [form, setForm] = useState({
-    trousseCle: '',
-    personneHabilitee: '',
-    matriculePersonne: '',
-    action: 'Perception',
-    agentGardien: '',
-    heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  });
+  const [form, setForm] = useState(initialForm);
+  const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const refresh = useCallback(async () => {
+    const data = await serviceApi.listKeyTracking();
+    setEntries(data);
+    setError("");
+  }, []);
+
+  useEffect(() => {
+    refresh().catch((reason) => setError(reason instanceof Error ? reason.message : "Chargement impossible."))
+      .finally(() => setLoading(false));
+  }, [refresh]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/keys`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Erreur serveur");
-
-      toast.success(`Mouvement de clé enregistré avec succès (${form.action}).`);
-      setForm({ 
-        trousseCle: '', 
-        personneHabilitee: '', 
-        matriculePersonne: '', 
-        action: 'Perception', 
-        agentGardien: '', 
-        heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-      });
-    } catch (error: any) {
-      toast.error(error.message || "Erreur lors de l'enregistrement de la clé.");
+      await serviceApi.createKeyTracking(form);
+      await refresh();
+      setForm(initialForm());
+      toast.success("Suivi des clés enregistré.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Enregistrement du suivi impossible.");
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-      <div className="bg-muted/50 p-3 rounded-md mb-2">
-        <p className="font-semibold text-primary">Gestion du Trousseau & Boîte à Clés</p>
-        <p className="text-[11px] text-muted-foreground">Registre contradictoire d'accès aux locaux sensibles (Base de données).</p>
-      </div>
+    <div className="space-y-6">
+      <Panel title="Suivi journalier des clés">
+        <form onSubmit={handleSubmit} className="space-y-4 text-sm">
+          <p className="text-xs text-muted-foreground">Les données sont rattachées au site du compte connecté.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5"><Label htmlFor="keys-date">Date</Label><Input id="keys-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></div>
+            <div className="space-y-1.5"><Label htmlFor="keys-place">Lieu / trousseau</Label><Input id="keys-place" required maxLength={255} value={form.lieu} onChange={(event) => setForm({ ...form, lieu: event.target.value })} placeholder="Ex. Trousseau du poste principal" /></div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-3 items-end">
-        <div className="space-y-1.5">
-          <Label className="block h-8 flex items-center">Réf. Trousseau / Clé</Label>
-          <Input required value={form.trousseCle} onChange={e => setForm({ ...form, trousseCle: e.target.value })} placeholder="ex. CLE-TGBT-01" className="h-9" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="block h-8 flex items-center">Type de Mouvement</Label>
-          <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}>
-            <option value="Perception">Perception (Sortie)</option>
-            <option value="Réintégration">Réintégration (Retour)</option>
-          </select>
-        </div>
-      </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {slots.map(([timeKey, label, personKey, personLabel]) => (
+              <div key={timeKey} className="space-y-2 rounded-md border p-3">
+                <Label htmlFor={timeKey}>{label}</Label>
+                <Input id={timeKey} type="time" value={form[timeKey]} onChange={(event) => setForm({ ...form, [timeKey]: event.target.value })} />
+                <Input aria-label={`${personLabel} — ${label}`} maxLength={255} value={form[personKey]} onChange={(event) => setForm({ ...form, [personKey]: event.target.value })} placeholder={personLabel} />
+              </div>
+            ))}
+          </div>
 
-      <div className="grid grid-cols-2 gap-3 items-end">
-        <div className="space-y-1.5">
-          <Label className="block h-8 flex items-center leading-tight">Personne Habilitée (Nom/Prénom)</Label>
-          <Input required value={form.personneHabilitee} onChange={e => setForm({ ...form, personneHabilitee: e.target.value })} placeholder="ex. Jean Marc" className="h-9" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="block h-8 flex items-center">Matricule / Société</Label>
-          <Input required value={form.matriculePersonne} onChange={e => setForm({ ...form, matriculePersonne: e.target.value })} placeholder="ex. MAT-4029" className="h-9" />
-        </div>
-      </div>
+          <div className="space-y-1.5"><Label htmlFor="keys-observations">Observations</Label><Textarea id="keys-observations" maxLength={20000} value={form.observations} onChange={(event) => setForm({ ...form, observations: event.target.value })} /></div>
+          <Button disabled={saving}><KeyRound className="mr-2 h-4 w-4" />{saving ? "Enregistrement…" : "Enregistrer le suivi"}</Button>
+        </form>
+      </Panel>
 
-      <div className="grid grid-cols-2 gap-3 items-end">
-        <div className="space-y-1.5">
-          <Label className="block h-8 flex items-center">Agent Gardien (Signataire)</Label>
-          <Input required value={form.agentGardien} onChange={e => setForm({ ...form, agentGardien: e.target.value })} placeholder="Matricule Agent" className="h-9" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="block h-8 flex items-center">Heure (HH:MM)</Label>
-          <Input required type="time" value={form.heure} onChange={e => setForm({ ...form, heure: e.target.value })} className="h-9 font-mono" />
-        </div>
-      </div>
-
-      <Button className="w-full h-10 mt-2">
-        <KeyRound className="mr-2 h-4 w-4" /> Enregistrer le Mouvement & Valider
-      </Button>
-    </form>
+      <Panel title="Historique des mouvements">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loading ? <p className="text-sm text-muted-foreground">Chargement…</p> : entries.length === 0 ? <p className="text-sm text-muted-foreground">Aucun suivi enregistré pour ce site.</p> : (
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <article key={entry.id} className="rounded-md border p-3 text-sm">
+                <div className="flex flex-wrap justify-between gap-2"><strong>{entry.lieu}</strong><time className="text-muted-foreground">{new Date(entry.date).toLocaleDateString("fr-FR")}</time></div>
+                <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2 text-xs">
+                  {slots.map(([timeKey, label, personKey]) => entry[timeKey] && <p key={timeKey}>{label} : {entry[timeKey]}{entry[personKey] ? ` · ${entry[personKey]}` : ""}</p>)}
+                </div>
+                {entry.observations && <p className="mt-2 text-xs text-muted-foreground">{entry.observations}</p>}
+              </article>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }

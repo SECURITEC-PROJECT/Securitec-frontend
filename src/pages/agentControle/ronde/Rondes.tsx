@@ -1,5 +1,7 @@
 import { PageHeader } from "@/components/PageHeader";
-import { useEffect, useState } from "react";
+import { useSites } from "@/hooks/useSites";
+import { serviceApi } from "@/lib/service-api";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import ActivePatrolPanel from "./ActivePatrolPanel";
 import FormVigilance from "./FormVigilance";
@@ -8,179 +10,122 @@ import PatrolHistoryPanel from "./PatrolHistoryPanel";
 import StartPatrolPanel from "./StartPatrolPanel";
 
 const POINTS = [
-  "Accueil / hall",
-  "Parking",
-  "Portail principal",
-  "Issues de secours",
-  "Local technique",
-  "Entrepôt",
-  "Bureaux étage",
-  "Clôture périmétrique",
+  "Accueil / hall", "Parking", "Portail principal", "Issues de secours",
+  "Local technique", "Entrepôt", "Bureaux étage", "Clôture périmétrique",
 ];
 
-type Cp = { name: string; at: string | null };
-
-const API_URL = "http://localhost:5000/api";
+type Checkpoint = { name: string; at: string | null };
+type Patrol = {
+  id: string; route_name: string; started_at: string; ended_at: string | null;
+  checkpoints: Checkpoint[]; anomalies: string | null; siteId: string; site_name?: string;
+};
 
 export default function Rondes() {
+  const { sites, siteError } = useSites();
   const [activeTab, setActiveTab] = useState<"rondes" | "vigilance">("rondes");
+  const [siteId, setSiteId] = useState("");
   const [route, setRoute] = useState("Ronde complète");
-  const [anom, setAnom] = useState("");
-  const [patrols, setPatrols] = useState<any[]>([]);
+  const [observations, setObservations] = useState("");
+  const [patrols, setPatrols] = useState<Patrol[]>([]);
   const [vigilanceData, setVigilanceData] = useState<any[]>([]);
-
-  const fetchPatrols = () => {
-    fetch(`${API_URL}/patrols`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setPatrols(data);
-      })
-      .catch((err) => console.error("Erreur chargement rondes:", err));
-  };
-
-  const fetchVigilance = () => {
-    fetch(`${API_URL}/vigilance`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setVigilanceData(data);
-      })
-      .catch((err) => console.error("Erreur chargement vigilance:", err));
-  };
+  const [saving, setSaving] = useState(false);
+  const site = sites.find((item) => item.id === siteId);
 
   useEffect(() => {
-    fetchPatrols();
-    fetchVigilance();
-  }, []);
+    if (!siteId && sites.length) setSiteId(sites[0].id);
+  }, [siteId, sites]);
 
-  const active = patrols.find((p) => !p.ended_at);
-  const cps = (active?.checkpoints as Cp[] | undefined) ?? [];
+  const fetchPatrols = useCallback(async () => {
+    try {
+      setPatrols(await serviceApi.listPatrols(siteId || undefined));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chargement des rondes impossible.");
+    }
+  }, [siteId]);
+
+  const fetchVigilance = useCallback(async () => {
+    try {
+      setVigilanceData(await serviceApi.listVigilance(siteId || undefined));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chargement des points de vigilance impossible.");
+    }
+  }, [siteId]);
+
+  useEffect(() => { void fetchPatrols(); void fetchVigilance(); }, [fetchPatrols, fetchVigilance]);
+
+  const active = useMemo(() => patrols.find((patrol) => !patrol.ended_at), [patrols]);
 
   const start = async () => {
+    if (!siteId) return;
+    setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/patrols`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          route_name: route,
-          checkpoints: POINTS.map((n) => ({ name: n, at: null })),
-        }),
+      await serviceApi.startPatrol({
+        routeName: route,
+        siteId,
+        checkpoints: POINTS.map((name) => ({ name, at: null })),
       });
-
-      if (!response.ok) throw new Error("Erreur démarrage ronde");
-      toast.success("Ronde démarrée avec succès !");
-      fetchPatrols();
+      toast.success("Ronde démarrée.");
+      await fetchPatrols();
     } catch (error) {
-      toast.error("Impossible de démarrer la ronde.");
-    }
+      toast.error(error instanceof Error ? error.message : "Impossible de démarrer la ronde.");
+    } finally { setSaving(false); }
   };
 
-  const check = async (i: number) => {
+  const check = async (index: number) => {
     if (!active) return;
-    const nextCps = cps.map((c, j) => (j === i ? { ...c, at: c.at ? null : new Date().toISOString() } : c));
-
+    const checkpoints = (active.checkpoints || []).map((point, current) => current === index
+      ? { ...point, at: point.at ? null : new Date().toISOString() }
+      : point);
+    setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/patrols/${active.id}/check`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checkpoints: nextCps }),
-      });
-
-      if (!response.ok) throw new Error("Erreur mise à jour zone");
-      fetchPatrols();
+      await serviceApi.updatePatrol(active.id, checkpoints);
+      await fetchPatrols();
     } catch (error) {
-      toast.error("Erreur lors de la mise à jour de la zone.");
-    }
+      toast.error(error instanceof Error ? error.message : "Mise à jour du point impossible.");
+    } finally { setSaving(false); }
   };
 
   const finish = async () => {
     if (!active) return;
-
+    setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/patrols/${active.id}/finish`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ anomalies: anom }),
-      });
-
-      if (!response.ok) throw new Error("Erreur clôture ronde");
-      toast.success("Ronde clôturée avec succès !");
-      setAnom("");
-      fetchPatrols();
+      await serviceApi.finishPatrol(active.id, observations);
+      setObservations("");
+      toast.success("Ronde clôturée.");
+      await fetchPatrols();
     } catch (error) {
-      toast.error("Erreur lors de la clôture de la ronde.");
-    }
+      toast.error(error instanceof Error ? error.message : "Clôture de la ronde impossible.");
+    } finally { setSaving(false); }
   };
 
-  const fmtTime = (dateStr: string | null) => {
-    if (!dateStr) return "—";
-    const date = new Date(dateStr);
-    if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const fmtTime = (value: string | null) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
   };
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Patrouilles, Rondes & Points de Vigilance"
-        subtitle="Suivi des rondes de sécurité et contrôles de vigilance du site"
-      />
-
-      {/* Onglets de sous-navigation */}
-      <div className="flex gap-2 border-b pb-3">
-        <button
-          onClick={() => setActiveTab("rondes")}
-          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-            activeTab === "rondes"
-              ? "bg-primary text-primary-foreground shadow"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-          }`}
-        >
-          6 - Patrouille ou Ronde
-        </button>
-        <button
-          onClick={() => setActiveTab("vigilance")}
-          className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-            activeTab === "vigilance"
-              ? "bg-primary text-primary-foreground shadow"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-          }`}
-        >
-          7 - Points de Vigilance
-        </button>
-      </div>
-
-      {activeTab === "rondes" && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {active ? (
-            <ActivePatrolPanel
-              active={active}
-              cps={cps}
-              anom={anom}
-              setAnom={setAnom}
-              onCheck={check}
-              onFinish={finish}
-              fmtTime={fmtTime}
-            />
-          ) : (
-            <StartPatrolPanel
-              route={route}
-              setRoute={setRoute}
-              pointsCount={POINTS.length}
-              pointsListString={POINTS.join(", ")}
-              onStart={start}
-            />
-          )}
-
-          <PatrolHistoryPanel data={patrols} fmt={fmtTime} />
-        </div>
-      )}
-
-      {activeTab === "vigilance" && (
-        <div className="space-y-6">
-          <FormVigilance onRefresh={fetchVigilance} />
-          <ListVigilance data={vigilanceData} />
-        </div>
-      )}
+  return <div className="space-y-6">
+    <PageHeader title="Patrouilles, rondes et points de vigilance" subtitle="Suivi des rondes de sécurité et contrôles de vigilance du site" />
+    <div className="max-w-xl">
+      <label htmlFor="patrol-site" className="mb-1 block text-sm font-medium">Site de travail</label>
+      <select id="patrol-site" value={siteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+        {!sites.length && <option value="">Aucun site disponible</option>}
+        {sites.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.type === "AGENCE" ? "Agence" : "Usine"}</option>)}
+      </select>
+      {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
     </div>
-  );
+    <div className="flex gap-2 border-b pb-3">
+      <button onClick={() => setActiveTab("rondes")} className={`rounded px-3 py-1.5 text-xs font-medium ${activeTab === "rondes" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>Patrouille ou ronde</button>
+      <button onClick={() => setActiveTab("vigilance")} className={`rounded px-3 py-1.5 text-xs font-medium ${activeTab === "vigilance" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>Points de vigilance</button>
+    </div>
+    {activeTab === "rondes" ? <div className="grid gap-6 lg:grid-cols-2">
+      {active ? <ActivePatrolPanel active={active} checkpoints={active.checkpoints || []} observations={observations} setObservations={setObservations} onCheck={check} onFinish={finish} fmtTime={fmtTime} saving={saving} />
+        : <StartPatrolPanel route={route} setRoute={setRoute} sites={sites} siteId={siteId} setSiteId={setSiteId} onStart={start} saving={saving} />}
+      <PatrolHistoryPanel data={patrols} fmt={fmtTime} />
+    </div> : <div className="space-y-6">
+      <FormVigilance siteId={siteId} onRefresh={fetchVigilance} />
+      <ListVigilance data={vigilanceData} />
+    </div>}
+    {!site && sites.length > 0 && <p className="text-sm text-muted-foreground">Sélectionnez un site pour charger ou enregistrer les données.</p>}
+  </div>;
 }
