@@ -24,7 +24,7 @@ export interface ShiftFormData {
   notes: string;
 }
 
-type EmployeeMatch = { firstName: string; lastName: string; matricule: string; provider: string; siteId: string; siteName: string };
+type EmployeeMatch = { firstName: string; lastName: string; matricule: string; provider: string; siteId: string | null; siteName: string | null; siteActive: boolean; active: boolean };
 
 export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFormData) => Promise<boolean> }) {
   const [matricule, setMatricule] = useState("");
@@ -49,7 +49,7 @@ export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFor
 
   const handleStart = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!employee) { toast.error("Recherchez d’abord un matricule valide."); return; }
+    if (!employee || !employee.active || !employee.siteId || !employee.siteActive) { toast.error("Cet employé doit être actif et affecté à un site actif."); return; }
     const saved = await onStart({ matricule: employee.matricule, nom: employee.lastName, prenom: employee.firstName,
       prestataire: employee.provider, site_de_travail: employee.siteName, checks, notes: notes.trim() });
     if (saved) { setMatricule(""); setEmployee(null); setChecks({}); setNotes(""); }
@@ -74,7 +74,8 @@ export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFor
         <p><span className="text-muted-foreground">Nom :</span> {employee.lastName}</p>
         <p><span className="text-muted-foreground">Prénom :</span> {employee.firstName}</p>
         <p><span className="text-muted-foreground">Prestataire :</span> {employee.provider}</p>
-        <p><span className="text-muted-foreground">Site de travail :</span> {employee.siteName}</p>
+        <p><span className="text-muted-foreground">Site de travail :</span> {employee.siteName || "Non affecté"}</p>
+        {(!employee.active || !employee.siteId || !employee.siteActive) && <p className="col-span-2 text-destructive">{!employee.active ? "Cet employé est désactivé." : "Aucun site de travail actif n’est affecté. Mettez à jour sa fiche dans le module Employés."}</p>}
       </div>}
 
       <div>
@@ -86,7 +87,7 @@ export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFor
       </div>
 
       <div><Label htmlFor="shift-notes">Observations</Label><Textarea id="shift-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Matériel manquant, anomalie constatée…" className="mt-1" /></div>
-      <Button type="submit" className="w-full" disabled={!employee || searching}>Valider la prise de poste</Button>
+      <Button type="submit" className="w-full" disabled={!employee || !employee.active || !employee.siteId || !employee.siteActive || searching}>Valider la prise de poste</Button>
     </form>
   </Panel>;
 }
