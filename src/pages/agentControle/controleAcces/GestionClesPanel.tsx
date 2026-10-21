@@ -49,7 +49,7 @@ const slots = [
   ["reintegrationApresMidi", "Réintégration après-midi", "responsableReintegrationApresMidi", "Personne ayant rendu les clés"],
 ] as const;
 
-export default function GestionClesPanel() {
+export default function GestionClesPanel({ siteId }: { siteId: string }) {
   const [form, setForm] = useState(initialForm);
   const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,21 +57,25 @@ export default function GestionClesPanel() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
-    const data = await serviceApi.listKeyTracking();
+    if (!siteId) { setEntries([]); return; }
+    const data = await serviceApi.listKeyTracking(siteId);
     setEntries(data);
     setError("");
-  }, []);
+  }, [siteId]);
 
   useEffect(() => {
+    setLoading(Boolean(siteId));
+    if (!siteId) { setEntries([]); setLoading(false); setError(""); return; }
     refresh().catch((reason) => setError(reason instanceof Error ? reason.message : "Chargement impossible."))
       .finally(() => setLoading(false));
   }, [refresh]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!siteId) { toast.error("Sélectionnez un site avant d’enregistrer le suivi."); return; }
     setSaving(true);
     try {
-      await serviceApi.createKeyTracking(form);
+      await serviceApi.createKeyTracking({ ...form, siteId });
       await refresh();
       setForm(initialForm());
       toast.success("Suivi des clés enregistré.");
