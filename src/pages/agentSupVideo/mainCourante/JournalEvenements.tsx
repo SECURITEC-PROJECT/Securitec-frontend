@@ -42,7 +42,7 @@ export default function JournalEvenements({ data }: JournalEvenementsProps) {
                     </span>
                   )}
                   {l.severity && l.severity !== "normal" && (
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${SEV[l.severity]}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${SEV[l.severity] || SEV.normal}`}>
                       {l.severity}
                     </span>
                   )}

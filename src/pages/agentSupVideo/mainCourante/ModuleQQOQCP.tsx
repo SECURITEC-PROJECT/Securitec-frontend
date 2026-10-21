@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { toast } from "sonner";
 import { serviceApi } from "@/lib/service-api";
 
+const currentTime = () => new Date().toTimeString().slice(0, 5);
+
 interface ModuleQQOQCPProps {
   siteId: string;
   onRefresh?: () => void;
@@ -16,7 +18,7 @@ export default function ModuleQQOQCP({ siteId, onRefresh }: ModuleQQOQCPProps) {
     qui: '',
     quoi: '',
     ou: '',
-    quand: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    quand: currentTime(),
     comment: '',
     pourquoi: '',
     mesuresPrises: ''
@@ -45,7 +47,7 @@ export default function ModuleQQOQCP({ siteId, onRefresh }: ModuleQQOQCPProps) {
         qui: '',
         quoi: '',
         ou: '',
-        quand: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        quand: currentTime(),
         comment: '',
         pourquoi: '',
         mesuresPrises: ''

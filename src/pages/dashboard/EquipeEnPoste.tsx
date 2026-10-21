@@ -16,11 +16,11 @@ export default function EquipeEnPoste({ shifts, name }: EquipeEnPosteProps) {
         {activeShifts.map((s, i) => (
           <div key={s.id} className="flex items-center gap-3 py-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-primary">
-              {name(s.agent_id).split(" ").map((x) => x[0]).join("")}
+              {(s.agent_name || name(s.agent_id)).split(" ").map((x: string) => x[0]).join("")}
             </span>
             <div className="flex-1">
-              <p className="text-xs font-semibold">{name(s.agent_id)}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Agent 0{i + 1} · {s.post_name.split(" · ")[0]}</p>
+              <p className="text-xs font-semibold">{s.agent_name || name(s.agent_id)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Agent 0{i + 1} · {s.post_name?.split(" · ")[0] || s.site || "Vacation active"}</p>
             </div>
             <span className="text-[10px] text-success">En poste</span>
           </div>

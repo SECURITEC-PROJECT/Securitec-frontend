@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { toast } from "sonner";
 import { serviceApi } from "@/lib/service-api";
 
+const currentTime = () => new Date().toTimeString().slice(0, 5);
+
 interface ViolationsProps {
   siteId: string;
   onRefresh?: () => void;
@@ -18,7 +20,7 @@ export default function ViolationsProcedure({ siteId, onRefresh }: ViolationsPro
     natureViolation: 'Refus de contrôle',
     description: '',
     mesuresPrises: '',
-    heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    heure: currentTime()
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,7 +46,7 @@ export default function ViolationsProcedure({ siteId, onRefresh }: ViolationsPro
         natureViolation: 'Refus de contrôle',
         description: '',
         mesuresPrises: '',
-        heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        heure: currentTime()
       });
       if (onRefresh) onRefresh();
     } catch (error) {

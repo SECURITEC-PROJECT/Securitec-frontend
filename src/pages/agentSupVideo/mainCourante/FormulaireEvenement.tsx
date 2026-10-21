@@ -8,6 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { serviceApi } from "@/lib/service-api";
 const CATS = ["Information", "Incident", "Intervention", "Alarme", "Livraison", "Appel", "Anomalie technique", "Visiteur", "Prise de poste", "Passation", "Ronde", "Fin de service"];
+const currentTime = () => new Date().toTimeString().slice(0, 5);
 
 interface FormProps {
   siteId: string;
@@ -34,7 +35,7 @@ export default function FormulaireEvenement({ siteId, onRefresh }: FormProps) {
           people,
           description: desc,
           mesuresPrises,
-          heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          heure: currentTime()
       });
 
       toast.success("Événement consigné dans la main courante !");
