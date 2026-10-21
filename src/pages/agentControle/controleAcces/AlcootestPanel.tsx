@@ -36,7 +36,7 @@ const initialForm = () => ({
   tauxMesure: "0.00",
 });
 
-export default function AlcootestPanel() {
+export default function AlcootestPanel({ siteId }: { siteId: string }) {
   const [form, setForm] = useState(initialForm);
   const [entries, setEntries] = useState<BreathTestEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,18 +44,22 @@ export default function AlcootestPanel() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
-    const data = await serviceApi.listBreathTests();
+    if (!siteId) { setEntries([]); return; }
+    const data = await serviceApi.listBreathTests(siteId);
     setEntries(data);
     setError("");
-  }, []);
+  }, [siteId]);
 
   useEffect(() => {
+    setLoading(Boolean(siteId));
+    if (!siteId) { setEntries([]); setLoading(false); setError(""); return; }
     refresh().catch((reason) => setError(reason instanceof Error ? reason.message : "Chargement impossible."))
       .finally(() => setLoading(false));
   }, [refresh]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!siteId) { toast.error("Sélectionnez un site avant d’enregistrer le contrôle."); return; }
     if (form.typeDemande === "À la demande d'un service" && !form.demandeur.trim()) {
       toast.error("Le nom du demandeur est obligatoire pour un contrôle sur demande.");
       return;
@@ -64,6 +68,7 @@ export default function AlcootestPanel() {
     try {
       await serviceApi.createBreathTest({
         ...form,
+        siteId,
         tauxMesure: form.tauxMesure === "" ? null : Number(form.tauxMesure),
       });
       await refresh();
