@@ -2,42 +2,45 @@ import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { demo } from "@/lib/demo-store";
 import { ScanLine } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
-interface BadgeScannerPanelProps {
-  rows: any[];
-}
+const API_URL = "http://localhost:5000/api";
 
-export default function BadgeScannerPanel({ rows }: BadgeScannerPanelProps) {
+export default function BadgeScannerPanel() {
   const [uid, setUid] = useState("V-014");
   const [result, setResult] = useState<{ title: string; text: string; allowed: boolean } | null>(null);
 
-  const handleSimulate = (e: React.FormEvent) => {
+  const handleSimulate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const badge = rows.find((b) => b.uid === uid);
-    const allowed = Boolean(badge?.active);
-    
-    setResult({ 
-      allowed, 
-      title: allowed ? 'Accès autorisé' : 'Accès refusé', 
-      text: badge ? `${badge.holder} · ${badge.zone}` : 'Badge inconnu' 
-    });
+    try {
+      const response = await fetch(`${API_URL}/badges/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid }),
+      });
 
-    demo.add("logbook_entries", { 
-      category: "Intervention", 
-      severity: allowed ? "normal" : "urgent", 
-      description: `Simulation badge ${uid} : ${allowed ? "autorisé" : "refusé"}` 
-    });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Erreur de lecture");
+
+      setResult({
+        allowed: data.allowed,
+        title: data.title,
+        text: data.text,
+      });
+      toast.success("Scan effectué avec succès dans la base de données.");
+    } catch (error: any) {
+      toast.error(error.message || "Erreur lors du scan du badge.");
+    }
   };
 
   return (
-    <Panel title="Lecture d’un badge · Simulation">
+    <Panel title="Lecture d’un badge · Réel (Base de données)">
       <form className="space-y-4" onSubmit={handleSimulate}>
         <Label htmlFor="badge-uid">UID du badge</Label>
         <Input id="badge-uid" value={uid} onChange={(e) => setUid(e.target.value)} required />
-        <Button className="w-full"><ScanLine /> Simuler la lecture</Button>
+        <Button className="w-full"><ScanLine /> Vérifier le badge (BDD)</Button>
       </form>
 
       {result && (

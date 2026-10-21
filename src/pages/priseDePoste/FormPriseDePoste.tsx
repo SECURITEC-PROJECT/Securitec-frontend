@@ -1,11 +1,10 @@
-
 import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const CHECKS = [
   "Tenue réglementaire",
@@ -18,87 +17,129 @@ const CHECKS = [
   "Système d'alarme vérifié",
 ];
 
+// 💡 EXPORT OBLIGATOIRE DE L'INTERFACE
+export interface ShiftFormData {
+  nom: string;
+  prenom: string;
+  prestataire: string;
+  site_de_travail: string;
+  checks: Record<string, boolean>;
+  notes: string;
+}
+
 interface FormPriseDePosteProps {
-  mine: {
-    post_name: string;
-    started_at: string;
-  } | null | undefined;
-  onStart: (
-    post: string,
-    checks: Record<string, boolean>,
-    notes: string
-  ) => void;
-  onEnd: () => void;
-  fmt: (dateStr: string | null) => string;
+  onStart: (data: ShiftFormData) => void;
+  initialNom?: string;
+  initialPrenom?: string;
 }
 
 export default function FormPriseDePoste({
-  mine,
   onStart,
-  onEnd,
-  fmt,
+  initialNom = "",
+  initialPrenom = "",
 }: FormPriseDePosteProps) {
-  const [post, setPost] = useState("Poste principal");
+  const [nom, setNom] = useState(initialNom);
+  const [prenom, setPrenom] = useState(initialPrenom);
+  const [prestataire, setPrestataire] = useState("securitec");
+  const [siteDeTravail, setSiteDeTravail] = useState("Usine Antsirabe");
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState("");
 
+  useEffect(() => {
+    if (initialNom) setNom(initialNom);
+    if (initialPrenom) setPrenom(initialPrenom);
+  }, [initialNom, initialPrenom]);
+
   const handleCheck = (name: string, checked: boolean) => {
-    setChecks((previous) => ({
-      ...previous,
+    setChecks((prev) => ({
+      ...prev,
       [name]: checked,
     }));
   };
 
-  const handleStart = () => {
-    if (!post.trim()) {
+  const handleStart = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim() || !prenom.trim()) {
       return;
     }
 
-    onStart(post.trim(), checks, notes.trim());
+    onStart({
+      nom: nom.trim(),
+      prenom: prenom.trim(),
+      prestataire,
+      site_de_travail: siteDeTravail,
+      checks,
+      notes: notes.trim(),
+    });
+
+    setNom("");
+    setPrenom("");
+    setPrestataire("securitec");
+    setSiteDeTravail("Usine Antsirabe");
     setChecks({});
     setNotes("");
   };
 
-  if (mine) {
-    return (
-      <Panel title="Service en cours">
-        <p className="text-lg font-semibold">{mine.post_name}</p>
-
-        <p className="text-sm text-muted-foreground">
-          Débuté à {fmt(mine.started_at)}
-        </p>
-
-        <Button
-          type="button"
-          variant="destructive"
-          className="mt-4"
-          onClick={onEnd}
-        >
-          Terminer le service
-        </Button>
-      </Panel>
-    );
-  }
-
   return (
     <Panel title="Nouvelle prise de poste">
-      <div className="space-y-4">
-        <div>
-          <Label htmlFor="post-name">Poste</Label>
-          <Input
-            id="post-name"
-            value={post}
-            onChange={(e) => setPost(e.target.value)}
-            className="mt-1"
-            placeholder="Nom du poste"
-          />
+      <form onSubmit={handleStart} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="nom">Nom *</Label>
+            <Input
+              id="nom"
+              required
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              className="mt-1"
+              placeholder="Nom de famille"
+            />
+          </div>
+          <div>
+            <Label htmlFor="prenom">Prénom *</Label>
+            <Input
+              id="prenom"
+              required
+              value={prenom}
+              onChange={(e) => setPrenom(e.target.value)}
+              className="mt-1"
+              placeholder="Prénom"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="prestataire">Prestataire</Label>
+            <select
+              id="prestataire"
+              value={prestataire}
+              onChange={(e) => setPrestataire(e.target.value)}
+              className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="securitec">securitec</option>
+              <option value="GPS">GPS</option>
+              <option value="option3">option3</option>
+            </select>
+          </div>
+
+          <div>
+            <Label htmlFor="site_de_travail">Site de travail</Label>
+            <select
+              id="site_de_travail"
+              value={siteDeTravail}
+              onChange={(e) => setSiteDeTravail(e.target.value)}
+              className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="Usine Antsirabe">Usine Antsirabe</option>
+              <option value="Malto">Malto</option>
+              <option value="Ambatolampy">Ambatolampy</option>
+            </select>
+          </div>
         </div>
 
         <div>
-          <Label className="mb-2 block">
-            Vérification des équipements et consignes
-          </Label>
-
+          <Label className="mb-2 block">Vérification des équipements</Label>
           <div className="space-y-2">
             {CHECKS.map((check) => (
               <label
@@ -111,7 +152,6 @@ export default function FormPriseDePoste({
                     handleCheck(check, value === true)
                   }
                 />
-
                 <span>{check}</span>
               </label>
             ))}
@@ -130,14 +170,13 @@ export default function FormPriseDePoste({
         </div>
 
         <Button
-          type="button"
+          type="submit"
           className="w-full"
-          disabled={!post.trim()}
-          onClick={handleStart}
+          disabled={!nom.trim() || !prenom.trim()}
         >
           Valider la prise de poste
         </Button>
-      </div>
+      </form>
     </Panel>
   );
 }

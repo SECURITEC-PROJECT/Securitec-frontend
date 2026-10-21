@@ -1,15 +1,16 @@
+import type { AuthenticatedUser } from "@/lib/auth-api";
 import { useState, type FormEvent } from "react";
 import FormAuthentification from "./FormAuthentification";
 import MarqueAuthentification from "./MarqueAuthentification";
-import { login, type AuthenticatedUser } from "@/lib/auth-api";
 
 interface AuthentificationProps {
   onLoginSuccess: (user: AuthenticatedUser) => void;
 }
 
 export default function Authentification({ onLoginSuccess }: AuthentificationProps) {
-  const [identifier, setIdentifier] = useState("");
-  const [pin, setPin] = useState("");
+  // Champs pré-remplis par défaut
+  const [identifier, setIdentifier] = useState("admin");
+  const [pin, setPin] = useState("123456");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -17,12 +18,24 @@ export default function Authentification({ onLoginSuccess }: AuthentificationPro
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
-      const user = await login(identifier, pin);
-      onLoginSuccess(user);
-    } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Connexion impossible.");
-    } finally {
+      // Simulation d'un utilisateur connecté pour les tests
+      const mockUser: AuthenticatedUser = {
+        id: 1,
+        nom: "Sahala",
+        identifiant: identifier || "admin",
+        role: "ADMIN",
+        siteNom: "Usine Antsirabe",
+      };
+
+      // Petite pause pour simuler un temps de réponse réseau
+      setTimeout(() => {
+        onLoginSuccess(mockUser);
+        setLoading(false);
+      }, 300);
+    } catch (err) {
+      setError("Erreur lors de la connexion fictive.");
       setLoading(false);
     }
   };

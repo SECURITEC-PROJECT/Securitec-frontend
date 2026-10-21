@@ -1,123 +1,121 @@
-
 import { PageHeader } from "@/components/PageHeader";
-import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import FormPriseDePoste from "./FormPriseDePoste";
-import ListHistoriquePriseDePoste from "./ListHistoriquePriseDePoste";
+import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
-interface Shift {
-  id: number;
-  agent_id: number;
-  agent_name: string;
-  post_name: string;
-  started_at: string;
-  ended_at: string | null;
-  checklist: Record<string, boolean>;
+export interface ShiftFormData {
+  nom: string;
+  prenom: string;
+  prestataire: string;
+  site_de_travail: string;
+  checks: Record<string, boolean>;
   notes: string;
 }
 
-const initialChecklist: Record<string, boolean> = {
-  "Tenue réglementaire": true,
-  "Radio / talkie-walkie testé": true,
-  "Clés du site récupérées": true,
-  "Lampe torche": true,
-  "Téléphone de service chargé": true,
-  "Registre consulté": true,
-  "Vidéosurveillance opérationnelle": true,
-  "Système d'alarme vérifié": true,
-};
+const API_URL = "http://localhost:5000/api";
 
 export default function PriseDePoste() {
-  const [shifts, setShifts] = useState<Shift[]>([
-    {
-      id: 1,
-      agent_id: 1,
-      agent_name: "Karim Benali",
-      post_name: "Poste principal",
-      started_at: new Date(Date.now() - 3600000).toISOString(),
-      ended_at: null,
-      checklist: { ...initialChecklist },
-      notes: "RAS au démarrage.",
-    },
-  ]);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const me = {
-    id: 1,
-    name: "Karim Benali",
-  };
+  const routeState = location.state as {
+    agentMontant?: { nom: string; prenom: string };
+  } | null;
 
-  // Recherche le service actuellement en cours pour cet agent.
-  const mine = shifts.find(
-    (shift) =>
-      shift.agent_id === me.id && shift.ended_at === null
-  );
+  const initialNom = routeState?.agentMontant?.nom || "";
+  const initialPrenom = routeState?.agentMontant?.prenom || "";
 
-  // Enregistre une nouvelle prise de poste.
-  const start = (
-    post: string,
-    checks: Record<string, boolean>,
-    notes: string
-  ) => {
-    if (!post.trim()) {
-      toast.error("Veuillez saisir le nom du poste.");
-      return;
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [selectedShiftForEnd, setSelectedShiftForEnd] = useState<Shift | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/shifts`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setShifts(data);
+      })
+      .catch((err) => console.error("Erreur chargement shifts:", err));
+  }, []);
+
+  const handleStart = async (data: ShiftFormData) => {
+    try {
+      const response = await fetch(`${API_URL}/shifts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) throw new Error("Erreur serveur");
+
+      const newShift = await response.json();
+      setShifts((prev) => [newShift, ...prev]);
+      toast.success(`Prise de poste enregistrée pour ${data.nom} ${data.prenom}`);
+    } catch (error) {
+      toast.error("Impossible d'enregistrer la prise de poste.");
     }
-
-    // Conserve les huit contrôles du formulaire.
-    const checklist: Record<string, boolean> = {
-      ...initialChecklist,
-      ...checks,
-    };
-
-    const newShift: Shift = {
-      id: Date.now(),
-      agent_id: me.id,
-      agent_name: me.name,
-      post_name: post.trim(),
-      started_at: new Date().toISOString(),
-      ended_at: null,
-      checklist,
-      notes: notes.trim(),
-    };
-
-    setShifts((previous) => [newShift, ...previous]);
-
-    toast.success("Prise de poste enregistrée");
   };
 
-  // Enregistre la fin du service en cours.
-  const end = () => {
-    if (!mine) {
-      toast.error("Aucun service en cours.");
-      return;
+  const handleOpenEndDialog = (shift: Shift, isOnlyOne: boolean) => {
+    if (isOnlyOne) {
+      // Si l'agent est le seul en service, redirection directe vers la passation
+      // SANS clôturer son service à ce stade.
+      toast.info("Dernier agent en service : Redirection vers la passation...");
+      navigateToPassation(shift);
+    } else {
+      setSelectedShiftForEnd(shift);
+      setIsModalOpen(true);
     }
-
-    setShifts((previous) =>
-      previous.map((shift) =>
-        shift.id === mine.id
-          ? {
-              ...shift,
-              ended_at: new Date().toISOString(),
-            }
-          : shift
-      )
-    );
-
-    toast.success("Fin de service enregistrée");
   };
 
-  // Formate une date pour afficher l'heure.
+  const navigateToPassation = (shift: Shift) => {
+    navigate("/dashboard/passation", {
+      state: {
+        agentSortant: {
+          id: shift.id, // Transmis pour pouvoir clôturer lors de la confirmation
+          nom: shift.nom,
+          prenom: shift.prenom,
+          site: shift.site_de_travail,
+        },
+      },
+    });
+  };
+
+  // Option 1 : Choix de faire une passation (l'agent reste actif jusqu'à validation)
+  const handleChoicePassation = () => {
+    if (!selectedShiftForEnd) return;
+    setIsModalOpen(false);
+    navigateToPassation(selectedShiftForEnd);
+  };
+
+  // Option 2 : Terminer simplement (clôture immédiate)
+  const handleChoiceTerminateOnly = async () => {
+    if (!selectedShiftForEnd) return;
+    await executeEndService(selectedShiftForEnd.id);
+    setIsModalOpen(false);
+    toast.success(`Service terminé pour ${selectedShiftForEnd.nom} ${selectedShiftForEnd.prenom}`);
+  };
+
+  const executeEndService = async (shiftId: number) => {
+    try {
+      const response = await fetch(`${API_URL}/shifts/${shiftId}/end`, {
+        method: "PUT",
+      });
+      if (!response.ok) throw new Error("Erreur clôture");
+      const updatedShift = await response.json();
+      setShifts((prev) => prev.map((s) => (s.id === shiftId ? updatedShift : s)));
+    } catch (error) {
+      toast.error("Erreur lors de la clôture du service.");
+    }
+  };
+
   const fmt = (dateStr: string | null) => {
-    if (!dateStr) {
-      return "En cours";
-    }
-
+    if (!dateStr) return "En cours";
     const date = new Date(dateStr);
-
-    if (Number.isNaN(date.getTime())) {
-      return "—";
-    }
-
+    if (Number.isNaN(date.getTime())) return "—";
     return date.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -133,17 +131,40 @@ export default function PriseDePoste() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <FormPriseDePoste
-          mine={mine}
-          onStart={start}
-          onEnd={end}
-          fmt={fmt}
+          onStart={handleStart}
+          initialNom={initialNom}
+          initialPrenom={initialPrenom}
         />
-
         <ListHistoriquePriseDePoste
           shifts={shifts}
+          onOpenEndDialog={handleOpenEndDialog}
           fmt={fmt}
         />
       </div>
+
+      {isModalOpen && selectedShiftForEnd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-background p-6 shadow-lg space-y-4">
+            <h3 className="text-lg font-semibold">
+              Fin de service - {selectedShiftForEnd.nom} {selectedShiftForEnd.prenom}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Souhaitez-vous effectuer une passation des consignes ou simplement terminer votre service ?
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <Button onClick={handleChoicePassation} className="w-full">
+                Effectuer une passation
+              </Button>
+              <Button variant="outline" onClick={handleChoiceTerminateOnly} className="w-full">
+                Terminer simplement le travail
+              </Button>
+              <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="w-full">
+                Annuler
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

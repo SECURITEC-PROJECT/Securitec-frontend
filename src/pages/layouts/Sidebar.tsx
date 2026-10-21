@@ -1,10 +1,20 @@
 import { Button } from "@/components/ui/button";
-import { BarChart3, BookOpen, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, MessageSquare, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, MessageSquare, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 const groups = [
   { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
-  { title: "POSTE DE GARDE", items: [{ to: "/dashboard/prise-de-poste", label: "Prise de poste", icon: ClipboardCheck }, { to: "/dashboard/passation", label: "Passation", icon: Repeat }, { to: "/dashboard/visiteurs", label: "Entrées / sorties", icon: Users }, { to: "/dashboard/controle-acces", label: "Contrôle d’accès", icon: ScanLine }, { to: "/dashboard/rondes", label: "Rondes", icon: RouteIcon }, { to: "/dashboard/cameras", label: "Caméras", icon: Video }, { to: "/dashboard/main-courante", label: "Main courante", icon: BookOpen }] },
+  { title: "POSTE DE GARDE", items: [
+      { to: "/dashboard/prise-de-poste", label: "Prise de poste", icon: ClipboardCheck },
+      { to: "/dashboard/passation", label: "Passation", icon: Repeat },
+      { to: "/dashboard/visiteurs", label: "Entrées / sorties", icon: Users },
+      { to: "/dashboard/controle-acces", label: "Contrôle d’accès", icon: ScanLine },
+      { to: "/dashboard/logistique", label: "Flux Logistiques", icon: Boxes },
+      { to: "/dashboard/rondes", label: "Rondes", icon: RouteIcon },
+      { to: "/dashboard/cameras", label: "Caméras", icon: Video },
+      { to: "/dashboard/main-courante", label: "Main courante", icon: BookOpen }
+    ] 
+  },
   { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/messagerie", label: "Messagerie", icon: MessageSquare }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
 ] as const;
 
