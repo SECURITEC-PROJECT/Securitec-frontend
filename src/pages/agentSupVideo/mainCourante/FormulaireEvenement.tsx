@@ -6,15 +6,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import { API_URL } from "@/lib/api";
+import { serviceApi } from "@/lib/service-api";
 const CATS = ["Information", "Incident", "Intervention", "Alarme", "Livraison", "Appel", "Anomalie technique", "Visiteur", "Prise de poste", "Passation", "Ronde", "Fin de service"];
 
 interface FormProps {
+  siteId: string;
   onRefresh?: () => void;
 }
 
-export default function FormulaireEvenement({ onRefresh }: FormProps) {
+export default function FormulaireEvenement({ siteId, onRefresh }: FormProps) {
   const [cat, setCat] = useState("Information");
   const [sev, setSev] = useState("normal");
   const [desc, setDesc] = useState("");
@@ -25,11 +25,9 @@ export default function FormulaireEvenement({ onRefresh }: FormProps) {
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_URL}/main-courante`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await serviceApi.createMainCourante({
           typeEntree: "STANDARD",
+          siteId,
           category: cat,
           severity: sev,
           zone,
@@ -37,10 +35,7 @@ export default function FormulaireEvenement({ onRefresh }: FormProps) {
           description: desc,
           mesuresPrises,
           heure: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }),
       });
-
-      if (!response.ok) throw new Error("Erreur enregistrement");
 
       toast.success("Événement consigné dans la main courante !");
       setDesc("");
@@ -49,7 +44,7 @@ export default function FormulaireEvenement({ onRefresh }: FormProps) {
       setPeople("");
       if (onRefresh) onRefresh();
     } catch (error) {
-      toast.error("Erreur lors de l'enregistrement.");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de l'enregistrement.");
     }
   };
 
@@ -91,7 +86,7 @@ export default function FormulaireEvenement({ onRefresh }: FormProps) {
           <Label>Mesures prises / Actions conservatoires</Label>
           <Input value={mesuresPrises} onChange={(e) => setMesuresPrises(e.target.value)} placeholder="ex. Ronde effectuée, zone isolée..." />
         </div>
-        <Button className="w-full">Enregistrer</Button>
+        <Button className="w-full" disabled={!siteId}>Enregistrer</Button>
       </form>
     </Panel>
   );

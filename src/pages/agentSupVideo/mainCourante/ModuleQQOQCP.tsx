@@ -4,14 +4,14 @@ import { Label } from "@/components/ui/label";
 import { FileQuestion } from "lucide-react";
 import { useState } from 'react';
 import { toast } from "sonner";
-
-import { API_URL } from "@/lib/api";
+import { serviceApi } from "@/lib/service-api";
 
 interface ModuleQQOQCPProps {
+  siteId: string;
   onRefresh?: () => void;
 }
 
-export default function ModuleQQOQCP({ onRefresh }: ModuleQQOQCPProps) {
+export default function ModuleQQOQCP({ siteId, onRefresh }: ModuleQQOQCPProps) {
   const [form, setForm] = useState({
     qui: '',
     quoi: '',
@@ -28,11 +28,9 @@ export default function ModuleQQOQCP({ onRefresh }: ModuleQQOQCPProps) {
     const formattedDescription = `QUI: ${form.qui} | QUOI: ${form.quoi} | OÙ: ${form.ou} | COMMENT: ${form.comment} | POURQUOI: ${form.pourquoi}`;
 
     try {
-      const response = await fetch(`${API_URL}/main-courante`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await serviceApi.createMainCourante({
           typeEntree: "DIVERS",
+          siteId,
           category: "Incident",
           severity: "important",
           zone: form.ou,
@@ -40,10 +38,7 @@ export default function ModuleQQOQCP({ onRefresh }: ModuleQQOQCPProps) {
           description: formattedDescription,
           mesuresPrises: form.mesuresPrises,
           heure: form.quand
-        }),
       });
-
-      if (!response.ok) throw new Error("Erreur enregistrement");
 
       toast.success("Fait notable (10 - DIVERS) consigné avec succès !");
       setForm({
@@ -57,7 +52,7 @@ export default function ModuleQQOQCP({ onRefresh }: ModuleQQOQCPProps) {
       });
       if (onRefresh) onRefresh();
     } catch (error) {
-      toast.error("Erreur lors de la consignation du fait notable.");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la consignation du fait notable.");
     }
   };
 
@@ -106,7 +101,7 @@ export default function ModuleQQOQCP({ onRefresh }: ModuleQQOQCPProps) {
         <Input required value={form.mesuresPrises} onChange={e => setForm({ ...form, mesuresPrises: e.target.value })} placeholder="Action corrective / décision prise..." className="h-9 border-primary/40" />
       </div>
 
-      <Button className="w-full h-10 mt-2">
+      <Button className="w-full h-10 mt-2" disabled={!siteId}>
         <FileQuestion className="mr-2 h-4 w-4" /> Consigner l'Événement (Section 10 DIVERS)
       </Button>
     </form>
