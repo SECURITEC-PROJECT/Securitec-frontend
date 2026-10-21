@@ -1,4 +1,6 @@
-const apiBaseUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
+import { API_URL } from "@/lib/api";
+
+const apiBaseUrl = API_URL;
 const tokenKey = "securitec-access-token";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
