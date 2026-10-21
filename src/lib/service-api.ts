@@ -21,7 +21,7 @@ const body = (data: unknown): string => JSON.stringify(data);
 
 export const serviceApi = {
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
-  async createSite(data: { name: string; type: "USINE" | "AGENCE" }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
+  async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
   async listShifts() { return (await request<{ shifts: any[] }>("/shifts")).shifts; },
   async startShift(data: unknown) { return (await request<{ shift: any }>("/shifts", { method: "POST", body: body(data) })).shift; },
@@ -66,6 +66,11 @@ export const serviceApi = {
   async updateCamera(id: string, data: unknown) { return (await request<{ camera: any }>(`/cameras/${id}`, { method: "PUT", body: body(data) })).camera; },
   async setCameraStatus(id: string, status: "EN_SERVICE" | "MAINTENANCE") { return (await request<{ camera: any }>(`/cameras/${id}`, { method: "PATCH", body: body({ status }) })).camera; },
   async deleteCamera(id: string) { return request<{ id: string; deleted: boolean }>(`/cameras/${id}`, { method: "DELETE" }); },
+  async listEmployees() { return (await request<{ employees: any[] }>("/employees")).employees; },
+  async createEmployee(data: unknown) { return (await request<{ employee: any }>("/employees", { method: "POST", body: body(data) })).employee; },
+  async updateEmployee(id: string, data: unknown) { return (await request<{ employee: any }>(`/employees/${id}`, { method: "PUT", body: body(data) })).employee; },
+  async setEmployeeActive(id: string, active: boolean) { return (await request<{ employee: any }>(`/employees/${id}`, { method: "PATCH", body: body({ active }) })).employee; },
+  async findEmployeeByMatricule(matricule: string) { return (await request<{ employee: any }>(`/employees/by-matricule/${encodeURIComponent(matricule)}`)).employee; },
   async listReports(date?: string) { return (await request<{ reports: any[] }>(`/service-reports${date ? `?date=${encodeURIComponent(date)}` : ""}`)).reports; },
   async createReport(data: unknown) { return (await request<{ report: any }>("/service-reports", { method: "POST", body: body(data) })).report; },
   async updateReport(id: string, data: unknown) { return (await request<{ report: any }>(`/service-reports/${id}`, { method: "PUT", body: body(data) })).report; },

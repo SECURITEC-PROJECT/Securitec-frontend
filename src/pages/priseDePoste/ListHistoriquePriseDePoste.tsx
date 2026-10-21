@@ -6,6 +6,7 @@ export interface Shift {
   id: string;
   nom: string;
   prenom: string;
+  matricule?: string;
   prestataire: string;
   site_de_travail: string;
   started_at: string;
@@ -58,7 +59,7 @@ export default function ListHistoriquePriseDePoste({
                     {s.nom} {s.prenom}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {s.prestataire} · {s.site_de_travail}
+                    {s.matricule ? `Matricule ${s.matricule} · ` : ""}{s.prestataire} · {s.site_de_travail}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Début : <span className="font-mono">{fmt(s.started_at)}</span>

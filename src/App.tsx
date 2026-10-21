@@ -10,6 +10,7 @@ import Authentification from '@/pages/authentification/Authentification';
 import CompteRendu from '@/pages/compteRendu/CompteRendu';
 import Dashboard from '@/pages/dashboard/Dashboard';
 import Documents from '@/pages/documentation/Documentation';
+import Employes from '@/pages/employes/Employes';
 import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="comptes-rendus" element={<CompteRendu />} />
           <Route path="messagerie" element={<Messagerie />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="employes" element={<Employes />} />
           <Route path="administration" element={<Administration />} />
         </Route>
 
