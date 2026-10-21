@@ -55,6 +55,7 @@ export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps)
   });
 
   const [agentNom, setAgentNom] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const handleStatusChange = (index: number, val: string) => {
     const updated = [...items];
@@ -71,10 +72,8 @@ export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const currentTime = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
     const payload = items.map((it) => ({
       ...it,
@@ -83,13 +82,16 @@ export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps)
       siteId,
     }));
 
+    setSaving(true);
     try {
       await serviceApi.createVigilance(payload);
 
       toast.success("Points de vigilance consignés avec succès dans le CRJ !");
-      if (onRefresh) onRefresh();
+      if (onRefresh) void onRefresh();
     } catch (error) {
-      toast.error("Impossible d'enregistrer les points de vigilance.");
+      toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer les points de vigilance.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -158,8 +160,8 @@ export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps)
           </table>
         </div>
 
-        <Button type="submit" disabled={!siteId} className="w-full h-10 font-semibold">
-          <CheckCircle2 className="mr-2 h-4 w-4" /> Enregistrer le contrôle des Points de Vigilance
+        <Button type="submit" disabled={!siteId || saving || !agentNom.trim()} className="w-full h-10 font-semibold">
+          <CheckCircle2 className="mr-2 h-4 w-4" /> {saving ? "Enregistrement…" : "Enregistrer le contrôle des Points de Vigilance"}
         </Button>
       </form>
     </Panel>

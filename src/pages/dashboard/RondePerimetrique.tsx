@@ -16,11 +16,11 @@ export default function RondePerimetrique({ patrols, name }: RondePerimetriquePr
       {patrols.slice(0, 1).map((p) => (
         <div key={p.id}>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <RouteIcon className="h-4 w-4" />{name(p.agent_id)}
-            <span className="ml-auto text-primary">{p.checkpoints.filter((c: any) => c.at).length} / {p.checkpoints.length} balises</span>
+            <RouteIcon className="h-4 w-4" />{p.agent_name || name(p.agent_id)}
+            <span className="ml-auto text-primary">{(p.checkpoints || []).filter((c: any) => c.at).length} / {(p.checkpoints || []).length} balises</span>
           </div>
           <div className="mt-3 grid grid-cols-8 gap-1.5">
-            {p.checkpoints.map((c: any) => (
+            {(p.checkpoints || []).map((c: any) => (
               <div key={c.name} title={c.name} className={`h-2 rounded-sm ${c.at ? "bg-success" : "bg-border"}`} />
             ))}
           </div>
