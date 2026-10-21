@@ -1,13 +1,22 @@
 import { PageHeader, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { demo, useDemoTable } from "@/lib/demo-store";
 import { fmt } from "@/lib/security";
 import { useState } from 'react';
+import { toast } from "sonner";
 
-export function ListVehicule() {
-  const rows = useDemoTable("vehicles");
+export function ListVehicule({ rows, onExit }: { rows: any[]; onExit: (id: string) => Promise<void> }) {
   const [query, setQuery] = useState("");
+
+  const handleExit = async (vehicle: any) => {
+    if (!window.confirm(`Confirmer la sortie du véhicule ${vehicle.plate} conduit par ${vehicle.driver} ?`)) return;
+    try {
+      await onExit(vehicle.id);
+      toast.success(`Sortie enregistrée pour ${vehicle.plate}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sortie impossible");
+    }
+  };
 
   return (
     <div>
@@ -33,7 +42,7 @@ export function ListVehicule() {
             <table className="w-full min-w-[560px] text-left text-xs">
               <thead className="border-b text-muted-foreground">
                 <tr>
-                  {['Véhicule', 'Conducteur', 'Zone', 'Contrôle', 'Présence'].map((x) => (
+                  {['Véhicule', 'Conducteur', 'Site / zone', 'Contrôle', 'Présence'].map((x) => (
                     <th className="py-3 pr-4 font-medium" key={x}>{x}</th>
                   ))}
                 </tr>
@@ -43,21 +52,19 @@ export function ListVehicule() {
                   <tr key={r.id}>
                     <td className="py-4 pr-3">
                       <p className="font-mono font-semibold">{r.plate}</p>
-                      <p className="mt-1 text-muted-foreground">{r.company}</p>
+                      <p className="mt-1 text-muted-foreground">{[r.type, r.company].filter(Boolean).join(" · ") || "—"}</p>
+                      <p className="mt-1 text-muted-foreground">{[r.operation, r.load_state, r.seal_number && `Plomb ${r.seal_number}`, r.document_reference && `Titre ${r.document_reference}`].filter(Boolean).join(" · ")}</p>
                     </td>
                     <td>{r.driver}</td>
-                    <td>{r.zone}</td>
+                    <td>{r.site_name} · {r.zone}</td>
                     <td className={r.compliant ? 'text-success' : 'text-warning-foreground'}>
                       {r.compliant ? 'Conforme' : 'À vérifier'}
                     </td>
                     <td>
                       {r.exited_at ? (
-                        <span className="text-muted-foreground">Sorti · {fmt(r.exited_at)}</span>
+                        <span className="text-muted-foreground">Entrée {fmt(r.entered_at)} · Sortie {fmt(r.exited_at)}</span>
                       ) : (
-                        <Button size="sm" variant="outline" onClick={() => { 
-                          demo.update("vehicles", r.id, { exited_at: new Date().toISOString() }); 
-                          demo.add("logbook_entries", { category: "Livraison", description: `Sortie véhicule ${r.plate}` }); 
-                        }}>
+                        <Button size="sm" variant="outline" onClick={() => void handleExit(r)}>
                            Sortie
                         </Button>
                       )}

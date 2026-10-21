@@ -20,6 +20,11 @@ export type DemoTables = {
 
   shifts: Base & {
     post_name: string;
+    agent_name: string;
+    matricule: string;
+    prestataire: string;
+    site: string;
+    shift: "JOUR" | "NUIT";
     started_at: string;
     ended_at: string | null;
     checklist: Record<string, boolean>;
@@ -27,10 +32,16 @@ export type DemoTables = {
   };
 
   handovers: Base & {
+    outgoing_agent: string;
+    outgoing_matricule: string;
     incoming_agent: string;
+    incoming_matricule: string;
+    post_name: string;
     equipment: string | null;
     ongoing_events: string | null;
     instructions: string | null;
+    outgoing_signed: boolean;
+    incoming_signed: boolean;
   };
 
   visitors: Base & {
@@ -77,7 +88,12 @@ export type DemoTables = {
 
   vehicles: Base & {
     plate: string;
+    type: string;
     company: string;
+    operation: string;
+    seal_number: string;
+    document_reference: string;
+    load_state: string;
     driver: string;
     passengers: string;
     reason: string;
@@ -120,6 +136,11 @@ const data: { [K in keyof DemoTables]: DemoTables[K][] } = {
     {
       ...base("shift-1"),
       post_name: "Accueil · Poste principal",
+      agent_name: "Mickaël Rakoto",
+      matricule: "AG-001",
+      prestataire: "Prestataire à renseigner",
+      site: "Site à renseigner",
+      shift: "JOUR",
       started_at: at("06:00"),
       ended_at: null,
       checklist: {},
@@ -127,6 +148,11 @@ const data: { [K in keyof DemoTables]: DemoTables[K][] } = {
     },
     {
       ...base("shift-2", "agent-2"),
+      agent_name: "Sarah Rabe",
+      matricule: "AG-002",
+      prestataire: "Prestataire à renseigner",
+      site: "Site à renseigner",
+      shift: "JOUR",
       post_name: "Contrôle · Périmètre",
       started_at: at("06:00"),
       ended_at: null,
@@ -135,6 +161,11 @@ const data: { [K in keyof DemoTables]: DemoTables[K][] } = {
     },
     {
       ...base("shift-3", "agent-3"),
+      agent_name: "Jean Ranaivo",
+      matricule: "AG-003",
+      prestataire: "Prestataire à renseigner",
+      site: "Site à renseigner",
+      shift: "JOUR",
       post_name: "Supervision vidéo",
       started_at: at("06:00"),
       ended_at: null,
@@ -147,11 +178,17 @@ const data: { [K in keyof DemoTables]: DemoTables[K][] } = {
     {
       ...base("handover-1", "agent-3", "05:55"),
       incoming_agent: "Mickaël Rakoto",
+      outgoing_agent: "Jean Ranaivo",
+      outgoing_matricule: "AG-003",
+      incoming_matricule: "AG-001",
+      post_name: "Poste principal",
       equipment: "Radio 02, trousseau principal, tablette 01",
       ongoing_events:
         "Maintenance de la caméra du parking à prévoir.",
       instructions:
         "Livraison attendue à 10 h. Contrôler le chargement.",
+      outgoing_signed: true,
+      incoming_signed: true,
     },
   ],
 
@@ -303,7 +340,12 @@ const data: { [K in keyof DemoTables]: DemoTables[K][] } = {
     {
       ...base("vehicle-1"),
       plate: "1234 TBA",
+      type: "Camion",
       company: "Logistique Express",
+      operation: "Déchargement",
+      seal_number: "PL-4521",
+      document_reference: "BL-2026-084",
+      load_state: "Pleins",
       driver: "Thomas Bernard",
       passengers: "0",
       reason: "Livraison",
@@ -404,7 +446,7 @@ export const demo = {
     bucket(table).unshift(row);
     notify();
 
-    return { error: null };
+    return { error: null, data: row };
   },
 
   update<K extends keyof DemoTables>(

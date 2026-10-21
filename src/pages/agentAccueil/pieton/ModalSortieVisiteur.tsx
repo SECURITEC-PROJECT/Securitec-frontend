@@ -3,7 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ModalSortieVisiteurProps {
   visitor: any;
@@ -21,6 +21,12 @@ export default function ModalSortieVisiteur({
   const [equipmentChecked, setEquipmentChecked] = useState(false);
   const [hasExtraEquipment, setHasExtraEquipment] = useState(false);
   const [extraEquipmentDetails, setExtraEquipmentDetails] = useState("");
+
+  useEffect(() => {
+    setEquipmentChecked(false);
+    setHasExtraEquipment(false);
+    setExtraEquipmentDetails("");
+  }, [visitor?.id]);
 
   if (!visitor) return null;
 
@@ -112,6 +118,7 @@ export default function ModalSortieVisiteur({
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={onClose}>Annuler</Button>
           <Button 
+            disabled={(Boolean(visitor.equipment?.trim()) && !equipmentChecked) || (hasExtraEquipment && !extraEquipmentDetails.trim())}
             onClick={() => onConfirmExit(visitor.id, visitor.full_name, { 
               equipmentOut: equipmentChecked, 
               extraEquipment: extraEquipmentDetails 
