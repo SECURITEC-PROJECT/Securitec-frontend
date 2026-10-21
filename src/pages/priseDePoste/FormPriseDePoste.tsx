@@ -4,21 +4,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useEffect, useState } from "react";
+import { serviceApi } from "@/lib/service-api";
+import { Search } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 const CHECKS = [
-  "Tenue réglementaire",
-  "Radio / talkie-walkie testé",
-  "Clés du site récupérées",
-  "Lampe torche",
-  "Téléphone de service chargé",
-  "Registre consulté",
-  "Vidéosurveillance opérationnelle",
-  "Système d'alarme vérifié",
+  "Tenue réglementaire", "Radio / talkie-walkie testé", "Clés du site récupérées", "Lampe torche",
+  "Téléphone de service chargé", "Registre consulté", "Vidéosurveillance opérationnelle", "Système d'alarme vérifié",
 ];
 
-// 💡 EXPORT OBLIGATOIRE DE L'INTERFACE
 export interface ShiftFormData {
+  matricule: string;
   nom: string;
   prenom: string;
   prestataire: string;
@@ -27,156 +24,69 @@ export interface ShiftFormData {
   notes: string;
 }
 
-interface FormPriseDePosteProps {
-  onStart: (data: ShiftFormData) => void;
-  initialNom?: string;
-  initialPrenom?: string;
-}
+type EmployeeMatch = { firstName: string; lastName: string; matricule: string; provider: string; siteId: string; siteName: string };
 
-export default function FormPriseDePoste({
-  onStart,
-  initialNom = "",
-  initialPrenom = "",
-}: FormPriseDePosteProps) {
-  const [nom, setNom] = useState(initialNom);
-  const [prenom, setPrenom] = useState(initialPrenom);
-  const [prestataire, setPrestataire] = useState("securitec");
-  const [siteDeTravail, setSiteDeTravail] = useState("Usine Antsirabe");
+export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFormData) => Promise<boolean> }) {
+  const [matricule, setMatricule] = useState("");
+  const [employee, setEmployee] = useState<EmployeeMatch | null>(null);
+  const [searching, setSearching] = useState(false);
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState("");
 
-  useEffect(() => {
-    if (initialNom) setNom(initialNom);
-    if (initialPrenom) setPrenom(initialPrenom);
-  }, [initialNom, initialPrenom]);
-
-  const handleCheck = (name: string, checked: boolean) => {
-    setChecks((prev) => ({
-      ...prev,
-      [name]: checked,
-    }));
+  const lookupEmployee = async () => {
+    const value = matricule.trim();
+    if (!value) { toast.error("Saisissez un matricule."); return; }
+    setSearching(true);
+    setEmployee(null);
+    try {
+      const match = await serviceApi.findEmployeeByMatricule(value) as EmployeeMatch;
+      setEmployee(match);
+      toast.success("Employé trouvé. Ses informations ont été remplies.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Aucun employé trouvé pour ce matricule.");
+    } finally { setSearching(false); }
   };
 
-  const handleStart = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nom.trim() || !prenom.trim()) {
-      return;
-    }
-
-    onStart({
-      nom: nom.trim(),
-      prenom: prenom.trim(),
-      prestataire,
-      site_de_travail: siteDeTravail,
-      checks,
-      notes: notes.trim(),
-    });
-
-    setNom("");
-    setPrenom("");
-    setPrestataire("securitec");
-    setSiteDeTravail("Usine Antsirabe");
-    setChecks({});
-    setNotes("");
+  const handleStart = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!employee) { toast.error("Recherchez d’abord un matricule valide."); return; }
+    const saved = await onStart({ matricule: employee.matricule, nom: employee.lastName, prenom: employee.firstName,
+      prestataire: employee.provider, site_de_travail: employee.siteName, checks, notes: notes.trim() });
+    if (saved) { setMatricule(""); setEmployee(null); setChecks({}); setNotes(""); }
   };
 
-  return (
-    <Panel title="Nouvelle prise de poste">
-      <form onSubmit={handleStart} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="nom">Nom *</Label>
-            <Input
-              id="nom"
-              required
-              value={nom}
-              onChange={(e) => setNom(e.target.value)}
-              className="mt-1"
-              placeholder="Nom de famille"
-            />
-          </div>
-          <div>
-            <Label htmlFor="prenom">Prénom *</Label>
-            <Input
-              id="prenom"
-              required
-              value={prenom}
-              onChange={(e) => setPrenom(e.target.value)}
-              className="mt-1"
-              placeholder="Prénom"
-            />
-          </div>
+  return <Panel title="Nouvelle prise de poste">
+    <form onSubmit={(event) => void handleStart(event)} className="space-y-4">
+      <div>
+        <Label htmlFor="employee-matricule">Matricule employé *</Label>
+        <div className="mt-1 flex gap-2">
+          <Input id="employee-matricule" required autoComplete="off" value={matricule} placeholder="Saisir ou scanner le matricule"
+            onChange={(event) => { setMatricule(event.target.value); setEmployee(null); }}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void lookupEmployee(); } }} />
+          <Button type="button" variant="outline" disabled={searching || !matricule.trim()} onClick={() => void lookupEmployee()}>
+            <Search className="mr-2 h-4 w-4" />{searching ? "Recherche…" : "Rechercher"}
+          </Button>
         </div>
+        <p className="mt-1 text-xs text-muted-foreground">Raccourci : appuyez sur Entrée après la saisie. Un lecteur de badge configuré pour envoyer Entrée déclenche aussi la recherche.</p>
+      </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="prestataire">Prestataire</Label>
-            <select
-              id="prestataire"
-              value={prestataire}
-              onChange={(e) => setPrestataire(e.target.value)}
-              className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="securitec">securitec</option>
-              <option value="GPS">GPS</option>
-              <option value="option3">option3</option>
-            </select>
-          </div>
+      {employee && <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3 text-sm">
+        <p><span className="text-muted-foreground">Nom :</span> {employee.lastName}</p>
+        <p><span className="text-muted-foreground">Prénom :</span> {employee.firstName}</p>
+        <p><span className="text-muted-foreground">Prestataire :</span> {employee.provider}</p>
+        <p><span className="text-muted-foreground">Site de travail :</span> {employee.siteName}</p>
+      </div>}
 
-          <div>
-            <Label htmlFor="site_de_travail">Site de travail</Label>
-            <select
-              id="site_de_travail"
-              value={siteDeTravail}
-              onChange={(e) => setSiteDeTravail(e.target.value)}
-              className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="Usine Antsirabe">Usine Antsirabe</option>
-              <option value="Malto">Malto</option>
-              <option value="Ambatolampy">Ambatolampy</option>
-            </select>
-          </div>
-        </div>
+      <div>
+        <Label className="mb-2 block">Vérification des équipements</Label>
+        <div className="space-y-2">{CHECKS.map((check) => <label key={check} className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-muted/50">
+          <Checkbox checked={!!checks[check]} onCheckedChange={(value) => setChecks((prev) => ({ ...prev, [check]: value === true }))} />
+          <span>{check}</span>
+        </label>)}</div>
+      </div>
 
-        <div>
-          <Label className="mb-2 block">Vérification des équipements</Label>
-          <div className="space-y-2">
-            {CHECKS.map((check) => (
-              <label
-                key={check}
-                className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-muted/50"
-              >
-                <Checkbox
-                  checked={!!checks[check]}
-                  onCheckedChange={(value) =>
-                    handleCheck(check, value === true)
-                  }
-                />
-                <span>{check}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="shift-notes">Observations</Label>
-          <Textarea
-            id="shift-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Matériel manquant, anomalie constatée…"
-            className="mt-1"
-          />
-        </div>
-
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={!nom.trim() || !prenom.trim()}
-        >
-          Valider la prise de poste
-        </Button>
-      </form>
-    </Panel>
-  );
+      <div><Label htmlFor="shift-notes">Observations</Label><Textarea id="shift-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Matériel manquant, anomalie constatée…" className="mt-1" /></div>
+      <Button type="submit" className="w-full" disabled={!employee || searching}>Valider la prise de poste</Button>
+    </form>
+  </Panel>;
 }

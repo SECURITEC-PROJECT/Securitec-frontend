@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, MessageSquare, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, MessageSquare, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 const groups = [
@@ -15,7 +15,7 @@ const groups = [
       { to: "/dashboard/main-courante", label: "Main courante", icon: BookOpen }
     ] 
   },
-  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/messagerie", label: "Messagerie", icon: MessageSquare }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
+  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/messagerie", label: "Messagerie", icon: MessageSquare }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
 ] as const;
 
 interface SidebarProps {
@@ -57,7 +57,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
           <div key={g.title}>
             <p className="mb-2 px-3 text-[10px] font-semibold text-muted-foreground">{g.title}</p>
             <div className="space-y-0.5">
-              {g.items.map((n) => {
+              {g.items.filter((n) => n.to !== "/dashboard/employes" || user?.role === 1).map((n) => {
                 const isActive = location.pathname === n.to;
                 return (
                   <Link 

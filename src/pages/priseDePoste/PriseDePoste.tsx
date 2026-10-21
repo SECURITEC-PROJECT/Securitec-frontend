@@ -1,12 +1,13 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import FormPriseDePoste from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
 export interface ShiftFormData {
+  matricule: string;
   nom: string;
   prenom: string;
   prestataire: string;
@@ -19,14 +20,6 @@ import { API_URL, authHeaders } from "@/lib/api";
 
 export default function PriseDePoste() {
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const routeState = location.state as {
-    agentMontant?: { nom: string; prenom: string };
-  } | null;
-
-  const initialNom = routeState?.agentMontant?.nom || "";
-  const initialPrenom = routeState?.agentMontant?.prenom || "";
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [selectedShiftForEnd, setSelectedShiftForEnd] = useState<Shift | null>(null);
@@ -41,7 +34,7 @@ export default function PriseDePoste() {
       .catch((err) => console.error("Erreur chargement shifts:", err));
   }, []);
 
-  const handleStart = async (data: ShiftFormData) => {
+  const handleStart = async (data: ShiftFormData): Promise<boolean> => {
     try {
       const response = await fetch(`${API_URL}/shifts`, {
         method: "POST",
@@ -49,13 +42,16 @@ export default function PriseDePoste() {
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) throw new Error("Erreur serveur");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erreur serveur");
 
-      const newShift = await response.json();
+      const newShift = result;
       setShifts((prev) => [newShift, ...prev]);
       toast.success(`Prise de poste enregistrée pour ${data.nom} ${data.prenom}`);
+      return true;
     } catch (error) {
-      toast.error("Impossible d'enregistrer la prise de poste.");
+      toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer la prise de poste.");
+      return false;
     }
   };
 
@@ -133,8 +129,6 @@ export default function PriseDePoste() {
       <div className="grid gap-6 lg:grid-cols-2">
         <FormPriseDePoste
           onStart={handleStart}
-          initialNom={initialNom}
-          initialPrenom={initialPrenom}
         />
         <ListHistoriquePriseDePoste
           shifts={shifts}
