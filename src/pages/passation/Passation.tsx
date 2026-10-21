@@ -7,6 +7,18 @@ import ListPassation from "./ListPassation";
 
 import { API_URL, authHeaders } from "@/lib/api";
 
+type Handover = {
+  id: number;
+  agent_sortant_nom: string;
+  agent_sortant_prenom: string;
+  incoming_nom: string;
+  incoming_prenom: string;
+  equipment: string;
+  ongoing_events: string;
+  instructions: string;
+  created_at: string;
+};
+
 export default function Passation() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -19,7 +31,7 @@ export default function Passation() {
   const agentSortantNom = routeState?.agentSortant?.nom || "";
   const agentSortantPrenom = routeState?.agentSortant?.prenom || "";
 
-  const [handovers, setHandovers] = useState([]);
+  const [handovers, setHandovers] = useState<Handover[]>([]);
 
   useEffect(() => {
     fetch(`${API_URL}/handovers`, { headers: authHeaders() })
