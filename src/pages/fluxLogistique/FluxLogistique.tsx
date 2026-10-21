@@ -52,6 +52,13 @@ export default function FluxLogistique() {
     } catch (error) { toast.error(error instanceof Error ? error.message : "Chargement des flux logistiques impossible."); }
   };
 
+  useEffect(() => {
+    if (!siteName && sites.length > 0) {
+      setSiteName(sites[0].name);
+      setSiteType(sites[0].type);
+    }
+  }, [siteName, sites]);
+
   useEffect(() => { void loadEntries(site?.id); }, [site?.id]);
   useEffect(() => { setStockItems(products(stockCategory === "VIDES" ? EMPTY_PRODUCTS : FULL_PRODUCTS)); }, [stockCategory]);
   useEffect(() => { if (!visibleTabs.includes(tab)) setTab("DECHARGEMENT"); }, [site?.type, siteType]);
@@ -59,7 +66,7 @@ export default function FluxLogistique() {
   const saveTruck = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true);
     try {
-      const result = await serviceApi.createLogistics({ ...truckForm, type: tab, siteName, siteType });
+      const result = await serviceApi.createLogistics({ ...truckForm, type: tab, siteId: site?.id, siteName, siteType });
       if (!result.entry) throw new Error("La réponse du serveur ne contient pas le mouvement enregistré.");
       setEntries((current) => [result.entry, ...current]); setTruckForm(emptyTruck());
       toast.success(tab === "CHARGEMENT" ? "Chargement enregistré." : "Déchargement enregistré.");
@@ -70,7 +77,7 @@ export default function FluxLogistique() {
   const saveStock = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true);
     try {
-      const result = await serviceApi.createLogistics({ type: "INVENTAIRE", date: stockDate, categorieStock: stockCategory, items: stockItems, siteName, siteType });
+      const result = await serviceApi.createLogistics({ type: "INVENTAIRE", date: stockDate, categorieStock: stockCategory, items: stockItems, siteId: site?.id, siteName, siteType });
       setEntries((current) => [...(result.entries || []), ...current]);
       setStockItems(products(stockCategory === "VIDES" ? EMPTY_PRODUCTS : FULL_PRODUCTS));
       toast.success("Inventaire de stock enregistré.");
@@ -83,7 +90,7 @@ export default function FluxLogistique() {
     if (tab !== "ANOMALIE" && tab !== "VIOLATION_PROCEDURE") return;
     setSaving(true);
     try {
-      const entry = await serviceApi.createLogisticsEvent({ ...eventForm, type: tab, siteName, siteType });
+      const entry = await serviceApi.createLogisticsEvent({ ...eventForm, type: tab, siteId: site?.id, siteName, siteType });
       setEvents((current) => [entry, ...current]); setEventForm(emptyEvent());
       toast.success(tab === "ANOMALIE" ? "Anomalie enregistrée." : "Violation de procédure enregistrée.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Enregistrement du signalement impossible."); }
