@@ -12,7 +12,7 @@ import Dashboard from '@/pages/dashboard/Dashboard';
 import Documents from '@/pages/documentation/Documentation';
 import Employes from '@/pages/employes/Employes';
 import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
-import Messagerie from '@/pages/messagerie/Messagerie';
+// import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
 import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
@@ -86,7 +86,7 @@ export default function App() {
           <Route path="cameras" element={<Cameras />} />
           <Route path="main-courante" element={<MainCourante />} />
           <Route path="comptes-rendus" element={<CompteRendu />} />
-          <Route path="messagerie" element={<Messagerie />} />
+          {/* <Route path="messagerie" element={<Messagerie />} /> */}
           <Route path="documents" element={<Documents />} />
           <Route path="employes" element={<Employes />} />
           <Route path="administration" element={<Administration />} />
