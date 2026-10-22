@@ -70,7 +70,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
                   >
                     <n.icon className="h-4 w-4 shrink-0" />
                     <span className="flex-1">{n.label}</span>
-                    {n.to === "/dashboard/messagerie" && <span className="rounded bg-primary/10 px-1.5 text-xs text-primary">1</span>}
+                    {n.label === "Messagerie" && <span className="rounded bg-primary/10 px-1.5 text-xs text-primary">1</span>}
                   </Link>
                 );
               })}
