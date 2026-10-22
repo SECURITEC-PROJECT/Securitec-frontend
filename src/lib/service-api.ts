@@ -20,6 +20,31 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const body = (data: unknown): string => JSON.stringify(data);
 
 export const serviceApi = {
+  async listDocuments(siteId: string) { return (await request<{ documents: any[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
+  async uploadDocument(siteId: string, file: File, category: string) {
+    const token = sessionStorage.getItem(tokenKey);
+    const headers = new Headers({ "Content-Type": file.type || "application/octet-stream", "X-Site-Id": siteId,
+      "X-File-Name": encodeURIComponent(file.name), "X-File-Category": category });
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${apiBaseUrl}/documents`, { method: "POST", headers, body: file });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
+    return result.document as any;
+  },
+  async downloadDocument(id: string) {
+    const token = sessionStorage.getItem(tokenKey);
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${apiBaseUrl}/documents/${encodeURIComponent(id)}`, { headers });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || `Erreur API (${response.status})`);
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    return { blob: await response.blob(), name: encoded ? decodeURIComponent(encoded) : "document" };
+  },
+  async deleteDocument(id: string) { return request<{ id: string; deleted: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
   async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
@@ -28,10 +53,10 @@ export const serviceApi = {
   async endShift(id: string) { return (await request<{ shift: any }>(`/shifts/${id}/end`, { method: "POST", body: "{}" })).shift; },
   async listPassations() { return (await request<{ passations: any[] }>("/passations")).passations; },
   async createPassation(data: unknown) { return (await request<{ passation: any }>("/passations", { method: "POST", body: body(data) })).passation; },
-  async listVisitors() { return (await request<{ visitors: any[] }>("/visitors")).visitors; },
+  async listVisitors(siteId?: string) { return (await request<{ visitors: any[] }>(`/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).visitors; },
   async createVisitor(data: unknown) { return (await request<{ visitor: any }>("/visitors", { method: "POST", body: body(data) })).visitor; },
   async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
-  async listVehicles() { return (await request<{ vehicles: any[] }>("/vehicles")).vehicles; },
+  async listVehicles(siteId?: string) { return (await request<{ vehicles: any[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },
   async createVehicle(data: unknown) { return (await request<{ vehicle: any }>("/vehicles", { method: "POST", body: body(data) })).vehicle; },
   async exitVehicle(id: string) { return (await request<{ vehicle: any }>(`/vehicles/${id}/exit`, { method: "PATCH", body: "{}" })).vehicle; },
   async listKeyTracking(siteId?: string) { return (await request<{ entries: any[] }>(`/access-control/keys${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
