@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
+import { API_URL, authHeaders } from "@/lib/api";
 import { useEffect, useState } from "react";
 import GenerateurCRJ, { type CRJData } from "./GenerateurCRJ";
 import ValidationCRJ from "./ValidationCRJ";

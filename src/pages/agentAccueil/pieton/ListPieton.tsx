@@ -1,9 +1,6 @@
 import { Panel } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
-import { LogOut, PackageCheck } from "lucide-react";
-import { toast } from "sonner";
-import ModalSortieVisiteur from "./ModalSortieVisiteur";
 import { formatTime } from "./formatTime";
 
 // Registre complet des visiteurs (les « Présents sur site » sont dans PresentsSurSite.tsx)
@@ -16,21 +13,6 @@ export default function ListPieton({ visitors }: { visitors: any[] }) {
       .toLowerCase()
       .includes(q.toLowerCase())
   );
-
-  // Enregistrer la sortie d'un visiteur
-  const handleConfirmExit = async (
-    id: string | number,
-    name: string,
-    details: { equipmentOut: boolean; extraEquipment: string }
-  ) => {
-    try {
-      await onExit(String(id), details);
-      toast.success(`Sortie enregistrée pour ${name}`);
-      setSelectedVisitor(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sortie impossible");
-    }
-  };
 
   return (
     <Panel title="Registre complet">
