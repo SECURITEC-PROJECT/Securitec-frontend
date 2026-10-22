@@ -23,6 +23,7 @@ export interface CRJData {
   };
   alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string; typeControle: string }>;
   rondes: Array<{ debut: string; fin: string; obs: string }>;
+  pointsVigilance: Array<{ heure: string; typePoint: string; element: string; statut: string; agent: string; obs: string }>;
   anomalies: Array<{ heure: string; camion: string; transporteur: string; titre: string; obs: string }>;
   violations: Array<{ heure: string; nomPrenom: string; obs: string; mesures: string }>;
   divers: Array<{ dateHeure: string; faits: string; mesures: string }>;
@@ -34,6 +35,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
   const handlePrint = () => {
     window.print();
   };
+
+  // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
+  const decalage = data.siteType === 'Agence' ? 1 : 0;
 
   // Filtrage conforme à la consigne pour les alcootests
   const alcootestsAffiches = data.alcootests.filter(item => {
@@ -203,7 +207,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* SPECIFITE AGENCE : INVENTAIRE STOCK EXTERIEUR (RUBRIQUE 5) */}
         {data.siteType === 'Agence' && (
           <div>
-            <h4 className="font-bold border-b border-black mb-1">5 - INVENTAIRE STOCK EXTERIEUR MAGASIN (AGENCE ONLY)</h4>
+            <h4 className="font-bold border-b border-black mb-1">5 - INVENTAIRE STOCK EXTERIEUR MAGASIN</h4>
             <div className="grid grid-cols-2 gap-2 text-[10px]">
               <div className="border border-black p-2">
                 <p className="font-bold underline mb-1">VIDES (Palettes & Vrac) :</p>
@@ -222,7 +226,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* ALCOOTEST */}
         <div>
           <h4 className="font-bold border-b border-black mb-1">
-            {data.siteType === 'Agence' ? '6' : '5'} - ALCOOTEST (Seuls les tests positifs ordinaires et tous les tests à la demande sont affichés)
+            {5 + decalage} - ALCOOTEST (Seuls les tests positifs ordinaires et tous les tests à la demande sont affichés)
           </h4>
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
@@ -255,7 +259,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* ANOMALIES & VIOLATIONS */}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <h4 className="font-bold border-b border-black mb-1">ANOMALIES</h4>
+            <h4 className="font-bold border-b border-black mb-1">{6 + decalage} - ANOMALIES</h4>
             <div className="border border-black p-2 min-h-[50px] text-[10px]">
               {data.anomalies.length > 0 ? data.anomalies.map((a, i) => (
                 <p key={i}>• {a.heure} - Camion {a.camion} ({a.titre}): {a.obs}</p>
@@ -264,13 +268,100 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           </div>
 
           <div>
-            <h4 className="font-bold border-b border-black mb-1">VIOLATION DE PROCEDURE</h4>
+            <h4 className="font-bold border-b border-black mb-1">{7 + decalage} - VIOLATION DE PROCEDURE</h4>
             <div className="border border-black p-2 min-h-[50px] text-[10px]">
               {data.violations.length > 0 ? data.violations.map((v, i) => (
                 <p key={i}>• {v.heure} - {v.nomPrenom}: {v.obs} (Mesure: {v.mesures})</p>
               )) : <p className="text-gray-500 italic">R.A.S</p>}
             </div>
           </div>
+        </div>
+
+        {/* RONDES */}
+        <div>
+          <h4 className="font-bold border-b border-black mb-1">{8 + decalage} - RONDES</h4>
+          <table className="w-full border-collapse border border-black text-center text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-black p-1">DEBUT</th>
+                <th className="border border-black p-1">FIN</th>
+                <th className="border border-black p-1">OBSERVATIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rondes.length > 0 ? data.rondes.map((r, i) => (
+                <tr key={i}>
+                  <td className="border border-black p-1 font-mono">{r.debut}</td>
+                  <td className="border border-black p-1 font-mono">{r.fin}</td>
+                  <td className="border border-black p-1 text-left">{r.obs}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={3} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* POINTS DE VIGILANCE */}
+        <div>
+          <h4 className="font-bold border-b border-black mb-1">{9 + decalage} - POINTS DE VIGILANCE</h4>
+          <table className="w-full border-collapse border border-black text-center text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-black p-1">HEURE</th>
+                <th className="border border-black p-1">TYPE DE POINT</th>
+                <th className="border border-black p-1">ELEMENT VERIFIE</th>
+                <th className="border border-black p-1">STATUT</th>
+                <th className="border border-black p-1">AGENT</th>
+                <th className="border border-black p-1">OBSERVATIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.pointsVigilance.length > 0 ? data.pointsVigilance.map((v, i) => (
+                <tr key={i}>
+                  <td className="border border-black p-1 font-mono">{v.heure}</td>
+                  <td className="border border-black p-1">{v.typePoint}</td>
+                  <td className="border border-black p-1">{v.element}</td>
+                  <td className="border border-black p-1">{v.statut}</td>
+                  <td className="border border-black p-1">{v.agent}</td>
+                  <td className="border border-black p-1 text-left">{v.obs}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={6} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* DIVERS */}
+        <div>
+          <h4 className="font-bold border-b border-black mb-1">{10 + decalage} - DIVERS</h4>
+          <table className="w-full border-collapse border border-black text-center text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-black p-1">HEURE</th>
+                <th className="border border-black p-1">FAITS</th>
+                <th className="border border-black p-1">MESURES PRISES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.divers.length > 0 ? data.divers.map((d, i) => (
+                <tr key={i}>
+                  <td className="border border-black p-1 font-mono">{d.dateHeure}</td>
+                  <td className="border border-black p-1 text-left">{d.faits}</td>
+                  <td className="border border-black p-1 text-left">{d.mesures}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={3} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         {/* SIGNATURES */}

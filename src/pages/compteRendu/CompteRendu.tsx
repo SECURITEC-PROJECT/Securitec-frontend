@@ -1,11 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
-import { API_URL, authHeaders } from "@/lib/api";
-import { useDemoTable } from "@/lib/demo-store";
-import AlcootestPanel from "@/pages/agentControle/controleAcces/AlcootestPanel";
 import { useEffect, useState } from "react";
-import FormCompteRendu from "./FormCompteRendu";
 import GenerateurCRJ, { type CRJData } from "./GenerateurCRJ";
-import ListCompteRendu from "./ListCompteRendu";
 import ValidationCRJ from "./ValidationCRJ";
 
 interface Option {
@@ -17,11 +12,6 @@ interface Option {
 const selectClass = "h-9 min-w-56 rounded-md border border-input bg-background px-3 text-xs";
 
 export default function ComptesRendus() {
-  const reportsData = useDemoTable("reports");
-
-  // Onglet actif : Saisie & Historique, Alcootest ou Aperçu/Impression du CRJ
-  const [activeTab, setActiveTab] = useState<'saisie' | 'alcootest' | 'apercu'>('saisie');
-
   // Sélecteurs : prestataire, site de travail et date du CRJ
   const [prestataires, setPrestataires] = useState<Option[]>([]);
   const [sites, setSites] = useState<Option[]>([]);
@@ -63,7 +53,7 @@ export default function ComptesRendus() {
 
   // Générer le CRJ dès que le prestataire, le site ou la date change
   useEffect(() => {
-    if (activeTab !== "apercu" || !prestataireId || !siteId || !date) return;
+    if (!prestataireId || !siteId || !date) return;
 
     const controller = new AbortController();
     setLoading(true);
@@ -86,7 +76,7 @@ export default function ComptesRendus() {
       });
 
     return () => controller.abort();
-  }, [activeTab, prestataireId, siteId, date, refresh]);
+  }, [prestataireId, siteId, date, refresh]);
 
   return (
     <div className="space-y-6">
@@ -95,7 +85,7 @@ export default function ComptesRendus() {
         subtitle="Saisie, contrôle de l'alcoolémie sur demande et génération automatique du rapport opposable (HH:MM)" 
       />
 
-      {/* SÉLECTEURS DU CRJ & ONGLETS */}
+      {/* SÉLECTEURS DU CRJ */}
       <div className="flex flex-wrap items-end justify-between gap-4 p-4 border rounded-lg bg-card shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
@@ -120,23 +110,10 @@ export default function ComptesRendus() {
           </div>
         </div>
 
-        {/* ONGLETS DE NAVIGATION DE LA PAGE */}
         <div className="flex gap-2 border-l pl-4">
           <button
-            onClick={() => setActiveTab('saisie')}
-            className={`px-3 py-1.5 text-xs font-medium rounded ${activeTab === 'saisie' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-          >
-            Saisie & Rapports
-          </button>
-          <button
-            onClick={() => setActiveTab('alcootest')}
-            className={`px-3 py-1.5 text-xs font-medium rounded ${activeTab === 'alcootest' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-          >
-            Contrôle Alcoolémie (Supérieur)
-          </button>
-          <button
-            onClick={() => setActiveTab('apercu')}
-            className={`px-3 py-1.5 text-xs font-medium rounded ${activeTab === 'apercu' ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted'}`}
+            onClick={() => setRefresh((n) => n + 1)}
+            className="px-3 py-1.5 text-xs font-medium rounded bg-primary text-primary-foreground font-bold"
           >
             🖨️ Aperçu CRJ Généré ({siteTypeLabel})
           </button>
@@ -146,29 +123,12 @@ export default function ComptesRendus() {
       {/* CLÔTURE DU CRJ */}
       <ValidationCRJ />
 
-      {/* CONTENU SELON L'ONGLET SÉLECTIONNÉ */}
-      {activeTab === 'saisie' && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <FormCompteRendu />
-          <ListCompteRendu data={reportsData} />
-        </div>
-      )}
-
-      {activeTab === 'alcootest' && (
-        <div className="max-w-2xl mx-auto">
-          <AlcootestPanel siteId={siteId} onAddEntry={() => setRefresh((n) => n + 1)} />
-        </div>
-      )}
-
-      {activeTab === 'apercu' && (
-        <>
-          {loading && <p className="text-xs text-muted-foreground">Génération du rapport en cours…</p>}
-          {erreur && <p className="text-xs font-medium text-red-600">✕ {erreur}</p>}
-          {!loading && !erreur && crj && <GenerateurCRJ data={crj} />}
-          {!loading && !erreur && !crj && (
-            <p className="text-xs text-muted-foreground">Choisissez un prestataire, un site et une date pour générer le CRJ.</p>
-          )}
-        </>
+      {/* CRJ GÉNÉRÉ */}
+      {loading && <p className="text-xs text-muted-foreground">Génération du rapport en cours…</p>}
+      {erreur && <p className="text-xs font-medium text-red-600">✕ {erreur}</p>}
+      {!loading && !erreur && crj && <GenerateurCRJ data={crj} />}
+      {!loading && !erreur && !crj && (
+        <p className="text-xs text-muted-foreground">Choisissez un prestataire, un site et une date pour générer le CRJ.</p>
       )}
     </div>
   );
