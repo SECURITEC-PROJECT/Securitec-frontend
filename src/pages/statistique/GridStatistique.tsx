@@ -3,9 +3,10 @@ interface GridStatistiqueProps {
   vehiclesCount: number;
   logsCount: number;
   patrolsCount: number;
+  loading?: boolean;
 }
 
-export default function GridStatistique({ visitorsCount, vehiclesCount, logsCount, patrolsCount }: GridStatistiqueProps) {
+export default function GridStatistique({ visitorsCount, vehiclesCount, logsCount, patrolsCount, loading = false }: GridStatistiqueProps) {
   const stats = [
     ['Passages visiteurs', visitorsCount], 
     ['Véhicules', vehiclesCount], 
@@ -18,7 +19,7 @@ export default function GridStatistique({ visitorsCount, vehiclesCount, logsCoun
       {stats.map(([label, value]) => (
         <div key={label} className="rounded-lg border bg-card p-5">
           <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="mt-3 text-3xl font-semibold">{value}</p>
+          <p className="mt-3 text-3xl font-semibold">{loading ? "—" : value}</p>
         </div>
       ))}
     </div>
