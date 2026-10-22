@@ -1,9 +1,10 @@
 import { PageHeader, Panel } from "@/components/PageHeader";
-import { serviceApi } from "@/lib/service-api";
 import { useSites } from "@/hooks/useSites";
+import { serviceApi } from "@/lib/service-api";
 import { useCallback, useEffect, useState } from "react";
 import FormPieton from "./FormPieton";
 import ListPieton from "./ListPieton";
+import PresentsSurSite from "./Presentsursite";
 
 export default function Pieton() {
   const [visitors, setVisitors] = useState<any[]>([]);
@@ -28,8 +29,20 @@ export default function Pieton() {
     <PageHeader title="Contrôle des passages" subtitle="Registre des entrées et sorties visiteurs, relié au site et au journal des mouvements." />
     {(error || siteError) && <Panel title="Connexion backend"><p className="text-sm text-destructive">{error || siteError}</p></Panel>}
     {loading ? <Panel title="Chargement"><p className="text-sm text-muted-foreground">Chargement du registre visiteurs…</p></Panel> : <>
-      <FormPieton sites={sites} canCreateSite={canCreateSite} onAddSite={addSite} onCreated={(visitor) => setVisitors((previous) => [visitor, ...previous])} />
-      <ListPieton visitors={visitors} onExit={exit} />
+      {/* Formulaire à gauche, présents sur site à droite */}
+      <div className="grid items-start gap-6 lg:grid-cols-[360px_1fr]">
+        <FormPieton
+          sites={sites}
+          canCreateSite={canCreateSite}
+          onAddSite={addSite}
+          knownVisitors={visitors}
+          onCreated={(visitor) => setVisitors((previous) => [visitor, ...previous])}
+        />
+        <PresentsSurSite visitors={visitors} onExit={exit} />
+      </div>
+
+      {/* Registre complet en bas */}
+      <ListPieton visitors={visitors} />
     </>}
   </div>;
 }
