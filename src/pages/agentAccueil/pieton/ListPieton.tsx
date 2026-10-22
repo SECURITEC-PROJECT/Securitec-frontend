@@ -6,6 +6,7 @@ import { useState } from "react";
 import { LogOut, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import ModalSortieVisiteur from "./ModalSortieVisiteur";
+import { formatTime } from "./formatTime";
 
 export default function ListPieton({ visitors, onExit }: { visitors: any[]; onExit: (id: string, details: { equipmentOut: boolean; extraEquipment: string }) => Promise<void> }) {
   const [q, setQ] = useState("");
@@ -36,22 +37,6 @@ export default function ListPieton({ visitors, onExit }: { visitors: any[]; onEx
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sortie impossible");
     }
-  };
-
-  // Formater l'heure, même si la date est null ou absente
-  const formatTime = (
-    dateStr: string | Date | null | undefined
-  ): string => {
-    if (!dateStr) return "—";
-
-    const date = new Date(dateStr);
-
-    if (Number.isNaN(date.getTime())) return "—";
-
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   return (
