@@ -9,7 +9,7 @@ import Sidebar from "./Sidebar";
 const groups = [
   { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble" }, { to: "/dashboard/statistiques", label: "Statistiques" }] },
   { title: "POSTE DE GARDE", items: [{ to: "/dashboard/prise-de-poste", label: "Prise de poste" }, { to: "/dashboard/passation", label: "Passation" }, { to: "/dashboard/visiteurs", label: "Entrées / sorties" }, { to: "/dashboard/controle-acces", label: "Contrôle d’accès" }, { to: "/dashboard/rondes", label: "Rondes" }, { to: "/dashboard/cameras", label: "Caméras" }, { to: "/dashboard/main-courante", label: "Main courante" }] },
-  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés" }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus" }, { to: "/dashboard/messagerie", label: "Messagerie" }, { to: "/dashboard/documents", label: "Documents" }, { to: "/dashboard/administration", label: "Administration" }] },
+  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés" }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus" }, { to: "/dashboard/documents", label: "Documents" }, { to: "/dashboard/administration", label: "Administration" }] },
 ] as const;
 
 interface LayoutPrincipalProps {

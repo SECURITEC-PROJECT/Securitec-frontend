@@ -16,8 +16,8 @@ const groups: { title: string; items: { to: string; label: string; icon: LucideI
       { to: "/dashboard/main-courante", label: "Main courante", icon: BookOpen }
     ] 
   },
-  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/messagerie", label: "Messagerie", icon: MessageSquare }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
-];
+  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
+] as const;
 
 interface SidebarProps {
   open: boolean;
