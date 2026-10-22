@@ -20,6 +20,31 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const body = (data: unknown): string => JSON.stringify(data);
 
 export const serviceApi = {
+  async listDocuments(siteId: string) { return (await request<{ documents: any[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
+  async uploadDocument(siteId: string, file: File, category: string) {
+    const token = sessionStorage.getItem(tokenKey);
+    const headers = new Headers({ "Content-Type": file.type || "application/octet-stream", "X-Site-Id": siteId,
+      "X-File-Name": encodeURIComponent(file.name), "X-File-Category": category });
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${apiBaseUrl}/documents`, { method: "POST", headers, body: file });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
+    return result.document as any;
+  },
+  async downloadDocument(id: string) {
+    const token = sessionStorage.getItem(tokenKey);
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${apiBaseUrl}/documents/${encodeURIComponent(id)}`, { headers });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || `Erreur API (${response.status})`);
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    return { blob: await response.blob(), name: encoded ? decodeURIComponent(encoded) : "document" };
+  },
+  async deleteDocument(id: string) { return request<{ id: string; deleted: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
   async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
