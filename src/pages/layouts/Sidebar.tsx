@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, MessageSquare, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
-const groups = [
+const groups: { title: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
   { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
   { title: "POSTE DE GARDE", items: [
       { to: "/dashboard/prise-de-poste", label: "Prise de poste", icon: ClipboardCheck },
@@ -59,6 +60,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
             <div className="space-y-0.5">
               {g.items.filter((n) => n.to !== "/dashboard/employes" || user?.role === 1).map((n) => {
                 const isActive = location.pathname === n.to;
+                const Icon = n.label === "Messagerie" ? MessageSquare : n.icon;
                 return (
                   <Link 
                     key={n.to} 
@@ -68,7 +70,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
                       isActive ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : ""
                     }`}
                   >
-                    <n.icon className="h-4 w-4 shrink-0" />
+                    <Icon className="h-4 w-4 shrink-0" />
                     <span className="flex-1">{n.label}</span>
                     {n.label === "Messagerie" && <span className="rounded bg-primary/10 px-1.5 text-xs text-primary">1</span>}
                   </Link>
