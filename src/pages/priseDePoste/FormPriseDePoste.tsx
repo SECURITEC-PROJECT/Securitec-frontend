@@ -36,7 +36,6 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
   // Charger les options depuis la base de données
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 4_800);
     fetch(`${API_URL}/options-prise-de-poste`, { headers: authHeaders(), signal: controller.signal })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
@@ -54,7 +53,7 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
         }
       })
       .catch((err) => { if (err.name !== "AbortError") console.error("Erreur chargement options:", err); });
-    return () => { window.clearTimeout(timeout); controller.abort(); };
+    return () => controller.abort();
   }, []);
 
   // Vérification automatique du matricule
@@ -70,7 +69,6 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
 
     setStatus("verifying");
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 4_800);
     let active = true;
 
     const timer = setTimeout(async () => {
@@ -90,12 +88,10 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
         }
       } catch (error) {
         if (active) setStatus("invalid");
-      } finally {
-        window.clearTimeout(timeout);
       }
     }, 400);
 
-    return () => { active = false; clearTimeout(timer); window.clearTimeout(timeout); controller.abort(); };
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [matricule]);
 
   const handleSubmit = (e: React.FormEvent) => {

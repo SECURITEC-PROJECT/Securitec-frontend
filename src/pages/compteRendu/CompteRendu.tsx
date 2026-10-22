@@ -41,11 +41,6 @@ export default function ComptesRendus() {
   // Charger les prestataires et les sites depuis la base de données
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      controller.abort();
-      setLoading(false);
-      setErreur("Le chargement des options CRJ a dépassé 5 secondes.");
-    }, 4_800);
     fetch(`${API_URL}/crj/options`, { headers: authHeaders(), signal: controller.signal })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
@@ -63,7 +58,7 @@ export default function ComptesRendus() {
         }
       })
       .catch((err) => { if (err.name !== "AbortError") console.error("Erreur chargement options CRJ:", err); });
-    return () => { window.clearTimeout(timeout); controller.abort(); };
+    return () => controller.abort();
   }, []);
 
   // Générer le CRJ dès que le prestataire, le site ou la date change
@@ -71,11 +66,6 @@ export default function ComptesRendus() {
     if (activeTab !== "apercu" || !prestataireId || !siteId || !date) return;
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      controller.abort();
-      setLoading(false);
-      setErreur("La génération du CRJ a dépassé 5 secondes.");
-    }, 4_800);
     setLoading(true);
     setErreur("");
 
@@ -92,11 +82,10 @@ export default function ComptesRendus() {
         setErreur(err.message || "Impossible de générer le CRJ.");
       })
       .finally(() => {
-        window.clearTimeout(timeout);
         if (!controller.signal.aborted) setLoading(false);
       });
 
-    return () => { window.clearTimeout(timeout); controller.abort(); };
+    return () => controller.abort();
   }, [activeTab, prestataireId, siteId, date, refresh]);
 
   return (

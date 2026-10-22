@@ -17,8 +17,6 @@ export default function PriseDePoste() {
 
   useEffect(() => {
     const controller = new AbortController();
-    let timedOut = false;
-    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 4_800);
     fetch(`${API_URL}/shifts`, { headers: authHeaders(), signal: controller.signal })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
@@ -29,13 +27,12 @@ export default function PriseDePoste() {
         if (Array.isArray(data)) setShifts(data);
       })
       .catch((err) => {
-        if (err.name !== "AbortError" || timedOut) {
+        if (err.name !== "AbortError") {
           console.error("Erreur chargement shifts:", err);
-          toast.error(timedOut ? "Chargement des prises de poste dépassé (5 s)." : err instanceof Error ? err.message : "Chargement des prises de poste impossible.");
+          toast.error(err instanceof Error ? err.message : "Chargement des prises de poste impossible.");
         }
-      })
-      .finally(() => window.clearTimeout(timeout));
-    return () => { window.clearTimeout(timeout); controller.abort(); };
+      });
+    return () => controller.abort();
   }, []);
 
   const handleStart = async (data: ShiftFormData): Promise<boolean> => {
