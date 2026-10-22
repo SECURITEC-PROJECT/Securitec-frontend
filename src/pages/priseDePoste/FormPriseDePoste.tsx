@@ -1,18 +1,12 @@
 import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { serviceApi } from "@/lib/service-api";
-import { Search } from "lucide-react";
-import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import SelecteursPoste from "./components/SelecteursPoste";
 
-const CHECKS = [
-  "Tenue réglementaire", "Radio / talkie-walkie testé", "Clés du site récupérées", "Lampe torche",
-  "Téléphone de service chargé", "Registre consulté", "Vidéosurveillance opérationnelle", "Système d'alarme vérifié",
-];
+const API_URL = "http://localhost:5000/api";
 
 export interface ShiftFormData {
   matricule: string;
@@ -20,74 +14,169 @@ export interface ShiftFormData {
   prenom: string;
   prestataire: string;
   site_de_travail: string;
-  checks: Record<string, boolean>;
   notes: string;
 }
 
-type EmployeeMatch = { firstName: string; lastName: string; matricule: string; provider: string; siteId: string | null; siteName: string | null; siteActive: boolean; active: boolean };
+interface FormPriseDePosteProps {
+  onStart: (data: ShiftFormData) => void;
+}
 
-export default function FormPriseDePoste({ onStart }: { onStart: (data: ShiftFormData) => Promise<boolean> }) {
+export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
   const [matricule, setMatricule] = useState("");
-  const [employee, setEmployee] = useState<EmployeeMatch | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
+  const [status, setStatus] = useState<"idle" | "verifying" | "valid" | "invalid">("idle");
+
+  const [nom, setNom] = useState("");
+  const [prenom, setPrenom] = useState("");
+
+  const [prestataires, setPrestataires] = useState([]);
+  const [sites, setSites] = useState([]);
+  const [prestataire, setPrestataire] = useState("");
+  const [siteDeTravail, setSiteDeTravail] = useState("");
   const [notes, setNotes] = useState("");
 
-  const lookupEmployee = async () => {
-    const value = matricule.trim();
-    if (!value) { toast.error("Saisissez un matricule."); return; }
-    setSearching(true);
-    setEmployee(null);
-    try {
-      const match = await serviceApi.findEmployeeByMatricule(value) as EmployeeMatch;
-      setEmployee(match);
-      toast.success("Employé trouvé. Ses informations ont été remplies.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Aucun employé trouvé pour ce matricule.");
-    } finally { setSearching(false); }
+  // Charger les options depuis la base de données
+  useEffect(() => {
+    fetch(`${API_URL}/options-prise-de-poste`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.prestataires?.length) {
+          setPrestataires(data.prestataires);
+          setPrestataire(data.prestataires[0].prestataire);
+        }
+        if (data.sites?.length) {
+          setSites(data.sites);
+          setSiteDeTravail(data.sites[0].site);
+        }
+      })
+      .catch((err) => console.error("Erreur chargement options:", err));
+  }, []);
+
+  // Vérification automatique du matricule
+  useEffect(() => {
+    const trimmed = matricule.trim();
+
+    if (!trimmed) {
+      setStatus("idle");
+      setNom("");
+      setPrenom("");
+      return;
+    }
+
+    setStatus("verifying");
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_URL}/employes/${trimmed}`);
+        if (res.ok) {
+          const employee = await res.json();
+          setNom(employee.nom);
+          setPrenom(employee.prenom);
+          setStatus("valid");
+        } else {
+          setNom("");
+          setPrenom("");
+          setStatus("invalid");
+        }
+      } catch (error) {
+        setStatus("invalid");
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [matricule]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (status !== "valid") return;
+
+    onStart({
+      matricule: matricule.trim(),
+      nom: nom.trim(),
+      prenom: prenom.trim(),
+      prestataire,
+      site_de_travail: siteDeTravail,
+      notes: notes.trim(),
+    });
+
+    setMatricule("");
+    setNom("");
+    setPrenom("");
+    setStatus("idle");
+    setNotes("");
   };
 
-  const handleStart = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!employee || !employee.active || !employee.siteId || !employee.siteActive) { toast.error("Cet employé doit être actif et affecté à un site actif."); return; }
-    const saved = await onStart({ matricule: employee.matricule, nom: employee.lastName, prenom: employee.firstName,
-      prestataire: employee.provider, site_de_travail: employee.siteName ?? "", checks, notes: notes.trim() });
-    if (saved) { setMatricule(""); setEmployee(null); setChecks({}); setNotes(""); }
+  const getInputStyles = () => {
+    if (status === "valid") return "border-emerald-500 focus-visible:ring-emerald-500 bg-emerald-50/20";
+    if (status === "invalid") return "border-red-500 focus-visible:ring-red-500 bg-red-50/20";
+    return "";
   };
 
-  return <Panel title="Nouvelle prise de poste">
-    <form onSubmit={(event) => void handleStart(event)} className="space-y-4">
-      <div>
-        <Label htmlFor="employee-matricule">Matricule employé *</Label>
-        <div className="mt-1 flex gap-2">
-          <Input id="employee-matricule" required autoComplete="off" value={matricule} placeholder="Saisir ou scanner le matricule"
-            onChange={(event) => { setMatricule(event.target.value); setEmployee(null); }}
-            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void lookupEmployee(); } }} />
-          <Button type="button" variant="outline" disabled={searching || !matricule.trim()} onClick={() => void lookupEmployee()}>
-            <Search className="mr-2 h-4 w-4" />{searching ? "Recherche…" : "Rechercher"}
-          </Button>
+  return (
+    <Panel title="Nouvelle prise de poste">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <Label htmlFor="matricule">Matricule de l'employé *</Label>
+          <div className="relative mt-1">
+            <Input
+              id="matricule"
+              required
+              value={matricule}
+              onChange={(e) => setMatricule(e.target.value)}
+              placeholder="Ex: EMP001"
+              className={`transition-colors ${getInputStyles()}`}
+            />
+          </div>
+
+          {status === "verifying" && (
+            <p className="text-xs text-muted-foreground mt-1">Vérification en cours...</p>
+          )}
+          {status === "invalid" && (
+            <p className="text-xs text-red-500 font-medium mt-1">
+              ✕ Ce matricule n'existe pas dans la base de données.
+            </p>
+          )}
+          {status === "valid" && (
+            <p className="text-xs text-emerald-600 font-medium mt-1">
+              ✓ Employé identifié : {nom} {prenom}
+            </p>
+          )}
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">Raccourci : appuyez sur Entrée après la saisie. Un lecteur de badge configuré pour envoyer Entrée déclenche aussi la recherche.</p>
-      </div>
 
-      {employee && <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3 text-sm">
-        <p><span className="text-muted-foreground">Nom :</span> {employee.lastName}</p>
-        <p><span className="text-muted-foreground">Prénom :</span> {employee.firstName}</p>
-        <p><span className="text-muted-foreground">Prestataire :</span> {employee.provider}</p>
-        <p><span className="text-muted-foreground">Site de travail :</span> {employee.siteName || "Non affecté"}</p>
-        {(!employee.active || !employee.siteId || !employee.siteActive) && <p className="col-span-2 text-destructive">{!employee.active ? "Cet employé est désactivé." : "Aucun site de travail actif n’est affecté. Mettez à jour sa fiche dans le module Employés."}</p>}
-      </div>}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="nom">Nom</Label>
+            <Input id="nom" readOnly value={nom} className="mt-1 bg-muted" placeholder="Nom" />
+          </div>
+          <div>
+            <Label htmlFor="prenom">Prénom</Label>
+            <Input id="prenom" readOnly value={prenom} className="mt-1 bg-muted" placeholder="Prénom" />
+          </div>
+        </div>
 
-      <div>
-        <Label className="mb-2 block">Vérification des équipements</Label>
-        <div className="space-y-2">{CHECKS.map((check) => <label key={check} className="flex cursor-pointer items-center gap-3 rounded-md border p-2.5 text-sm hover:bg-muted/50">
-          <Checkbox checked={!!checks[check]} onCheckedChange={(value) => setChecks((prev) => ({ ...prev, [check]: value === true }))} />
-          <span>{check}</span>
-        </label>)}</div>
-      </div>
+        <SelecteursPoste
+          prestataires={prestataires}
+          sites={sites}
+          prestataire={prestataire}
+          setPrestataire={setPrestataire}
+          siteDeTravail={siteDeTravail}
+          setSiteDeTravail={setSiteDeTravail}
+        />
 
-      <div><Label htmlFor="shift-notes">Observations</Label><Textarea id="shift-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Matériel manquant, anomalie constatée…" className="mt-1" /></div>
-      <Button type="submit" className="w-full" disabled={!employee || !employee.active || !employee.siteId || !employee.siteActive || searching}>Valider la prise de poste</Button>
-    </form>
-  </Panel>;
+        <div>
+          <Label htmlFor="shift-notes">Observations</Label>
+          <Textarea
+            id="shift-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Matériel manquant, anomalie constatée…"
+            className="mt-1"
+          />
+        </div>
+
+        <Button type="submit" className="w-full" disabled={status !== "valid"}>
+          Valider la prise de poste
+        </Button>
+      </form>
+    </Panel>
+  );
 }
