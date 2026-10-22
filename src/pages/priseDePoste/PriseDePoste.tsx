@@ -16,12 +16,23 @@ export default function PriseDePoste() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_URL}/shifts`, { headers: authHeaders() })
-      .then((res) => res.json())
+    const controller = new AbortController();
+    fetch(`${API_URL}/shifts`, { headers: authHeaders(), signal: controller.signal })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Chargement des prises de poste impossible.");
+        return data;
+      })
       .then((data) => {
         if (Array.isArray(data)) setShifts(data);
       })
-      .catch((err) => console.error("Erreur chargement shifts:", err));
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Erreur chargement shifts:", err);
+          toast.error(err instanceof Error ? err.message : "Chargement des prises de poste impossible.");
+        }
+      });
+    return () => controller.abort();
   }, []);
 
   const handleStart = async (data: ShiftFormData): Promise<boolean> => {
