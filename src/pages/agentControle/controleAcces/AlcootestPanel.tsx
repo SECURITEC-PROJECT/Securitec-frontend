@@ -36,7 +36,7 @@ const initialForm = () => ({
   tauxMesure: "0.00",
 });
 
-export default function AlcootestPanel({ siteId }: { siteId: string }) {
+export default function AlcootestPanel({ siteId, onAddEntry }: { siteId: string; onAddEntry?: () => void }) {
   const [form, setForm] = useState(initialForm);
   const [entries, setEntries] = useState<BreathTestEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +73,7 @@ export default function AlcootestPanel({ siteId }: { siteId: string }) {
       });
       await refresh();
       setForm(initialForm());
+      onAddEntry?.();
       toast.success("Contrôle d’alcoolémie enregistré.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Enregistrement du contrôle impossible.");

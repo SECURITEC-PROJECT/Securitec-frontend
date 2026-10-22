@@ -151,7 +151,7 @@ export default function ComptesRendus() {
 
       {activeTab === 'alcootest' && (
         <div className="max-w-2xl mx-auto">
-          <AlcootestPanel onAddEntry={() => setRefresh((n) => n + 1)} />
+          <AlcootestPanel siteId={siteId} onAddEntry={() => setRefresh((n) => n + 1)} />
         </div>
       )}
 

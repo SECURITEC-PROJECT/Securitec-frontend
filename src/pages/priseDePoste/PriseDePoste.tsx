@@ -3,18 +3,8 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import FormPriseDePoste from "./FormPriseDePoste";
+import FormPriseDePoste, { type ShiftFormData } from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
-
-export interface ShiftFormData {
-  matricule: string;
-  nom: string;
-  prenom: string;
-  prestataire: string;
-  site_de_travail: string;
-  checks: Record<string, boolean>;
-  notes: string;
-}
 
 import { API_URL, authHeaders } from "@/lib/api";
 
