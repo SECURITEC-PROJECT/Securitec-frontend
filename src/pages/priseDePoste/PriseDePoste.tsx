@@ -3,18 +3,8 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import FormPriseDePoste from "./FormPriseDePoste";
+import FormPriseDePoste, { type ShiftFormData } from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
-
-export interface ShiftFormData {
-  matricule: string;
-  nom: string;
-  prenom: string;
-  prestataire: string;
-  site_de_travail: string;
-  checks: Record<string, boolean>;
-  notes: string;
-}
 
 import { API_URL, authHeaders } from "@/lib/api";
 
@@ -26,12 +16,23 @@ export default function PriseDePoste() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_URL}/shifts`, { headers: authHeaders() })
-      .then((res) => res.json())
+    const controller = new AbortController();
+    fetch(`${API_URL}/shifts`, { headers: authHeaders(), signal: controller.signal })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Chargement des prises de poste impossible.");
+        return data;
+      })
       .then((data) => {
         if (Array.isArray(data)) setShifts(data);
       })
-      .catch((err) => console.error("Erreur chargement shifts:", err));
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Erreur chargement shifts:", err);
+          toast.error(err instanceof Error ? err.message : "Chargement des prises de poste impossible.");
+        }
+      });
+    return () => controller.abort();
   }, []);
 
   const handleStart = async (data: ShiftFormData): Promise<boolean> => {

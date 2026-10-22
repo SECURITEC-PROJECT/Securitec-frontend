@@ -3,10 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { API_URL, authHeaders } from "@/lib/api";
 import { useEffect, useState } from "react";
 import SelecteursPoste from "./components/SelecteursPoste";
-
-const API_URL = "http://localhost:5000/api";
 
 export interface ShiftFormData {
   matricule: string;
@@ -36,8 +35,13 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
 
   // Charger les options depuis la base de données
   useEffect(() => {
-    fetch(`${API_URL}/options-prise-de-poste`)
-      .then((res) => res.json())
+    const controller = new AbortController();
+    fetch(`${API_URL}/options-prise-de-poste`, { headers: authHeaders(), signal: controller.signal })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Chargement des options impossible.");
+        return data;
+      })
       .then((data) => {
         if (data.prestataires?.length) {
           setPrestataires(data.prestataires);
@@ -48,7 +52,8 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
           setSiteDeTravail(data.sites[0].site);
         }
       })
-      .catch((err) => console.error("Erreur chargement options:", err));
+      .catch((err) => { if (err.name !== "AbortError") console.error("Erreur chargement options:", err); });
+    return () => controller.abort();
   }, []);
 
   // Vérification automatique du matricule
@@ -63,10 +68,14 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
     }
 
     setStatus("verifying");
+    const controller = new AbortController();
+    let active = true;
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_URL}/employes/${trimmed}`);
+        const res = await fetch(`${API_URL}/employes/${encodeURIComponent(trimmed)}`, {
+          headers: authHeaders(), signal: controller.signal,
+        });
         if (res.ok) {
           const employee = await res.json();
           setNom(employee.nom);
@@ -78,11 +87,11 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
           setStatus("invalid");
         }
       } catch (error) {
-        setStatus("invalid");
+        if (active) setStatus("invalid");
       }
     }, 400);
 
-    return () => clearTimeout(timer);
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [matricule]);
 
   const handleSubmit = (e: React.FormEvent) => {
