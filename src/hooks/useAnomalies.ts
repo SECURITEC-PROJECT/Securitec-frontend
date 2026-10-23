@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 export interface Anomalie {
   id: string;
   type: "visiteur" | "vehicule";
-  rowId: string; // identifiant de la ligne dans « Présents sur site » et le registre
+  rowId: string;
   titre: string;
   message: string;
   site: string;
@@ -18,9 +18,8 @@ export interface Anomalie {
   lignes: { label: string; valeur: string }[];
 }
 
-const INTERVALLE_MS = 60_000; // vérification chaque minute
+const INTERVALLE_MS = 60_000;
 
-// Une seule liste partagée par toute l'application (cloche, présents, registres)
 let cache: Anomalie[] = [];
 const abonnes = new Set<(liste: Anomalie[]) => void>();
 let minuteur: ReturnType<typeof setInterval> | null = null;
@@ -33,11 +32,10 @@ async function charger() {
     cache = Array.isArray(data.anomalies) ? data.anomalies : [];
     abonnes.forEach((notifier) => notifier(cache));
   } catch {
-    // On garde la dernière liste connue si le serveur est injoignable
+    // Conserve la dernière liste connue si le serveur est momentanément injoignable.
   }
 }
 
-// À appeler après une sortie pour retirer tout de suite l'alerte
 export function rafraichirAnomalies() {
   void charger();
 }
