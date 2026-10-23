@@ -1,5 +1,6 @@
+import ClocheAnomalies from "@/components/ClocheAnomalies";
 import { Button } from "@/components/ui/button";
-import { Bell, ChevronRight, CircleHelp, LogOut, Menu, X } from "lucide-react";
+import { ChevronRight, CircleHelp, LogOut, Menu, MessageSquare, X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface HeaderProps {
@@ -27,8 +28,9 @@ export default function Header({ open, setOpen, current, role, signOut }: Header
           <LogOut />
         </Button>
         <Button asChild variant="ghost" size="icon" title="Consignes à lire">
-          <Link to="/dashboard/messagerie"><Bell /></Link>
+          <Link to="/dashboard/messagerie"><MessageSquare /></Link>
         </Button>
+        <ClocheAnomalies />
         <Button asChild variant="ghost" size="icon" title="Documents du site" className="hidden sm:inline-flex">
           <Link to="/dashboard/documents"><CircleHelp /></Link>
         </Button>
