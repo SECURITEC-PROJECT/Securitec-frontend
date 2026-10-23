@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound, type LucideIcon } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 const groups: { title: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
@@ -59,7 +59,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
             <div className="space-y-0.5">
               {g.items.filter((n) => n.to !== "/dashboard/employes" || user?.role === 1).map((n) => {
                 const isActive = location.pathname === n.to;
-                const Icon = n.label === "Messagerie" ? MessageSquare : n.icon;
+                const Icon = n.icon;
                 return (
                   <Link 
                     key={n.to} 
