@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, MessageSquare, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 const groups = [
@@ -70,7 +70,6 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
                   >
                     <n.icon className="h-4 w-4 shrink-0" />
                     <span className="flex-1">{n.label}</span>
-                    {n.label === "Messagerie" && <span className="rounded bg-primary/10 px-1.5 text-xs text-primary">1</span>}
                   </Link>
                 );
               })}
