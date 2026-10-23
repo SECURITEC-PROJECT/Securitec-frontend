@@ -1,14 +1,13 @@
-
 import { Panel } from "@/components/PageHeader";
+import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { serviceApi } from "@/lib/service-api";
-import SitePicker from "@/components/SitePicker";
 import type { SiteOption } from "@/hooks/useSites";
+import { serviceApi } from "@/lib/service-api";
 import { Plus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 interface VehicleFormValues {
@@ -28,14 +27,7 @@ interface VehicleFormValues {
   compliant: boolean;
 }
 
-type VehicleField =
-  | "plate"
-  | "type"
-  | "company"
-  | "driver"
-  | "passengers"
-  | "reason"
-  | "zone";
+type TextField = Exclude<keyof VehicleFormValues, "siteType" | "compliant">;
 
 const empty: VehicleFormValues = {
   siteName: "",
@@ -54,15 +46,16 @@ const empty: VehicleFormValues = {
   compliant: false,
 };
 
-const fields: [VehicleField, string][] = [
-  ["plate", "Immatriculation"],
-  ["type", "Type de véhicule"],
-  ["company", "Société"],
-  ["driver", "Conducteur"],
-  ["passengers", "Passagers"],
-  ["reason", "Motif"],
-  ["zone", "Zone de stationnement"],
-];
+const selectClass = "mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+
+// Titre de section (occupe toute la largeur de la grille)
+function Section({ children }: { children: ReactNode }) {
+  return (
+    <p className="col-span-2 mt-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-0">
+      {children}
+    </p>
+  );
+}
 
 interface FormVehiculeProps {
   onCreated: (vehicle: any) => void;
@@ -89,80 +82,98 @@ function FormVehicule({ onCreated, sites, canCreateSite, onAddSite }: FormVehicu
     } finally { setSaving(false); }
   };
 
-  return (
-    <div className="grid gap-7 xl:grid-cols-[340px_1fr]">
-      <Panel title="Enregistrer une entrée">
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <SitePicker id="vehicle-site" value={form.siteName} type={form.siteType} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setForm((previous) => ({ ...previous, siteName, siteType }))} />
-          <div><Label htmlFor="vehicle-site-type">Type de site</Label><select id="vehicle-site-type" value={form.siteType} onChange={(e) => setForm({ ...form, siteType: e.target.value as "USINE" | "AGENCE" })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="USINE">Usine</option><option value="AGENCE">Agence</option></select></div>
-          {fields.map(([key, title]) => (
-            <div key={key}>
-              <Label htmlFor={key}>{title}</Label>
-
-              <Input
-                id={key}
-                required={["plate", "driver", "reason"].includes(key)}
-                value={form[key]}
-                onChange={(e) =>
-                  setForm((previous) => ({
-                    ...previous,
-                    [key]: e.target.value,
-                  }))
-                }
-              />
-            </div>
-          ))}
-
-          <div>
-            <Label htmlFor="vehicle-operation">Opération</Label>
-            <select id="vehicle-operation" value={form.operation} onChange={(e) => setForm({ ...form, operation: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              <option>Déchargement</option><option>Chargement</option><option>Autre passage</option>
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="seal-number">N° plomb</Label>
-            <Input id="seal-number" value={form.seal_number} onChange={(e) => setForm({ ...form, seal_number: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="transport-document">N° titre / facture / bon</Label>
-            <Input id="transport-document" value={form.document_reference} onChange={(e) => setForm({ ...form, document_reference: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="load-state">État du chargement</Label>
-            <select id="load-state" value={form.load_state} onChange={(e) => setForm({ ...form, load_state: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              <option>Pleins</option><option>Vides</option><option>Sans objet</option>
-            </select>
-          </div>
-
-          <label className="flex cursor-pointer items-center gap-3 text-sm">
-            <Checkbox
-              checked={form.compliant}
-              onCheckedChange={(value) =>
-                setForm((previous) => ({
-                  ...previous,
-                  compliant: value === true,
-                }))
-              }
-            />
-            Contrôle du chargement conforme
-          </label>
-
-          <div>
-            <Label htmlFor="vehicle-photo">Photo du contrôle</Label>
-            <Input
-              id="vehicle-photo"
-              type="file"
-              accept="image/*"
-            />
-          </div>
-
-          <Button type="submit" disabled={saving} className="w-full">
-            <Plus className="mr-2 h-4 w-4" />
-            {saving ? "Enregistrement…" : "Enregistrer l'entrée"}
-          </Button>
-        </form>
-      </Panel>
+  // Champ texte simple
+  const champ = (
+    key: TextField,
+    label: string,
+    opts: { required?: boolean; placeholder?: string; span?: boolean; numeric?: boolean } = {}
+  ) => (
+    <div className={opts.span ? "col-span-2" : ""}>
+      <Label htmlFor={key} className="text-xs">{label}</Label>
+      <Input
+        id={key}
+        className="mt-1 h-9"
+        required={opts.required}
+        placeholder={opts.placeholder}
+        inputMode={opts.numeric ? "numeric" : undefined}
+        value={form[key]}
+        onChange={(e) => {
+          const value = e.target.value;
+          setForm((previous) => ({ ...previous, [key]: value }));
+        }}
+      />
     </div>
+  );
+
+  return (
+    <Panel title="Enregistrer une entrée">
+      <form className="grid grid-cols-2 gap-x-3 gap-y-2.5" onSubmit={handleSubmit}>
+        <Section>Site</Section>
+        <div>
+          <SitePicker id="vehicle-site" value={form.siteName} type={form.siteType} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setForm((previous) => ({ ...previous, siteName, siteType }))} />
+        </div>
+        <div>
+          <Label htmlFor="vehicle-site-type" className="text-xs">Type de site</Label>
+          <select id="vehicle-site-type" value={form.siteType} onChange={(e) => setForm({ ...form, siteType: e.target.value as "USINE" | "AGENCE" })} className={selectClass}>
+            <option value="USINE">Usine</option>
+            <option value="AGENCE">Agence</option>
+          </select>
+        </div>
+
+        <Section>Véhicule</Section>
+        {champ("plate", "Immatriculation *", { required: true })}
+        {champ("type", "Type de véhicule")}
+        {champ("company", "Société")}
+        {champ("driver", "Conducteur *", { required: true })}
+        {champ("passengers", "Passagers", { numeric: true })}
+        {champ("zone", "Zone de stationnement")}
+
+        <Section>Opération</Section>
+        <div>
+          <Label htmlFor="vehicle-operation" className="text-xs">Opération</Label>
+          <select id="vehicle-operation" value={form.operation} onChange={(e) => setForm({ ...form, operation: e.target.value })} className={selectClass}>
+            <option>Déchargement</option><option>Chargement</option><option>Autre passage</option>
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="load-state" className="text-xs">État du chargement</Label>
+          <select id="load-state" value={form.load_state} onChange={(e) => setForm({ ...form, load_state: e.target.value })} className={selectClass}>
+            <option>Pleins</option><option>Vides</option><option>Sans objet</option>
+          </select>
+        </div>
+        {champ("seal_number", "N° plomb")}
+        {champ("document_reference", "N° titre / facture / bon")}
+        {champ("reason", "Motif *", { required: true, span: true })}
+
+        <Section>Contrôle</Section>
+        <label className="col-span-2 flex cursor-pointer items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <Checkbox
+            checked={form.compliant}
+            onCheckedChange={(value) =>
+              setForm((previous) => ({
+                ...previous,
+                compliant: value === true,
+              }))
+            }
+          />
+          Contrôle du chargement conforme
+        </label>
+        <div className="col-span-2">
+          <Label htmlFor="vehicle-photo" className="text-xs">Photo du contrôle</Label>
+          <Input
+            id="vehicle-photo"
+            type="file"
+            accept="image/*"
+            className="mt-1 h-9 cursor-pointer text-xs"
+          />
+        </div>
+
+        <Button type="submit" disabled={saving} className="col-span-2 mt-2 h-10 w-full">
+          <Plus className="mr-2 h-4 w-4" />
+          {saving ? "Enregistrement…" : "Enregistrer l'entrée"}
+        </Button>
+      </form>
+    </Panel>
   );
 }
 

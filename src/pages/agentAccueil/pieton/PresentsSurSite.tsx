@@ -1,5 +1,6 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { rafraichirAnomalies, useAnomalies } from "@/hooks/useAnomalies";
 import { LogOut, PackageCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -15,6 +16,12 @@ export default function PresentsSurSite({
 }) {
   const [selectedVisitor, setSelectedVisitor] = useState<any | null>(null);
 
+  // Anomalies : visiteurs encore présents après la fermeture du site
+  const anomalies = useAnomalies();
+  const enAnomalie = new Map(
+    anomalies.filter((a) => a.type === "visiteur").map((a) => [String(a.rowId), a])
+  );
+
   // Visiteurs actuellement présents sur le site
   const present = visitors.filter((v) => !v.exited_at);
 
@@ -26,6 +33,7 @@ export default function PresentsSurSite({
   ) => {
     try {
       await onExit(String(id), details);
+      rafraichirAnomalies();
       toast.success(`Sortie enregistrée pour ${name}`);
       setSelectedVisitor(null);
     } catch (error) {
@@ -41,7 +49,11 @@ export default function PresentsSurSite({
             {present.map((v) => (
               <li
                 key={v.id}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                className={`flex items-center justify-between gap-3 py-2.5 text-sm ${
+                  enAnomalie.has(String(v.id))
+                    ? "my-1 rounded-md border-l-4 border-red-500 bg-red-50 px-3 text-red-700"
+                    : ""
+                }`}
               >
                 <div>
                   <p className="font-medium">
@@ -54,7 +66,7 @@ export default function PresentsSurSite({
                     )}
                   </p>
 
-                  <p className="text-muted-foreground">
+                  <p className={enAnomalie.has(String(v.id)) ? "text-red-700" : "text-muted-foreground"}>
                     {[
                       v.company,
                       v.host && `voit ${v.host}`,
@@ -63,6 +75,13 @@ export default function PresentsSurSite({
                       .join(" · ")}{" "}
                     · entré {formatTime(v.entered_at)}
                   </p>
+
+                  {enAnomalie.get(String(v.id)) && (
+                    <p className="mt-1 text-xs font-semibold text-red-700">
+                      ⚠ Non sorti après la fermeture ({enAnomalie.get(String(v.id))?.heureFermeture}) · dépassement{" "}
+                      {enAnomalie.get(String(v.id))?.retardTexte}
+                    </p>
+                  )}
 
                   {v.equipment && (
                     <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-600">

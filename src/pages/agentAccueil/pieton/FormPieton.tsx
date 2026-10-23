@@ -5,24 +5,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { SiteOption } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-
-// Le champ "full_name" est affiché à part (avec les suggestions)
-const fields = [
-  ["company", "Société"], 
-  ["id_document", "Pièce d’identité · 4 derniers caractères"],
-  ["document_type", "Type de pièce"], 
-  ["zone", "Zone autorisée"], 
-  ["host", "Personne visitée *"], 
-  ["reason", "Motif *"], 
-  ["badge", "N° badge"], 
-  ["vehicle", "Immatriculation"],
-  ["equipment", "Matériel apporté (PC, outillage...)"],
-] as const;
 
 const normalize = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+const emptyForm = {
+  full_name: "", company: "", id_document: "", host: "", site_name: "", site_type: "USINE",
+  reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: "",
+};
+
+// Titre de section (occupe toute la largeur de la grille)
+function Section({ children }: { children: ReactNode }) {
+  return (
+    <p className="col-span-2 mt-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-0">
+      {children}
+    </p>
+  );
+}
 
 interface FormPietonProps {
   onCreated: (visitor: any) => void;
@@ -34,10 +35,7 @@ interface FormPietonProps {
 }
 
 export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite, knownVisitors }: FormPietonProps) {
-  const [f, setF] = useState<Record<string, string>>({
-    full_name: "", company: "", id_document: "", host: "", site_name: "", site_type: "USINE",
-    reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: ""
-  });
+  const [f, setF] = useState<Record<string, string>>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [active, setActive] = useState(-1);
@@ -103,25 +101,59 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
       const visitor = await serviceApi.createVisitor({ ...f, badge, siteName: f.site_name, siteType: f.site_type });
       onCreated(visitor);
       toast.success("Entrée visiteur enregistrée dans la base de données");
-      setF({ full_name: "", company: "", id_document: "", host: "", site_name: "", site_type: "USINE", reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: "" });
+      setF(emptyForm);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
     } finally { setSaving(false); }
   };
 
+  // Champ texte simple
+  const champ = (
+    k: string,
+    label: string,
+    opts: { required?: boolean; maxLength?: number; placeholder?: string; span?: boolean } = {}
+  ) => (
+    <div className={opts.span ? "col-span-2" : ""}>
+      <Label htmlFor={k} className="text-xs">{label}</Label>
+      <Input
+        id={k}
+        className="mt-1 h-9"
+        maxLength={opts.maxLength}
+        required={opts.required}
+        placeholder={opts.placeholder}
+        value={f[k] || ""}
+        onChange={(e) => {
+          const value = e.target.value;
+          setF((prev) => ({ ...prev, [k]: value }));
+        }}
+      />
+    </div>
+  );
+
   return (
     <Panel title="Enregistrer une entrée">
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <SitePicker id="visitor-site" value={f.site_name} type={f.site_type as SiteOption["type"]} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setF((previous) => ({ ...previous, site_name: siteName, site_type: siteType }))} />
-        <div><Label htmlFor="visitor-site-type">Type de site</Label><select id="visitor-site-type" value={f.site_type} onChange={(e) => setF({ ...f, site_type: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="USINE">Usine</option><option value="AGENCE">Agence</option></select></div>
+      <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+        <Section>Site</Section>
+        <div>
+          <SitePicker id="visitor-site" value={f.site_name} type={f.site_type as SiteOption["type"]} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setF((previous) => ({ ...previous, site_name: siteName, site_type: siteType }))} />
+        </div>
+        <div>
+          <Label htmlFor="visitor-site-type" className="text-xs">Type de site</Label>
+          <select id="visitor-site-type" value={f.site_type} onChange={(e) => setF({ ...f, site_type: e.target.value })} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+            <option value="USINE">Usine</option>
+            <option value="AGENCE">Agence</option>
+          </select>
+        </div>
 
+        <Section>Visiteur</Section>
         {/* Nom et prénom avec suggestions des personnes déjà présentes */}
-        <div className="relative">
-          <Label htmlFor="full_name">Nom et prénom *</Label>
+        <div className="relative col-span-2">
+          <Label htmlFor="full_name" className="text-xs">Nom et prénom *</Label>
           <Input
             id="full_name"
             required
             autoComplete="off"
+            className="mt-1 h-9"
             value={f.full_name || ""}
             onChange={(e) => {
               const value = e.target.value;
@@ -156,20 +188,23 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
             </ul>
           )}
         </div>
+        {champ("company", "Société")}
+        {champ("document_type", "Type de pièce", { placeholder: "CIN, passeport…" })}
+        {champ("id_document", "Pièce d'identité", { maxLength: 4, placeholder: "4 derniers caractères" })}
+        {champ("badge", "N° badge")}
 
-        {fields.map(([k, l]) => (
-          <div key={k}>
-            <Label htmlFor={k}>{l}</Label>
-            <Input 
-              id={k} 
-              maxLength={k === "id_document" ? 4 : undefined} 
-              required={["host", "reason"].includes(k)} 
-              value={f[k] || ""} 
-              onChange={(e) => setF({ ...f, [k]: e.target.value })} 
-            />
-          </div>
-        ))}
-        <Button type="submit" disabled={saving} className="w-full">{saving ? "Enregistrement…" : "Valider l'entrée"}</Button>
+        <Section>Visite</Section>
+        {champ("host", "Personne visitée *", { required: true })}
+        {champ("zone", "Zone autorisée")}
+        {champ("reason", "Motif *", { required: true, span: true })}
+
+        <Section>Véhicule et matériel</Section>
+        {champ("vehicle", "Immatriculation")}
+        {champ("equipment", "Matériel apporté", { placeholder: "PC, outillage…" })}
+
+        <Button type="submit" disabled={saving} className="col-span-2 mt-2 h-10 w-full">
+          {saving ? "Enregistrement…" : "Valider l'entrée"}
+        </Button>
       </form>
     </Panel>
   );
