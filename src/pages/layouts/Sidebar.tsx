@@ -18,6 +18,12 @@ const groups: { title: string; items: { to: string; label: string; icon: LucideI
   { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
 ] as const;
 
+const sidebarRoutesByRole: Record<number, string[]> = {
+  1: ["*"],
+  2: ["/dashboard", "/dashboard/statistiques", "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents"],
+  3: ["/dashboard", "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/main-courante", "/dashboard/comptes-rendus"],
+};
+
 interface SidebarProps {
   open: boolean;
   setOpen: (val: boolean) => void;
@@ -28,6 +34,7 @@ interface SidebarProps {
 
 export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarProps) {
   const location = useLocation();
+  const visibleRoutes = sidebarRoutesByRole[user?.role] || sidebarRoutesByRole[3];
 
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
@@ -53,11 +60,11 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto">
-        {groups.map((g) => (
+        {groups.map((g) => ({ ...g, items: g.items.filter((item) => visibleRoutes.includes("*") || visibleRoutes.includes(item.to)) })).filter((g) => g.items.length > 0).map((g) => (
           <div key={g.title}>
             <p className="mb-2 px-3 text-[10px] font-semibold text-muted-foreground">{g.title}</p>
             <div className="space-y-0.5">
-              {g.items.filter((n) => n.to !== "/dashboard/employes" || user?.role === 1).map((n) => {
+              {g.items.map((n) => {
                 const isActive = location.pathname === n.to;
                 const Icon = n.icon;
                 return (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Building2, Camera, ContactRound, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Building2, Camera, ContactRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { PageHeader, Panel } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ type Site = { id: string; name: string; type: "USINE" | "AGENCE" };
 type Employee = { id: string; firstName: string; lastName: string; matricule: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
 type CameraItem = { id: string; name: string; status: string; siteId: string; siteName: string; zoneName: string };
 type Zone = { id: string; name: string; siteId: string; siteName: string };
-type Tab = "Vue société" | "Sites" | "Équipe et équipements";
+type UserAccount = { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null };
+type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Utilisateurs";
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>("Vue société");
@@ -21,6 +22,17 @@ export default function Administration() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [cameras, setCameras] = useState<CameraItem[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [users, setUsers] = useState<UserAccount[]>([]);
+  const [userQuery, setUserQuery] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("ALL");
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [savingUser, setSavingUser] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserIdentifier, setNewUserIdentifier] = useState("");
+  const [newUserRole, setNewUserRole] = useState("3");
+  const [newUserSiteId, setNewUserSiteId] = useState("");
+  const [newUserPin, setNewUserPin] = useState("");
   const [canManageSites, setCanManageSites] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,6 +50,7 @@ export default function Administration() {
       const siteResult = await serviceApi.listSites();
       setSites(siteResult.sites);
       setCanManageSites(siteResult.canCreate && siteResult.canDelete);
+      if (siteResult.canCreate) setUsers(await serviceApi.listUsers());
       const employeeResult = await serviceApi.listEmployees();
       setEmployees(employeeResult);
       const cameraResults = await Promise.all(siteResult.sites.map(async (site) => {
@@ -66,6 +79,70 @@ export default function Administration() {
     return employees.filter((employee) => `${employee.firstName} ${employee.lastName} ${employee.matricule} ${employee.provider} ${employee.siteName || ""}`.toLocaleLowerCase().includes(needle));
   }, [employees, query]);
 
+  const filteredUsers = useMemo(() => {
+    const needle = userQuery.trim().toLocaleLowerCase();
+    return users.filter((user) => {
+      const role = user.role === 1 ? "ADMIN" : user.role === 2 ? "SUPERVISEUR" : "AGENT";
+      return (userRoleFilter === "ALL" || role === userRoleFilter) && (!needle || `${user.name} ${user.identifier} ${user.siteName || ""}`.toLocaleLowerCase().includes(needle));
+    });
+  }, [users, userQuery, userRoleFilter]);
+
+  const resetUserForm = () => {
+    setShowUserForm(false); setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
+    setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin("");
+  };
+
+  const startCreateUser = () => {
+    setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
+    setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin(""); setShowUserForm(true);
+  };
+
+  const editUser = (user: UserAccount) => {
+    setEditingUserId(user.id); setNewUserName(user.name); setNewUserIdentifier(user.identifier);
+    setNewUserRole(String(user.role)); setNewUserSiteId(user.siteId || ""); setNewUserPin("");
+    setShowUserForm(true);
+  };
+
+  const deleteUser = async (user: UserAccount) => {
+    if (!window.confirm(`Désactiver le compte de ${user.name} ? Son accès sera supprimé et ses historiques conservés.`)) return;
+    try {
+      await serviceApi.deleteUser(user.id);
+      setUsers((current) => current.filter((item) => item.id !== user.id));
+      if (editingUserId === user.id) resetUserForm();
+      toast.success("Le compte utilisateur a été supprimé.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Suppression du compte impossible.");
+    }
+  };
+
+  const saveUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const role = Number(newUserRole);
+    const siteId = newUserSiteId || null;
+    if (role !== 1 && !siteId) {
+      toast.error("Un site est obligatoire pour un agent ou un superviseur.");
+      return;
+    }
+    setSavingUser(true);
+    try {
+      const data = { name: newUserName.trim(), identifier: newUserIdentifier.trim(), role, pin: newUserPin, siteId };
+      if (editingUserId) {
+        const user = await serviceApi.updateUser(editingUserId, data);
+        setUsers((current) => current.map((item) => item.id === user.id ? user : item));
+        toast.success("Le compte utilisateur a été modifié.");
+      } else {
+        const user = await serviceApi.createUser(data);
+        setUsers((current) => [...current, user].sort((a, b) => a.name.localeCompare(b.name)));
+        toast.success("Le compte utilisateur a été créé.");
+      }
+      resetUserForm();
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Création du compte impossible.");
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
   const createSite = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSavingSite(true);
@@ -90,7 +167,7 @@ export default function Administration() {
     }
   };
 
-  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements"];
+  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", ...(canManageSites ? ["Utilisateurs" as const] : [])];
   return <div className="space-y-6">
     <PageHeader title="Administration de la société" subtitle="Vue globale des sites, des équipes et des équipements enregistrés dans la base." action={<Button variant="outline" onClick={() => void load(true)} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualiser</Button>} />
 
@@ -137,6 +214,24 @@ export default function Administration() {
           {cameras.length ? <div className="divide-y">{cameras.map((camera) => <div key={camera.id} className="flex flex-wrap items-center gap-3 py-3"><Camera className="h-4 w-4 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm font-medium">{camera.name}</p><p className="text-xs text-muted-foreground">{camera.siteName} · {camera.zoneName}</p></div><Badge variant={camera.status === "EN_SERVICE" ? "secondary" : "outline"}>{camera.status === "EN_SERVICE" ? "En service" : camera.status}</Badge></div>)}</div> : <p className="py-5 text-sm text-muted-foreground">Aucune caméra enregistrée.</p>}
         </Panel>
       </div>}
+      {tab === "Utilisateurs" && canManageSites && <Panel title={`Comptes utilisateurs (${filteredUsers.length})`}>
+        <div className="mb-4 flex justify-end"><Button type="button" onClick={() => showUserForm ? resetUserForm() : startCreateUser()}><Plus className="h-4 w-4" />{showUserForm ? "Annuler" : "Ajouter un utilisateur"}</Button></div>
+        {showUserForm && <form className="mb-6 grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2" onSubmit={(event) => void saveUser(event)}>
+          <div><Label htmlFor="new-user-name">Nom complet</Label><Input id="new-user-name" required maxLength={255} value={newUserName} onChange={(event) => setNewUserName(event.target.value)} /></div>
+          <div><Label htmlFor="new-user-identifier">Identifiant de connexion</Label><Input id="new-user-identifier" required maxLength={100} autoComplete="username" value={newUserIdentifier} onChange={(event) => setNewUserIdentifier(event.target.value)} /></div>
+          <div><Label htmlFor="new-user-role">Rôle</Label><select id="new-user-role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="1">Administrateur</option><option value="2">Superviseur</option><option value="3">Agent</option></select></div>
+          <div><Label htmlFor="new-user-site">Site {newUserRole === "1" ? "(facultatif)" : ""}</Label><select id="new-user-site" required={newUserRole !== "1"} value={newUserSiteId} onChange={(event) => setNewUserSiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">{newUserRole === "1" ? "Aucun site" : "Choisir un site"}</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>
+          <div><Label htmlFor="new-user-pin">PIN {editingUserId ? "(laisser vide pour conserver l’actuel)" : "temporaire"} · 6 chiffres</Label><Input id="new-user-pin" required={!editingUserId} type="password" inputMode="numeric" pattern={newUserPin ? "[0-9]{6}" : editingUserId ? undefined : "[0-9]{6}"} minLength={newUserPin ? 6 : editingUserId ? undefined : 6} maxLength={6} autoComplete="new-password" value={newUserPin} onChange={(event) => setNewUserPin(event.target.value.replace(/\D/g, "").slice(0, 6))} /></div>
+          <div className="flex items-end"><Button type="submit" disabled={savingUser}>{savingUser ? "Enregistrement…" : editingUserId ? "Enregistrer les modifications" : "Créer le compte"}</Button></div>
+        </form>}
+        <div className="mb-4 flex flex-wrap gap-3">
+          <Input aria-label="Rechercher un utilisateur" placeholder="Nom, identifiant ou site…" className="max-w-md" value={userQuery} onChange={(event) => setUserQuery(event.target.value)} />
+          <select aria-label="Filtrer par rôle" value={userRoleFilter} onChange={(event) => setUserRoleFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+            <option value="ALL">Tous les rôles</option><option value="ADMIN">Administrateur</option><option value="SUPERVISEUR">Superviseur</option><option value="AGENT">Agent</option>
+          </select>
+        </div>
+        {filteredUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Nom</th><th className="py-3 pr-4">Identifiant</th><th className="py-3 pr-4">Rôle</th><th className="py-3 pr-4">Site</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => <tr key={user.id}><td className="py-3 pr-4 font-medium">{user.name}</td><td className="py-3 pr-4 font-mono text-xs">{user.identifier}</td><td className="py-3 pr-4">{user.role === 1 ? "Administrateur" : user.role === 2 ? "Superviseur" : "Agent"}</td><td className="py-3 pr-4">{user.siteName || "—"}</td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${user.name}`} title="Modifier" onClick={() => editUser(user)}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${user.name}`} title="Supprimer" onClick={() => void deleteUser(user)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun utilisateur ne correspond aux filtres.</p>}
+      </Panel>}
     </>}
   </div>;
 }

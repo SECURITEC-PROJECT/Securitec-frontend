@@ -20,6 +20,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const body = (data: unknown): string => JSON.stringify(data);
 
 export const serviceApi = {
+  async listUsers() { return (await request<{ users: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null }[] }>("/users")).users; },
+  async createUser(data: { name: string; identifier: string; role: number; pin: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>("/users", { method: "POST", body: body(data) })).user; },
+  async updateUser(id: string, data: { name: string; identifier: string; role: number; pin?: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>(`/users/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).user; },
+  async deleteUser(id: string) { return request<{ id: string; deleted: boolean }>(`/users/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listDocuments(siteId: string) { return (await request<{ documents: any[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
   async uploadDocument(siteId: string, file: File, category: string) {
     const token = sessionStorage.getItem(tokenKey);
