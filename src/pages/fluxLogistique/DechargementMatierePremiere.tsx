@@ -233,9 +233,8 @@ export default function DechargementMatierePremiere() {
         subtitle="Enregistrement des réceptions de matière première"
       />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <div className="max-w-4xl">
-        <Panel title={editingId ? "Modifier un déchargement" : "Réception de matière première"}>
-          <form className="space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
+      <Panel title={editingId ? "Modifier un déchargement" : "Réception de matière première"}>
+          <form className="w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
             <SitePicker
               id="matiere-site"
               value={selectedSiteName}
@@ -285,8 +284,7 @@ export default function DechargementMatierePremiere() {
               {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
             </div>
           </form>
-        </Panel>
-      </div>
+      </Panel>
       <Panel title="Registre des déchargements">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">

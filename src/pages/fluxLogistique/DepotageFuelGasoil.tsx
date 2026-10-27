@@ -244,9 +244,8 @@ export default function DepotageFuelGasoil() {
     <div className="space-y-6">
       <PageHeader title="Dépotage fuel et gasoil" subtitle="Enregistrement des réceptions de fuel et de gasoil" />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <div className="max-w-5xl">
-        <Panel title={editingId ? "Modifier un dépotage" : "Nouveau dépotage fuel / gasoil"}>
-          <form className="space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
+      <Panel title={editingId ? "Modifier un dépotage" : "Nouveau dépotage fuel / gasoil"}>
+          <form className="w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
             <SitePicker
               id="fuel-site"
               value={selectedSiteName}
@@ -322,8 +321,7 @@ export default function DepotageFuelGasoil() {
               {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
             </div>
           </form>
-        </Panel>
-      </div>
+      </Panel>
 
       <Panel title="Registre des dépotages">
         <div className="mb-4 flex flex-wrap items-center gap-3">
