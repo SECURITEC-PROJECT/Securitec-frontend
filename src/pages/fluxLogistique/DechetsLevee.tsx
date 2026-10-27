@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { ClipboardList, Pencil, Printer, Scale, Search, Trash2, Truck } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -234,13 +234,22 @@ export default function DechetsLevee() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Déchets et levée"
+        title="Déchêt et Levure"
         subtitle="Enregistrement des sorties de déchets et des informations de pesage"
       />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <div className="max-w-3xl">
-        <Panel title={editingId ? "Modifier une sortie de déchets" : "Sortie de déchets"}>
-          <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+      <section className="w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex items-center gap-3 border-b bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-5 py-5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ClipboardList className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-foreground">{editingId ? "Modifier une sortie" : "Nouvelle sortie de déchets"}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Complétez les informations du transport et du pesage.</p>
+          </div>
+        </div>
+        <form className="space-y-5 p-4 sm:p-6" onSubmit={(event) => void submit(event)}>
+          <div className="max-w-2xl">
             <SitePicker
               id="dechets-site"
               value={selectedSiteName}
@@ -253,47 +262,72 @@ export default function DechetsLevee() {
                 setSiteType(type);
               }}
             />
+          </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+          <section className="rounded-lg border bg-muted/15 p-4 sm:p-5">
+            <div className="mb-4 flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Truck className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">Informations de sortie</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">Date, heure, véhicule et destinataire.</p>
+              </div>
+            </div>
+            <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="dechets-date">Date de sortie</Label>
                 <Input id="dechets-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="dechets-time">Heure de sortie</Label>
                 <Input id="dechets-time" type="time" required value={heureSortie} onChange={(event) => setHeureSortie(event.target.value)} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="dechets-pesage">Numéro de pesage</Label>
-                <Input id="dechets-pesage" required maxLength={100} value={numeroPesage} onChange={(event) => setNumeroPesage(event.target.value)} />
+              <div className="space-y-1.5">
+                <Label htmlFor="dechets-vehicule">Véhicule</Label>
+                <Input id="dechets-vehicule" required maxLength={160} placeholder="Immatriculation ou numéro" value={vehicule} onChange={(event) => setVehicule(event.target.value)} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="dechets-facture">Numéro de facture</Label>
-                <Input id="dechets-facture" required maxLength={160} value={facture} onChange={(event) => setFacture(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dechets-poids">Poids (kg)</Label>
-                <Input id="dechets-poids" type="number" min="0.01" step="0.01" required value={poids} onChange={(event) => setPoids(event.target.value)} />
-              </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="dechets-destinataire">Destinataire / client</Label>
                 <Input id="dechets-destinataire" required maxLength={255} value={destinataire} onChange={(event) => setDestinataire(event.target.value)} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="dechets-vehicule">Véhicule</Label>
-                <Input id="dechets-vehicule" required maxLength={160} placeholder="Immatriculation ou numéro du véhicule" value={vehicule} onChange={(event) => setVehicule(event.target.value)} />
+            </div>
+          </section>
+
+          <section className="rounded-lg border bg-muted/15 p-4 sm:p-5">
+            <div className="mb-4 flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Scale className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">Références et pesage</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">Numéros de suivi et poids mesuré.</p>
               </div>
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" className="flex-1 sm:flex-none" disabled={saving || !selectedSiteName.trim()}>
-                {saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer la sortie"}
-              </Button>
-              {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
+            <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="dechets-pesage">Numéro de pesage</Label>
+                <Input id="dechets-pesage" required maxLength={100} value={numeroPesage} onChange={(event) => setNumeroPesage(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dechets-facture">Numéro de facture</Label>
+                <Input id="dechets-facture" required maxLength={160} value={facture} onChange={(event) => setFacture(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dechets-poids">Poids (kg)</Label>
+                <Input id="dechets-poids" type="number" min="0.01" step="0.01" required value={poids} onChange={(event) => setPoids(event.target.value)} />
+              </div>
             </div>
-          </form>
-        </Panel>
-      </div>
+          </section>
+
+          <div className="flex flex-wrap justify-end gap-2 border-t pt-5">
+            {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
+            <Button type="submit" disabled={saving || !selectedSiteName.trim()}>
+              {saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer la sortie"}
+            </Button>
+          </div>
+        </form>
+      </section>
       <Panel title="Registre des sorties de déchets">
         {entriesError && <p className="mb-3 text-sm text-destructive">{entriesError}</p>}
         <div className="relative mb-4">
