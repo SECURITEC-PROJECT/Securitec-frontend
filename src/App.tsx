@@ -23,6 +23,7 @@ import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
+import PointageAPS from '@/pages/pointageAps/PointageAPS';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -107,6 +108,8 @@ export default function App() {
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<Vehicule />} />
           <Route path="pointage-aps" element={<MainCourante />} />
+          <Route path="mouvements-vehicules" element={<AgentAccueil />} />
+          <Route path="pointage-aps" element={<PointageAPS />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<FluxLogistique />} />
