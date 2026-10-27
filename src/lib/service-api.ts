@@ -59,6 +59,18 @@ export interface CourrierMovement {
   siteName: string;
 }
 
+export interface SubcontractorMaterialMovement {
+  id: string;
+  date: string;
+  heureEntree: string;
+  materiels: string;
+  nombre: number;
+  entreprise: string;
+  heureSortie: string | null;
+  siteId: string;
+  createdAt?: string;
+}
+
 export interface AlcoholCheck {
   id: string;
   date: string;
@@ -263,6 +275,22 @@ export const serviceApi = {
   async deleteCourrierMovement(id: string, siteId: string) {
     const params = new URLSearchParams({ siteId });
     return request<{ id: string; deleted: boolean }>(`/courrier-movements/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
+  async listSubcontractorMaterials(siteId: string) {
+    return (await request<{ entries: SubcontractorMaterialMovement[] }>(`/materiels-sous-traitant?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createSubcontractorMaterial(data: { date: string; heureEntree: string; materiels: string; nombre: number; entreprise: string; siteId: string }) {
+    return (await request<{ entry: SubcontractorMaterialMovement }>("/materiels-sous-traitant", { method: "POST", body: body(data) })).entry;
+  },
+  async updateSubcontractorMaterial(id: string, data: { date: string; heureEntree: string; materiels: string; nombre: number; entreprise: string; siteId: string }) {
+    return (await request<{ entry: SubcontractorMaterialMovement }>(`/materiels-sous-traitant/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteSubcontractorMaterial(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/materiels-sous-traitant/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async exitSubcontractorMaterial(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return (await request<{ entry: Pick<SubcontractorMaterialMovement, "id" | "heureSortie"> }>(`/materiels-sous-traitant/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);

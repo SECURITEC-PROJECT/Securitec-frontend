@@ -18,6 +18,7 @@ import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 // import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
 import Consignes from '@/pages/consigne/Consignes';
+import MaterielsSousTraitant from '@/pages/materielsSousTraitant/MaterielsSousTraitant';
 import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
 import DechargementBouteillesVides from '@/pages/fluxLogistique/DechargementBouteillesVides';
@@ -121,7 +122,7 @@ export default function App() {
           <Route path="test-alcool" element={<ControleAcces />} />
           <Route path="consigne" element={<Consignes />} />
           <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
-          <Route path="materiels-sous-traitant" element={<MainCourante />} />
+          <Route path="materiels-sous-traitant" element={<MaterielsSousTraitant />} />
           <Route path="enregistrements-ordures" element={<FluxLogistique />} />
           <Route path="materiels-star" element={<MainCourante />} />
           
