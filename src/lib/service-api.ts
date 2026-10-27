@@ -126,6 +126,7 @@ export const serviceApi = {
   },
   async deleteEmptyBottleDelivery(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/logistics/empty-bottles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
   async deleteMatierePremiereLogistics(id: string, siteId: string) {
     const params = new URLSearchParams({ siteId, type: "MATIERE_PREMIERE" });
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
