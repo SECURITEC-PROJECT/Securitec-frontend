@@ -118,7 +118,6 @@ export default function App() {
           <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<Anomalie/>} />
           <Route path="test-alcool" element={<TestAlcool />} />
-          <Route path="consigne" element={<Passation />} />
           <Route path="test-alcool" element={<ControleAcces />} />
           <Route path="consigne" element={<Consignes />} />
           <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
