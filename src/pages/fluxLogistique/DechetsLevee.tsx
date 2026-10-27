@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { Pencil, Search, Trash2 } from "lucide-react";
+import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -33,6 +33,15 @@ const formatDate = (value: string) => {
   const [year, month, day] = date.split("-");
   return `${day}/${month}/${year}`;
 };
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character] || character);
 
 export default function DechetsLevee() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
@@ -167,6 +176,61 @@ export default function DechetsLevee() {
     }
   };
 
+  const printEntry = (entry: DechetsEntry) => {
+    const printWindow = window.open("", "_blank", "width=420,height=420");
+    if (!printWindow) {
+      toast.error("Autorisez les fenêtres contextuelles pour imprimer le bon.");
+      return;
+    }
+
+    const rows = [
+      ["Date", formatDate(entry.date)],
+      ["Heure de sortie", entry.heureSortie || "—"],
+      ["Véhicule", entry.vehicule || "—"],
+      ["N° de pesage", entry.numeroPesage || "—"],
+      ["Facture", entry.facture || "—"],
+      ["Poids", entry.poids == null ? "—" : `${Number(entry.poids).toLocaleString("fr-FR")} kg`],
+      ["Destinataire / client", entry.destinataire || "—"],
+    ];
+    const details = rows.map(([label, value]) =>
+      `<div class="row"><span class="label">${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
+    ).join("");
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8">
+          <title>Bon de sortie déchets</title>
+          <style>
+            @page { size: 80mm 80mm; margin: 2mm; }
+            * { box-sizing: border-box; }
+            html, body { width: 76mm; min-height: 76mm; margin: 0; }
+            body { color: #111; font: 10px Arial, sans-serif; }
+            main { width: 76mm; min-height: 76mm; padding: 2mm; }
+            h1 { margin: 0 0 1mm; text-align: center; font-size: 15px; }
+            .subtitle { margin: 0 0 3mm; text-align: center; font-size: 9px; }
+            .site { margin: 0 0 2mm; text-align: center; font-weight: 700; }
+            .row { display: flex; justify-content: space-between; gap: 2mm; border-bottom: 1px dashed #999; padding: 1.5mm 0; }
+            .label { flex: 0 0 38%; }
+            strong { max-width: 60%; text-align: right; overflow-wrap: anywhere; }
+            .footer { margin-top: 3mm; text-align: center; font-size: 8px; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>Sortie de déchets</h1>
+            <p class="subtitle">Bon de sortie · format 80 × 80 mm</p>
+            ${entry.siteName ? `<p class="site">${escapeHtml(entry.siteName)}</p>` : ""}
+            ${details}
+            <p class="footer">Document généré depuis Securitec</p>
+          </main>
+          <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
+        </body>
+      </html>`);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -232,12 +296,7 @@ export default function DechetsLevee() {
       </div>
       <Panel title="Registre des sorties de déchets">
         {entriesError && <p className="mb-3 text-sm text-destructive">{entriesError}</p>}
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border bg-muted/20 px-4 py-3">
-            <p className="text-xs font-medium text-muted-foreground">Sorties enregistrées</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight">{entries.length}</p>
-          </div>
-          <div className="relative">
+        <div className="relative mb-4">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre des déchets"
@@ -246,7 +305,6 @@ export default function DechetsLevee() {
               onChange={(event) => setSearch(event.target.value)}
               className="h-full min-h-11 pl-9"
             />
-          </div>
         </div>
         {!site?.id ? (
           <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
@@ -286,6 +344,9 @@ export default function DechetsLevee() {
                       <td className="px-4 py-3">{entry.destinataire || "—"}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         <div className="inline-flex gap-1">
+                          <Button type="button" size="icon" variant="ghost" aria-label="Imprimer le bon de sortie" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
+                            <Printer className="h-4 w-4" />
+                          </Button>
                           <Button type="button" size="icon" variant="ghost" aria-label="Modifier la sortie" title="Modifier" onClick={() => startEditing(entry)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
