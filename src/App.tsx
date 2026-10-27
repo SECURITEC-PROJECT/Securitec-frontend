@@ -113,7 +113,6 @@ export default function App() {
           <Route path="pointage-aps" element={<PointageAPS />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<Courrier />} />
-          <Route path="anomalie" element={<FluxLogistique />} />
           <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<Anomalie/>} />
           <Route path="test-alcool" element={<ControleAcces />} />
