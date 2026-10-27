@@ -1,102 +1,96 @@
 import { Panel } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Pencil, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import type { VehicleMovement } from "@/lib/service-api";
 
-const formatTime = (dateStr: string | Date | null | undefined): string => {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const formatDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "—";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
 };
 
-// Format de la date (JJ/MM/AAAA)
-const formatDate = (dateStr: string | Date | null | undefined): string => {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-};
-
-// Premier champ non vide parmi plusieurs noms possibles
-const pick = (v: any, ...keys: string[]) => {
-  for (const k of keys) {
-    const value = v?.[k];
-    if (value !== null && value !== undefined && String(value).trim() !== "") return String(value);
-  }
-  return "";
-};
-
-// Registre complet des véhicules (les « présents sur site » sont dans PresentsVehicules.tsx)
-export default function RegistreVehicules({ rows }: { rows: any[] }) {
-  const [q, setQ] = useState("");
-
-  // Recherche par immatriculation, société, conducteur, opération, plomb ou référence
-  const filtered = rows.filter((v) =>
-    [
-      pick(v, "plate", "immatriculation"),
-      pick(v, "company", "societe"),
-      pick(v, "driver", "conducteur"),
-      pick(v, "operation"),
-      pick(v, "seal_number"),
-      pick(v, "document_reference"),
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(q.toLowerCase())
+export default function RegistreVehicules({
+  rows,
+  onEdit,
+  onDelete,
+}: {
+  rows: VehicleMovement[];
+  onEdit: (vehicle: VehicleMovement) => void;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [search, setSearch] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const filtered = rows.filter((vehicle) =>
+    [vehicle.plate, vehicle.ownerName, vehicle.category].join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   );
 
+  const deleteEntry = async (vehicle: VehicleMovement) => {
+    if (!window.confirm(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`)) return;
+    setDeletingId(vehicle.id);
+    try {
+      await onDelete(vehicle.id);
+      toast.success("Mouvement véhicule supprimé.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Suppression impossible.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
-    <Panel title="Registre des véhicules">
-      <Input
-        placeholder="Rechercher immatriculation, société, conducteur, plomb…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        className="mb-3"
-      />
-
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1000px] text-sm">
-          <thead className="text-left text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="py-2">Immatriculation</th>
-              <th>Type</th>
-              <th>Société</th>
-              <th>Conducteur</th>
-              <th>Opération</th>
-              <th>Plomb</th>
-              <th>Titre / facture</th>
-              <th>État</th>
-              <th>Date</th>
-              <th>Entrée</th>
-              <th>Sortie</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y">
-            {filtered.map((v) => (
-              <tr key={v.id}>
-                <td className="py-2 font-mono font-medium">{pick(v, "plate", "immatriculation") || "—"}</td>
-                <td>{pick(v, "type") || "—"}</td>
-                <td>{pick(v, "company", "societe") || "—"}</td>
-                <td>{pick(v, "driver", "conducteur") || "—"}</td>
-                <td>{pick(v, "operation") || "—"}</td>
-                <td className="font-mono text-xs">{pick(v, "seal_number") || "—"}</td>
-                <td className="font-mono text-xs">{pick(v, "document_reference") || "—"}</td>
-                <td className="text-xs">{pick(v, "load_state") || "—"}</td>
-                <td className="font-mono text-xs">{formatDate(pick(v, "entered_at", "entree", "created_at"))}</td>
-                <td className="font-mono text-xs">{formatTime(pick(v, "entered_at", "entree", "created_at"))}</td>
-                <td className="font-mono text-xs">{formatTime(pick(v, "exited_at", "sortie"))}</td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
+    <Panel title="Registre des mouvements véhicule">
+      <div className="relative mb-4">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Rechercher un mouvement véhicule"
+          placeholder="Rechercher par matricule, propriétaire ou catégorie…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="min-h-11 pl-9"
+        />
+      </div>
+      <div className="overflow-hidden rounded-lg border">
+        <div className="max-h-[560px] overflow-auto">
+          <table className="w-full min-w-[1050px] text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
               <tr>
-                <td colSpan={11} className="py-3 text-center text-xs italic text-muted-foreground">
-                  Aucun véhicule trouvé.
-                </td>
+                {["Date", "Matricule du véhicule", "Propriétaire (prénom)", "Type de propriétaire", "Personnes (entrée)", "Heure d’entrée", "Personnes (sortie)", "Heure de sortie", "Actions"].map((heading) => (
+                  <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>
+                ))}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border/70">
+              {filtered.map((vehicle) => (
+                <tr key={vehicle.id} className="transition-colors hover:bg-muted/30">
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(vehicle.entryDate)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-medium">{vehicle.plate}</td>
+                  <td className="px-3 py-3">{vehicle.ownerName || "—"}</td>
+                  <td className="px-3 py-3">{vehicle.category || "—"}</td>
+                  <td className="px-3 py-3 text-center">{vehicle.passengersEntry ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{vehicle.entryTime || "—"}</td>
+                  <td className="px-3 py-3 text-center">{vehicle.passengersOut ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{vehicle.exitTime || "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-3">
+                    <div className="flex items-center gap-1">
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => onEdit(vehicle)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer le mouvement" title="Supprimer le mouvement" disabled={deletingId === vehicle.id} onClick={() => void deleteEntry(vehicle)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length && (
+                <tr><td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground">Aucun mouvement véhicule trouvé.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </Panel>
   );

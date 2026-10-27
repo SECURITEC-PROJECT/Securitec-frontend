@@ -29,6 +29,24 @@ export interface EmptyBottleDelivery {
   siteName: string;
 }
 
+export interface VehicleMovement {
+  id: string;
+  plate: string;
+  type?: string;
+  category: string;
+  ownerName: string;
+  passengersEntry: number | string;
+  passengersOut: number | null;
+  entryDate: string;
+  entryTime: string;
+  exitDate?: string | null;
+  exitTime: string | null;
+  entered_at: string;
+  exited_at: string | null;
+  siteId?: string | null;
+  site_name?: string | null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -86,9 +104,14 @@ export const serviceApi = {
   async listVisitors(siteId?: string) { return (await request<{ visitors: any[] }>(`/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).visitors; },
   async createVisitor(data: unknown) { return (await request<{ visitor: any }>("/visitors", { method: "POST", body: body(data) })).visitor; },
   async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
-  async listVehicles(siteId?: string) { return (await request<{ vehicles: any[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },
-  async createVehicle(data: unknown) { return (await request<{ vehicle: any }>("/vehicles", { method: "POST", body: body(data) })).vehicle; },
-  async exitVehicle(id: string) { return (await request<{ vehicle: any }>(`/vehicles/${id}/exit`, { method: "PATCH", body: "{}" })).vehicle; },
+  async listVehicles(siteId?: string) { return (await request<{ vehicles: VehicleMovement[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },
+  async createVehicle(data: unknown) { return (await request<{ vehicle: VehicleMovement }>("/vehicles", { method: "POST", body: body(data) })).vehicle; },
+  async updateVehicle(id: string, data: unknown) { return (await request<{ vehicle: VehicleMovement }>(`/vehicles/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).vehicle; },
+  async deleteVehicle(id: string, siteId: string) { return request<{ id: string; deleted: boolean }>(`/vehicles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" }); },
+  async exitVehicle(id: string, passengersOut?: number, siteId?: string) {
+    const params = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    return (await request<{ vehicle: Partial<VehicleMovement> }>(`/vehicles/${encodeURIComponent(id)}/exit${params}`, { method: "PATCH", body: body(passengersOut === undefined ? {} : { passengersOut }) })).vehicle;
+  },
   async listKeyTypes() { return (await request<{ keyTypes: string[] }>("/access-control/key-types")).keyTypes; },
   async listKeyEmployees(keyType: string, siteId: string) {
     const params = new URLSearchParams({ keyType, siteId });

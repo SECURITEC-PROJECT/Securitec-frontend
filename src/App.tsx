@@ -2,6 +2,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { clearSession, restoreSession, type AuthenticatedUser } from '@/lib/auth-api';
 import Administration from '@/pages/administration/Administration';
 import AgentAccueil from '@/pages/agentAccueil/AgentAccueil';
+import Vehicule from '@/pages/agentAccueil/vehicule/Vehicule';
 import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
 import Rondes from '@/pages/agentControle/ronde/Rondes';
 import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
@@ -104,7 +105,7 @@ export default function App() {
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
-          <Route path="mouvements-vehicules" element={<AgentAccueil />} />
+          <Route path="mouvements-vehicules" element={<Vehicule />} />
           <Route path="pointage-aps" element={<MainCourante />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<MainCourante />} />
