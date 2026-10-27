@@ -125,6 +125,18 @@ export const serviceApi = {
   async endShift(id: string) { return (await request<{ shift: any }>(`/shifts/${id}/end`, { method: "POST", body: "{}" })).shift; },
   async listPassations() { return (await request<{ passations: any[] }>("/passations")).passations; },
   async createPassation(data: unknown) { return (await request<{ passation: any }>("/passations", { method: "POST", body: body(data) })).passation; },
+  async listJournalConsignes(siteId: string) {
+    return (await request<{ entries: any[] }>(`/consignes-journal?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createJournalConsigne(data: unknown) {
+    return (await request<{ entry: any }>("/consignes-journal", { method: "POST", body: body(data) })).entry;
+  },
+  async updateJournalConsigne(id: string, data: unknown) {
+    return (await request<{ entry: any }>(`/consignes-journal/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteJournalConsigne(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/consignes-journal/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
   async listVisitors(siteId?: string) { return (await request<{ visitors: any[] }>(`/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).visitors; },
   async createVisitor(data: unknown) { return (await request<{ visitor: any }>("/visitors", { method: "POST", body: body(data) })).visitor; },
   async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
