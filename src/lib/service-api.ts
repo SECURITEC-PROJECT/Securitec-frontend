@@ -71,6 +71,26 @@ export interface AlcoholCheck {
   siteName: string;
 }
 
+export interface StarParticulierLoading {
+  id: string;
+  date: string;
+  type: "CHARGEMENT";
+  typeChargement: "STAR" | "PARTICULIER";
+  heureSortie: string;
+  camion: string;
+  proprietaire: string;
+  nomChauffeur: string;
+  designation: string;
+  quantiteTexte: string;
+  poids: string | number;
+  destinataire: string;
+  lp: string;
+  titre: string;
+  plomb: string;
+  siteId: string;
+  siteName: string;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -187,6 +207,21 @@ export const serviceApi = {
   async deleteTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT", siteId: string) {
     const params = new URLSearchParams({ type, siteId });
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
+  async listStarParticulierLoadings(siteId: string) {
+    const query = `?siteId=${encodeURIComponent(siteId)}`;
+    const rows = await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`);
+    return rows.entries.filter((entry) => entry.typeChargement === "STAR" || entry.typeChargement === "PARTICULIER");
+  },
+  async createStarParticulierLoading(data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
+    return (await request<{ entry: StarParticulierLoading }>("/logistics/star-particulier", { method: "POST", body: body(data) })).entry;
+  },
+  async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
+    return (await request<{ entry: StarParticulierLoading }>(`/logistics/star-particulier/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteStarParticulierLoading(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return request<{ id: string; deleted: boolean }>(`/logistics/star-particulier/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
   async createEmptyBottleDelivery(data: unknown) {
     return request<{ entry: EmptyBottleDelivery }>("/logistics", { method: "POST", body: body(data) });
