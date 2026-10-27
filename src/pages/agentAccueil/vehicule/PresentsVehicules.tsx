@@ -1,52 +1,35 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { rafraichirAnomalies, useAnomalies } from "@/hooks/useAnomalies";
+import { Input } from "@/components/ui/input";
 import { LogOut, Truck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-const formatTime = (dateStr: string | Date | null | undefined): string => {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
-
-// Premier champ non vide parmi plusieurs noms possibles
-const pick = (v: any, ...keys: string[]) => {
-  for (const k of keys) {
-    const value = v?.[k];
-    if (value !== null && value !== undefined && String(value).trim() !== "") return String(value);
-  }
-  return "";
-};
+import type { VehicleMovement } from "@/lib/service-api";
 
 export default function PresentsVehicules({
   rows,
   onExit,
 }: {
-  rows: any[];
-  onExit: (id: string) => Promise<void>;
+  rows: VehicleMovement[];
+  onExit: (id: string, passengersOut: number) => Promise<void>;
 }) {
   const [exitingId, setExitingId] = useState<string | null>(null);
+  const [passengerCounts, setPassengerCounts] = useState<Record<string, string>>({});
+  const present = rows.filter((vehicle) => !vehicle.exited_at);
 
-  // Anomalies : véhicules encore présents après la fermeture du site
-  const anomalies = useAnomalies();
-  const enAnomalie = new Map(
-    anomalies.filter((a) => a.type === "vehicule").map((a) => [String(a.rowId), a])
-  );
-
-  // Véhicules actuellement présents sur le site
-  const present = rows.filter((v) => !v.exited_at);
-
-  const handleExit = async (v: any) => {
-    setExitingId(String(v.id));
+  const handleExit = async (vehicle: VehicleMovement) => {
+    const countValue = passengerCounts[vehicle.id] ?? String(vehicle.passengersEntry ?? "");
+    const count = Number(countValue);
+    if (!Number.isInteger(count) || count < 0 || count > 10000) {
+      toast.error("Saisissez un nombre de personnes à la sortie entre 0 et 10 000.");
+      return;
+    }
+    setExitingId(vehicle.id);
     try {
-      await onExit(v.id);
-      rafraichirAnomalies();
-      toast.success(`Sortie enregistrée pour ${pick(v, "plate", "immatriculation") || "le véhicule"}`);
+      await onExit(vehicle.id, count);
+      toast.success(`Sortie enregistrée pour ${vehicle.plate}.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sortie impossible");
+      toast.error(error instanceof Error ? error.message : "Sortie impossible.");
     } finally {
       setExitingId(null);
     }
@@ -55,58 +38,43 @@ export default function PresentsVehicules({
   return (
     <Panel title="Véhicules présents sur site">
       {present.length ? (
-        <ul className="max-h-[640px] divide-y overflow-y-auto">
-          {present.map((v) => {
-            const plate = pick(v, "plate", "immatriculation");
-            const details = [pick(v, "company", "societe"), pick(v, "driver", "conducteur")]
-              .filter(Boolean)
-              .join(" · ");
-            const operation = pick(v, "operation");
-            const loadState = pick(v, "load_state");
-            const seal = pick(v, "seal_number");
-            const doc = pick(v, "document_reference");
-            const anomalie = enAnomalie.get(String(v.id));
-
-            return (
-              <li
-                key={v.id}
-                className={`flex items-center justify-between gap-3 py-2.5 text-sm ${
-                  anomalie ? "my-1 rounded-md border-l-4 border-red-500 bg-red-50 px-3 text-red-700" : ""
-                }`}
-              >
-                <div>
-                  <p className="flex items-center gap-1.5 font-medium">
-                    <Truck className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-mono">{plate || "—"}</span>
-                    {operation && (
-                      <span className="rounded bg-accent px-1.5 py-0.5 text-xs">{operation}</span>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {details || "—"} · entré {formatTime(pick(v, "entered_at", "entree", "created_at"))}
-                  </p>
-                  {(loadState || seal || doc) && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {[loadState, seal && `Plomb ${seal}`, doc && `Réf. ${doc}`].filter(Boolean).join(" · ")}
-                    </p>
-                  )}
-                </div>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={exitingId === String(v.id)}
-                  onClick={() => handleExit(v)}
-                >
-                  <LogOut className="mr-1 h-4 w-4" />
-                  Sortie
+        <ul className="divide-y">
+          {present.map((vehicle) => (
+            <li key={vehicle.id} className="flex flex-wrap items-center justify-between gap-4 py-3">
+              <div className="min-w-[220px]">
+                <p className="flex items-center gap-2 font-medium">
+                  <Truck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <span className="font-mono">{vehicle.plate}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{vehicle.category}</span>
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {vehicle.ownerName} · {vehicle.passengersEntry} personne(s) · entrée {vehicle.entryTime}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Personnes à la sortie</span>
+                  <Input
+                    className="h-9 w-36"
+                    aria-label={`Nombre de personnes à la sortie pour ${vehicle.plate}`}
+                    type="number"
+                    min="0"
+                    max="10000"
+                    step="1"
+                    value={passengerCounts[vehicle.id] ?? String(vehicle.passengersEntry ?? "")}
+                    onChange={(event) => setPassengerCounts((current) => ({ ...current, [vehicle.id]: event.target.value }))}
+                  />
+                </label>
+                <Button size="sm" disabled={exitingId === vehicle.id} onClick={() => void handleExit(vehicle)}>
+                  <LogOut aria-hidden="true" />
+                  {exitingId === vehicle.id ? "Enregistrement…" : "Enregistrer la sortie"}
                 </Button>
-              </li>
-            );
-          })}
+              </div>
+            </li>
+          ))}
         </ul>
       ) : (
-        <Empty text="Aucun véhicule sur site" />
+        <Empty text="Aucun véhicule présent sur ce site." />
       )}
     </Panel>
   );

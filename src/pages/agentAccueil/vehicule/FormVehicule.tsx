@@ -1,180 +1,172 @@
 import { Panel } from "@/components/PageHeader";
-import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SiteOption } from "@/hooks/useSites";
+import type { VehicleMovement } from "@/lib/service-api";
 import { serviceApi } from "@/lib/service-api";
-import { Plus } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { Plus, Save, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-interface VehicleFormValues {
-  siteName: string;
-  siteType: "USINE" | "AGENCE";
-  plate: string;
-  type: string;
-  company: string;
-  operation: string;
-  seal_number: string;
-  document_reference: string;
-  load_state: string;
-  driver: string;
-  passengers: string;
-  reason: string;
-  zone: string;
-  compliant: boolean;
-}
-
-type TextField = Exclude<keyof VehicleFormValues, "siteType" | "compliant">;
-
-const empty: VehicleFormValues = {
-  siteName: "",
-  siteType: "USINE",
-  plate: "",
-  type: "",
-  company: "",
-  operation: "Déchargement",
-  seal_number: "",
-  document_reference: "",
-  load_state: "Pleins",
-  driver: "",
-  passengers: "0",
-  reason: "",
-  zone: "Quai de livraison",
-  compliant: false,
+const today = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
-const selectClass = "mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+const currentTime = () => {
+  const date = new Date();
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+};
 
-// Titre de section (occupe toute la largeur de la grille)
-function Section({ children }: { children: ReactNode }) {
-  return (
-    <p className="col-span-2 mt-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-0">
-      {children}
-    </p>
-  );
+interface MovementForm {
+  date: string;
+  plate: string;
+  ownerName: string;
+  category: "Particulier" | "Star";
+  passengersEntry: string;
+  entryTime: string;
+  passengersOut: string;
+  exitDate: string;
+  exitTime: string;
 }
+
+const newMovement = (): MovementForm => ({
+  date: today(),
+  plate: "",
+  ownerName: "",
+  category: "Particulier",
+  passengersEntry: "1",
+  entryTime: currentTime(),
+  passengersOut: "",
+  exitDate: today(),
+  exitTime: "",
+});
+
+const movementForm = (vehicle: VehicleMovement | null): MovementForm => vehicle ? ({
+  date: vehicle.entryDate,
+  plate: vehicle.plate,
+  ownerName: vehicle.ownerName,
+  category: vehicle.category === "Star" ? "Star" : "Particulier",
+  passengersEntry: String(vehicle.passengersEntry ?? ""),
+  entryTime: vehicle.entryTime,
+  passengersOut: vehicle.passengersOut == null ? "" : String(vehicle.passengersOut),
+  exitDate: vehicle.exitDate || vehicle.entryDate,
+  exitTime: vehicle.exitTime || "",
+}) : newMovement();
 
 interface FormVehiculeProps {
-  onCreated: (vehicle: any) => void;
-  sites: SiteOption[];
-  canCreateSite: boolean;
-  onAddSite: (name: string, type: SiteOption["type"]) => Promise<SiteOption>;
+  siteId: string;
+  onSaved: (vehicle: VehicleMovement) => void;
+  editingVehicle: VehicleMovement | null;
+  onCancelEdit: () => void;
 }
 
-function FormVehicule({ onCreated, sites, canCreateSite, onAddSite }: FormVehiculeProps) {
-  const [form, setForm] = useState<VehicleFormValues>(empty);
+export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancelEdit }: FormVehiculeProps) {
+  const [form, setForm] = useState<MovementForm>(() => movementForm(editingVehicle));
+  const [clock, setClock] = useState(currentTime);
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const plate = form.plate.trim().toUpperCase();
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(currentTime()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!siteId) {
+      toast.error("Sélectionnez un site de travail.");
+      return;
+    }
     setSaving(true);
     try {
-      const vehicle = await serviceApi.createVehicle({ ...form, plate, type: form.type.trim(), company: form.company.trim(), driver: form.driver.trim(), seal_number: form.seal_number.trim(), document_reference: form.document_reference.trim() });
-      onCreated(vehicle);
-      toast.success("Entrée du véhicule enregistrée dans la base de données");
-      setForm({ ...empty });
+      const payload = {
+        date: form.date,
+        plate: form.plate.trim().toUpperCase(),
+        ownerName: form.ownerName.trim(),
+        category: form.category,
+        passengersEntry: Number(form.passengersEntry),
+        entryTime: editingVehicle ? form.entryTime : currentTime(),
+        passengersOut: form.passengersOut === "" ? null : Number(form.passengersOut),
+        exitTime: form.exitTime || null,
+        exitDate: form.exitDate,
+        siteId,
+      };
+      const vehicle = editingVehicle
+        ? await serviceApi.updateVehicle(editingVehicle.id, payload)
+        : await serviceApi.createVehicle(payload);
+      onSaved(vehicle);
+      setForm(newMovement());
+      toast.success(editingVehicle ? "Mouvement véhicule modifié." : "Entrée du véhicule enregistrée.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
-    } finally { setSaving(false); }
+      toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Champ texte simple
-  const champ = (
-    key: TextField,
-    label: string,
-    opts: { required?: boolean; placeholder?: string; span?: boolean; numeric?: boolean } = {}
-  ) => (
-    <div className={opts.span ? "col-span-2" : ""}>
-      <Label htmlFor={key} className="text-xs">{label}</Label>
+  const field = (id: string, label: string, value: string, onChange: (value: string) => void, options: {
+    type?: string;
+    min?: string;
+    max?: string;
+    step?: string;
+    required?: boolean;
+    readOnly?: boolean;
+    placeholder?: string;
+    maxLength?: number;
+  } = {}) => (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
       <Input
-        id={key}
-        className="mt-1 h-9"
-        required={opts.required}
-        placeholder={opts.placeholder}
-        inputMode={opts.numeric ? "numeric" : undefined}
-        value={form[key]}
-        onChange={(e) => {
-          const value = e.target.value;
-          setForm((previous) => ({ ...previous, [key]: value }));
-        }}
+        id={id}
+        type={options.type || "text"}
+        min={options.min}
+        max={options.max}
+        step={options.step}
+        required={options.required}
+        readOnly={options.readOnly}
+        placeholder={options.placeholder}
+        maxLength={options.maxLength}
+        inputMode={options.type === "number" ? "numeric" : undefined}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
       />
     </div>
   );
 
   return (
-    <Panel title="Enregistrer une entrée">
-      <form className="grid grid-cols-2 gap-x-3 gap-y-2.5" onSubmit={handleSubmit}>
-        <Section>Site</Section>
-        <div>
-          <SitePicker id="vehicle-site" value={form.siteName} type={form.siteType} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setForm((previous) => ({ ...previous, siteName, siteType }))} />
+    <Panel title={editingVehicle ? "Modifier un mouvement véhicule" : "Enregistrer une entrée véhicule"}>
+      <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+        <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+          {field("vehicle-date", "Date", form.date, (date) => setForm({ ...form, date }), { type: "date", required: true })}
+          {field("vehicle-plate", "Matricule du véhicule", form.plate, (plate) => setForm({ ...form, plate }), { required: true, maxLength: 50 })}
+          {field("vehicle-owner", "Propriétaire (prénom)", form.ownerName, (ownerName) => setForm({ ...form, ownerName }), { required: true, maxLength: 255 })}
+          <div className="space-y-1.5">
+            <Label htmlFor="vehicle-category">Particulier ou Star</Label>
+            <select
+              id="vehicle-category"
+              required
+              value={form.category}
+              onChange={(event) => setForm({ ...form, category: event.target.value as MovementForm["category"] })}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="Particulier">Particulier</option>
+              <option value="Star">Star</option>
+            </select>
+          </div>
+          {field("vehicle-passengers-in", "Nombre de personnes (entrée)", form.passengersEntry, (passengersEntry) => setForm({ ...form, passengersEntry }), { type: "number", min: "0", max: "10000", step: "1", required: true })}
+          {field("vehicle-time-in", "Heure d’entrée", editingVehicle ? form.entryTime : clock, (entryTime) => setForm({ ...form, entryTime }), { type: "time", required: true, readOnly: !editingVehicle })}
+          {editingVehicle && field("vehicle-passengers-out", "Nombre de personnes (sortie)", form.passengersOut, (passengersOut) => setForm({ ...form, passengersOut }), { type: "number", min: "0", max: "10000", step: "1", required: Boolean(form.exitTime) })}
+          {editingVehicle && field("vehicle-time-out", "Heure de sortie", form.exitTime, (exitTime) => setForm({ ...form, exitTime }), { type: "time", required: Boolean(form.passengersOut) })}
         </div>
-        <div>
-          <Label htmlFor="vehicle-site-type" className="text-xs">Type de site</Label>
-          <select id="vehicle-site-type" value={form.siteType} onChange={(e) => setForm({ ...form, siteType: e.target.value as "USINE" | "AGENCE" })} className={selectClass}>
-            <option value="USINE">Usine</option>
-            <option value="AGENCE">Agence</option>
-          </select>
+        {!siteId && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          {editingVehicle && <Button type="button" variant="outline" disabled={saving} onClick={onCancelEdit}><X /> Annuler</Button>}
+          <Button type="submit" disabled={saving || !siteId}>
+            {editingVehicle ? <Save /> : <Plus />}
+            {saving ? "Enregistrement…" : editingVehicle ? "Enregistrer les modifications" : "Enregistrer l’entrée"}
+          </Button>
         </div>
-
-        <Section>Véhicule</Section>
-        {champ("plate", "Immatriculation *", { required: true })}
-        {champ("type", "Type de véhicule")}
-        {champ("company", "Société")}
-        {champ("driver", "Conducteur *", { required: true })}
-        {champ("passengers", "Passagers", { numeric: true })}
-        {champ("zone", "Zone de stationnement")}
-
-        <Section>Opération</Section>
-        <div>
-          <Label htmlFor="vehicle-operation" className="text-xs">Opération</Label>
-          <select id="vehicle-operation" value={form.operation} onChange={(e) => setForm({ ...form, operation: e.target.value })} className={selectClass}>
-            <option>Déchargement</option><option>Chargement</option><option>Autre passage</option>
-          </select>
-        </div>
-        <div>
-          <Label htmlFor="load-state" className="text-xs">État du chargement</Label>
-          <select id="load-state" value={form.load_state} onChange={(e) => setForm({ ...form, load_state: e.target.value })} className={selectClass}>
-            <option>Pleins</option><option>Vides</option><option>Sans objet</option>
-          </select>
-        </div>
-        {champ("seal_number", "N° plomb")}
-        {champ("document_reference", "N° titre / facture / bon")}
-        {champ("reason", "Motif *", { required: true, span: true })}
-
-        <Section>Contrôle</Section>
-        <label className="col-span-2 flex cursor-pointer items-center gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm">
-          <Checkbox
-            checked={form.compliant}
-            onCheckedChange={(value) =>
-              setForm((previous) => ({
-                ...previous,
-                compliant: value === true,
-              }))
-            }
-          />
-          Contrôle du chargement conforme
-        </label>
-        <div className="col-span-2">
-          <Label htmlFor="vehicle-photo" className="text-xs">Photo du contrôle</Label>
-          <Input
-            id="vehicle-photo"
-            type="file"
-            accept="image/*"
-            className="mt-1 h-9 cursor-pointer text-xs"
-          />
-        </div>
-
-        <Button type="submit" disabled={saving} className="col-span-2 mt-2 h-10 w-full">
-          <Plus className="mr-2 h-4 w-4" />
-          {saving ? "Enregistrement…" : "Enregistrer l'entrée"}
-        </Button>
       </form>
     </Panel>
   );
 }
-
-export default FormVehicule;

@@ -1,65 +1,120 @@
 import { PageHeader, Panel } from "@/components/PageHeader";
+import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi } from "@/lib/service-api";
-import { useCallback, useEffect, useState } from "react";
+import { serviceApi, type VehicleMovement } from "@/lib/service-api";
+import { useEffect, useMemo, useState } from "react";
 import FormVehicule from "./FormVehicule";
 import PresentsVehicules from "./PresentsVehicules";
 import RegistreVehicules from "./RegistreVehicules";
 
-function Vehicule() {
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+export default function Vehicule() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
-  const refresh = useCallback(async () => setVehicles(await serviceApi.listVehicles()), []);
-  useEffect(() => {
-    refresh().catch((reason) => setError(reason.message)).finally(() => setLoading(false));
-  }, [refresh]);
+  const [siteName, setSiteName] = useState("");
+  const [editingVehicle, setEditingVehicle] = useState<VehicleMovement | null>(null);
+  const [registry, setRegistry] = useState<{ siteId: string; vehicles: VehicleMovement[]; error: string }>({
+    siteId: "",
+    vehicles: [],
+    error: "",
+  });
+  const selectedSiteName = siteName || sites[0]?.name || "";
+  const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
 
-  const exit = async (id: string) => {
-    try {
-      const result = await serviceApi.exitVehicle(id);
-      setVehicles((previous) =>
-        previous.map((vehicle) => (vehicle.id === id ? { ...vehicle, exited_at: result.exited_at } : vehicle))
-      );
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "Sortie impossible";
-      setError(message);
-      throw reason;
-    }
+  useEffect(() => {
+    let active = true;
+    if (!site?.id) return () => { active = false; };
+    serviceApi.listVehicles(site.id)
+      .then((vehicles) => {
+        if (active) setRegistry({ siteId: site.id, vehicles, error: "" });
+      })
+      .catch((reason) => {
+        if (active) setRegistry({
+          siteId: site.id,
+          vehicles: [],
+          error: reason instanceof Error ? reason.message : "Chargement des mouvements impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [site?.id]);
+
+  const vehicles = registry.siteId === site?.id ? registry.vehicles : [];
+  const error = registry.siteId === site?.id ? registry.error : "";
+  const loading = Boolean(site?.id) && registry.siteId !== site?.id;
+
+  const saveVehicle = (vehicle: VehicleMovement) => {
+    setRegistry((current) => ({
+      siteId: site?.id || current.siteId,
+      vehicles: current.siteId === site?.id
+        ? current.vehicles.some((row) => row.id === vehicle.id)
+          ? current.vehicles.map((row) => row.id === vehicle.id ? { ...row, ...vehicle } : row)
+          : [vehicle, ...current.vehicles]
+        : [vehicle],
+      error: "",
+    }));
+    setEditingVehicle(null);
+  };
+
+  const exitVehicle = async (id: string, passengersOut: number) => {
+    const result = await serviceApi.exitVehicle(id, passengersOut, site?.id);
+    setRegistry((current) => ({
+      ...current,
+      vehicles: current.vehicles.map((vehicle) => vehicle.id === id ? { ...vehicle, ...result } : vehicle),
+    }));
+  };
+
+  const deleteVehicle = async (id: string) => {
+    if (!site?.id) return;
+    await serviceApi.deleteVehicle(id, site.id);
+    setRegistry((current) => ({ ...current, vehicles: current.vehicles.filter((vehicle) => vehicle.id !== id) }));
+    if (editingVehicle?.id === id) setEditingVehicle(null);
   };
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Contrôle des véhicules" subtitle="Chargements et déchargements avec immatriculation, transporteur, titre, plomb et état du chargement." />
+    <div className="space-y-6">
+      <PageHeader title="Mouvements véhicule (Entrée / Sortie)" subtitle="Enregistrez les entrées et sorties des véhicules et le nombre de personnes à bord." />
+      <div className="max-w-xl">
+        <SitePicker
+          id="vehicle-site"
+          value={selectedSiteName}
+          type={site?.type || "USINE"}
+          sites={sites}
+          canCreate={canCreateSite}
+          onAdd={addSite}
+          onChange={(name) => {
+            setSiteName(name);
+            setEditingVehicle(null);
+          }}
+        />
+      </div>
       {(error || siteError) && (
-        <Panel title="Connexion backend">
+        <Panel title="Erreur de chargement">
           <p className="text-sm text-destructive">{error || siteError}</p>
         </Panel>
       )}
-      {loading ? (
-        <Panel title="Chargement">
+      {!loading && (
+        <>
+          <FormVehicule
+            key={editingVehicle?.id || "new"}
+            siteId={site?.id || ""}
+            editingVehicle={editingVehicle}
+            onSaved={saveVehicle}
+            onCancelEdit={() => setEditingVehicle(null)}
+          />
+          <PresentsVehicules
+            rows={vehicles}
+            onExit={exitVehicle}
+          />
+          <RegistreVehicules
+            rows={vehicles}
+            onEdit={setEditingVehicle}
+            onDelete={deleteVehicle}
+          />
+        </>
+      )}
+      {loading && (
+        <Panel title="Chargement du registre">
           <p className="text-sm text-muted-foreground">Chargement des mouvements véhicules…</p>
         </Panel>
-      ) : (
-        <>
-          {/* Formulaire à gauche, véhicules présents sur site à droite */}
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[480px_1fr]">
-            <FormVehicule
-              sites={sites}
-              canCreateSite={canCreateSite}
-              onAddSite={addSite}
-              onCreated={(vehicle) => setVehicles((previous) => [vehicle, ...previous])}
-            />
-            <PresentsVehicules rows={vehicles} onExit={exit} />
-          </div>
-
-          {/* Registre complet en bas */}
-          <RegistreVehicules rows={vehicles} />
-        </>
       )}
     </div>
   );
 }
-
-export default Vehicule;
