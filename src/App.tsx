@@ -4,6 +4,7 @@ import Administration from '@/pages/administration/Administration';
 import AgentAccueil from '@/pages/agentAccueil/AgentAccueil';
 import Vehicule from '@/pages/agentAccueil/vehicule/Vehicule';
 import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
+import TestAlcool from '@/pages/agentControle/controleAcces/TestAlcool';
 import Rondes from '@/pages/agentControle/ronde/Rondes';
 import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
 import MainCourante from '@/pages/agentSupVideo/mainCourante/MainCourante';
@@ -115,7 +116,7 @@ export default function App() {
           <Route path="courrier" element={<Courrier />} />
           <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<Anomalie/>} />
-          <Route path="test-alcool" element={<ControleAcces />} />
+          <Route path="test-alcool" element={<TestAlcool />} />
           <Route path="consigne" element={<Passation />} />
           <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
           <Route path="materiels-sous-traitant" element={<MainCourante />} />
