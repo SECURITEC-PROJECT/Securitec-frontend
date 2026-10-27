@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
-import { Plus, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -314,7 +314,9 @@ export default function DechargementBouteillesVides() {
                   <td className="px-3 py-2">{entry.poids}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => editEntry(entry)}>Modifier</Button>
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editEntry(entry)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Supprimer la réception" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
