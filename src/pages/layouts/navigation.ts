@@ -43,7 +43,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/courrier", label: "Courrier", icon: Mail },
       { to: "/dashboard/anomalie", label: "Anomalie", icon: AlertTriangle },
       { to: "/dashboard/test-alcool", label: "Test alcool", icon: Beer },
-      { to: "/dashboard/consigne", label: "Consigne", icon: FileWarning },
+      { to: "/dashboard/consigne", label: "Consignes", icon: FileWarning },
       { to: "/dashboard/chargements-star-particuliers", label: "Chargements Star et particuliers", icon: Truck },
       { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitant", icon: Wrench },
       { to: "/dashboard/enregistrements-ordures", label: "Enregistrements Ordures", icon: Trash2 },
