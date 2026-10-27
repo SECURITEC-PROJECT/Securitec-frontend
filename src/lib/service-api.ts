@@ -178,6 +178,14 @@ export const serviceApi = {
   async createLogisticsEvent(data: unknown) {
     return (await request<{ entry: any }>("/logistics/incidents", { method: "POST", body: body(data) })).entry;
   },
+  async updateLogisticsIncident(id: string, siteId: string, data: unknown) {
+    const params = new URLSearchParams({ siteId });
+    return (await request<{ entry: any }>(`/logistics/incidents/${encodeURIComponent(id)}?${params}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteLogisticsIncident(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return request<{ id: string; deleted: boolean }>(`/logistics/incidents/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
   async listPatrols(siteId?: string) { return (await request<{ patrols: any[] }>(`/patrols${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).patrols; },
   async startPatrol(data: unknown) { return (await request<{ patrol: any }>("/patrols", { method: "POST", body: body(data) })).patrol; },
   async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[]) { return (await request<{ patrol: any }>(`/patrols/${id}`, { method: "PATCH", body: body({ checkpoints }) })).patrol; },
