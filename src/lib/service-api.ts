@@ -47,6 +47,18 @@ export interface VehicleMovement {
   site_name?: string | null;
 }
 
+export interface CourrierMovement {
+  id: string;
+  date: string;
+  heureEntree: string;
+  prenom: string;
+  designation: string;
+  nombre: number;
+  heureSortie: string | null;
+  siteId: string;
+  siteName: string;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -186,6 +198,27 @@ export const serviceApi = {
   async createVigilance(data: unknown) { return request<{ entries: any[] }>("/vigilance", { method: "POST", body: body(data) }); },
   async listMainCourante(siteId?: string) { return (await request<{ entries: any[] }>(`/main-courante${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createMainCourante(data: unknown) { return request<{ entry: any }>("/main-courante", { method: "POST", body: body(data) }); },
+  async listCourrierMovements(siteId?: string) {
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    return (await request<{ entries: CourrierMovement[] }>(`/courrier-movements${query}`)).entries;
+  },
+  async createCourrierMovement(data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }) {
+    return (await request<{ entry: CourrierMovement }>("/courrier-movements", { method: "POST", body: body(data) })).entry;
+  },
+  async updateCourrierMovement(id: string, data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }) {
+    return (await request<{ entry: CourrierMovement }>(`/courrier-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async exitCourrierMovement(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return (await request<{ entry: Pick<CourrierMovement, "id" | "heureSortie"> }>(
+      `/courrier-movements/${encodeURIComponent(id)}/exit?${params}`,
+      { method: "PATCH", body: "{}" },
+    )).entry;
+  },
+  async deleteCourrierMovement(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return request<{ id: string; deleted: boolean }>(`/courrier-movements/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
   },
