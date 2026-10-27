@@ -15,6 +15,20 @@ export interface KeyTrackingEntry {
   returnTime: string | null;
 }
 
+export interface EmptyBottleDelivery {
+  id: string;
+  date: string;
+  type: "BOUTEILLES_VIDES";
+  heureArrivee: string;
+  immatriculationVehicule: string;
+  nomChauffeur: string | null;
+  numeroTitre: string;
+  provenance: string;
+  poids: string | number;
+  detailsBouteilles: { designation: string; quantite: number }[];
+  siteName: string;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -95,11 +109,20 @@ export const serviceApi = {
   async createLogistics(data: unknown) {
     return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
   },
+  async createEmptyBottleDelivery(data: unknown) {
+    return request<{ entry: EmptyBottleDelivery }>("/logistics", { method: "POST", body: body(data) });
+  },
   async updateWasteLogistics(id: string, data: unknown) {
     return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) });
   },
   async deleteWasteLogistics(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async updateEmptyBottleDelivery(id: string, data: unknown) {
+    return request<{ entry: EmptyBottleDelivery }>(`/logistics/empty-bottles/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) });
+  },
+  async deleteEmptyBottleDelivery(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/logistics/empty-bottles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();
