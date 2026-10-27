@@ -17,6 +17,7 @@ import Passation from '@/pages/passation/Passation';
 import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
+import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -93,7 +94,7 @@ export default function App() {
           
           {/* Cahiers */}
           <Route path="mouvements-cles" element={<ControleAcces />} />
-          <Route path="carte-grise-permis" element={<AgentAccueil />} />
+          <Route path="carte-grise-permis" element={<CarteGrisePermis />} />
           <Route path="dechets-levee" element={<FluxLogistique />} />
           <Route path="mouvements-aps" element={<MainCourante />} />
           <Route path="dechargements-bennes-vides" element={<FluxLogistique />} />
