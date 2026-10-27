@@ -6,8 +6,9 @@ import { serviceApi } from "@/lib/service-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Printer, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { useLocation } from "react-router-dom";
 
 type TruckForm = {
   date: string;
@@ -39,7 +40,17 @@ const emptyTruck = (): TruckForm => ({
   destinataire: "",
 });
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character] || character);
+
 export default function FluxLogistique() {
+  const { pathname } = useLocation();
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
@@ -49,6 +60,7 @@ export default function FluxLogistique() {
   const [saving, setSaving] = useState(false);
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = sites.find((item) => item.name === selectedSiteName);
+  const canPrintEntries = pathname === "/dashboard/enregistrements-bon-facture-bon-sortie";
 
   useEffect(() => {
     if (!site?.id) return;
@@ -120,6 +132,61 @@ export default function FluxLogistique() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     }
+  };
+
+  const printEntry = (entry: TruckEntry) => {
+    const printWindow = window.open("", "_blank", "width=700,height=800");
+    if (!printWindow) {
+      toast.error("Autorisez les fenêtres contextuelles pour imprimer les données.");
+      return;
+    }
+
+    const date = String(entry.date || "").slice(0, 10);
+    const displayDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.split("-").reverse().join("/") : "—";
+    const rows = [
+      ["Date", displayDate],
+      ["Transport (véhicule)", entry.camion || "—"],
+      ["Nom chauffeur", entry.nomChauffeur || "—"],
+      ["Heure d’entrée", entry.heureArrivee || "—"],
+      ["Désignation", entry.designation || "—"],
+      ["NBR", entry.nbr || "—"],
+      ["Bon ou facture", entry.document || "—"],
+      ["Destination", entry.destinataire || "—"],
+    ];
+    const details = rows.map(([label, value]) =>
+      `<div class="row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
+    ).join("");
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8">
+          <title>Enregistrement bon / facture / bon de sortie</title>
+          <style>
+            @page { size: A5 portrait; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { color: #172033; font: 14px Arial, sans-serif; }
+            main { max-width: 700px; margin: 0 auto; }
+            h1 { margin: 0 0 6px; text-align: center; font-size: 21px; }
+            .site { margin: 0 0 24px; text-align: center; color: #526078; }
+            .row { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d6dbe4; padding: 12px 4px; }
+            .row span { color: #526078; }
+            strong { max-width: 65%; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
+            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #68758a; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>Bon / facture / bon de sortie</h1>
+            <p class="site">${escapeHtml(entry.siteName || selectedSiteName || "—")}</p>
+            ${details}
+            <p class="footer">Document généré depuis Securitec</p>
+          </main>
+          <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
+        </body>
+      </html>`);
+    printWindow.document.close();
   };
 
   return (
@@ -222,7 +289,12 @@ export default function FluxLogistique() {
                     <td className="px-3 py-3">{entry.siteName || "—"}</td>
                     <td className="whitespace-nowrap px-3 py-3">
                       <div className="flex items-center gap-1">
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editTruck(entry)}>
+                      {canPrintEntries && (
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer les données" title="Imprimer" onClick={() => printEntry(entry)}>
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editTruck(entry)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer la réception" title="Supprimer la réception" onClick={() => void deleteTruck(entry)}>
