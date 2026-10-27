@@ -1,4 +1,4 @@
-import { PageHeader, Panel } from "@/components/PageHeader";
+import { PageHeader } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,8 +98,6 @@ export default function CarteGrisePermis() {
       record.site_name,
     ].some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
   );
-  const presentCount = records.filter((record) => !record.exited_at).length;
-
   const handleExit = async (record: CarteGriseRecord) => {
     if (!window.confirm(`Confirmer la sortie de ${record.full_name || "cette personne"} ? Vérifiez que les documents lui ont été rendus.`)) return;
     setExitingId(record.id);
@@ -166,9 +164,9 @@ export default function CarteGrisePermis() {
         title="Carte grise / Permis de conduire"
         subtitle="Vérification et enregistrement des documents véhicules et permis"
       />
-      <div className="grid gap-6 lg:grid-cols-[600px_1fr]">
-        <Panel title="Enregistrement">
-          <form className="space-y-4" onSubmit={handleSubmit}>
+      <div className="space-y-6">
+          <form className="space-y-4 rounded-lg border bg-card p-4 shadow-sm" onSubmit={handleSubmit}>
+            <h2 className="font-semibold text-primary">Enregistrement carte grise / permis</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="date">Date</Label>
@@ -283,29 +281,14 @@ export default function CarteGrisePermis() {
               {saving ? "Enregistrement..." : "Enregistrer"}
             </Button>
           </form>
-        </Panel>
 
-        <Panel title="Registre">
+        <section className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
+          <h2 className="font-semibold text-primary">Registre carte grise / permis</h2>
           {registryError && <p className="mb-3 text-sm text-destructive">{registryError}</p>}
           {loadingRecords ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Chargement du registre…</p>
           ) : (
             <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border bg-muted/20 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">Enregistrements</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{records.length}</p>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-                  <p className="text-xs font-medium text-emerald-800">Présents</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight text-emerald-900">{presentCount}</p>
-                </div>
-                <div className="rounded-lg border bg-muted/20 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">Sorties enregistrées</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{records.length - presentCount}</p>
-                </div>
-              </div>
-
               <div className="relative">
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -393,7 +376,7 @@ export default function CarteGrisePermis() {
               )}
             </div>
           )}
-        </Panel>
+        </section>
       </div>
     </div>
   );
