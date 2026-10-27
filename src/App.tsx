@@ -24,6 +24,7 @@ import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
 import PointageAPS from '@/pages/pointageAps/PointageAPS';
+import Anomalie from '@/pages/anomalie/Anomalie';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -111,7 +112,7 @@ export default function App() {
           <Route path="pointage-aps" element={<PointageAPS />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<MainCourante />} />
-          <Route path="anomalie" element={<FluxLogistique />} />
+          <Route path="anomalie" element={<Anomalie/>} />
           <Route path="test-alcool" element={<ControleAcces />} />
           <Route path="consigne" element={<Passation />} />
           <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
