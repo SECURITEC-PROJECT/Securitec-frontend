@@ -107,7 +107,6 @@ export default function App() {
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<Vehicule />} />
-          <Route path="pointage-aps" element={<MainCourante />} />
           <Route path="mouvements-vehicules" element={<AgentAccueil />} />
           <Route path="pointage-aps" element={<PointageAPS />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
