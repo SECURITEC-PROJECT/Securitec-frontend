@@ -18,6 +18,7 @@ import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 // import Messagerie from '@/pages/messagerie/Messagerie';
 import Passation from '@/pages/passation/Passation';
 import Consignes from '@/pages/consigne/Consignes';
+import MaterielsSousTraitant from '@/pages/materielsSousTraitant/MaterielsSousTraitant';
 import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import ChargementsStarParticuliers from '@/pages/fluxLogistique/ChargementsStarParticuliers';
 import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
@@ -123,6 +124,8 @@ export default function App() {
           <Route path="consigne" element={<Consignes />} />
           <Route path="chargements-star-particuliers" element={<ChargementsStarParticuliers />} />
           <Route path="materiels-sous-traitant" element={<MainCourante />} />
+          <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
+          <Route path="materiels-sous-traitant" element={<MaterielsSousTraitant />} />
           <Route path="enregistrements-ordures" element={<FluxLogistique />} />
           <Route path="materiels-star" element={<MainCourante />} />
           
