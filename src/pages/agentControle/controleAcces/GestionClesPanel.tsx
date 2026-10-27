@@ -1,138 +1,330 @@
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import { API_URL, authHeaders } from "@/lib/api";
-import { CheckCircle2, KeyRound, RotateCcw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { serviceApi, type KeyTrackingEntry } from "@/lib/service-api";
+import { Check, CheckCircle2, ChevronsUpDown, KeyRound } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import ReintegrationDetailsModal from "./Reintegrationdetailsmodal";
-import ReintegrationModal from "./ReintegrationModal";
+
+interface KeyEmployee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  matricule: string;
+  role: string;
+}
+
+interface SearchOption {
+  value: string;
+  label: string;
+  searchTerms: string[];
+}
+
+function SearchableSelect({
+  value,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
+  disabled = false,
+  onChange,
+}: {
+  value: string;
+  options: SearchOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyMessage: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredOptions = options.filter((option) => !normalizedSearch || option.searchTerms.some((term) =>
+    term.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().startsWith(normalizedSearch),
+  ));
+
+  return (
+    <Popover open={open} onOpenChange={(nextOpen) => {
+      setOpen(nextOpen);
+      if (!nextOpen) setSearch("");
+    }}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="h-10 w-full justify-between px-3 font-normal"
+        >
+          <span className="truncate">{options.find((option) => option.value === value)?.label ?? placeholder}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+          />
+          <CommandList>
+            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            {filteredOptions.map((option) => (
+              <CommandItem
+                key={option.value}
+                value={option.value}
+                onSelect={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <Check className={`h-4 w-4 ${value === option.value ? "opacity-100" : "opacity-0"}`} />
+                <span className="truncate">{option.label}</span>
+              </CommandItem>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const dateActuelle = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const formaterDate = (value: string) => {
+  const datePart = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return "—";
+  const parsed = new Date(`${datePart}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== datePart) return "—";
+  return parsed.toLocaleDateString("fr-FR", { timeZone: "UTC" });
+};
 
 const heureActuelle = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
-const formVide = () => ({ trousseCle: "", personneHabilitee: "", rolePersonne: "", agentGardien: "", lieu: "", observation: "", heure: heureActuelle() });
+const nouveauFormulaire = () => ({ date: dateActuelle(), employeeId: "", keyType: "", quantity: "1" });
 
-export default function GestionClesPanel(_props: { siteId?: string }) {
-  const [form, setForm] = useState(formVide());
-  const [personnes, setPersonnes] = useState<any[]>([]);
-  const [isHabilite, setIsHabilite] = useState(true);
-  const [cles, setCles] = useState<any[]>([]);
-  const [selectedCle, setSelectedCle] = useState<any>(null);
-  const [detailsCle, setDetailsCle] = useState<{ perception: any; reintegration: any } | null>(null);
+export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
+  const [form, setForm] = useState(nouveauFormulaire);
+  const [currentTime, setCurrentTime] = useState(heureActuelle);
+  const [keyTypes, setKeyTypes] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<KeyEmployee[]>([]);
+  const [employeesFor, setEmployeesFor] = useState("");
+  const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
+  const [entriesForSite, setEntriesForSite] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [returningEntryId, setReturningEntryId] = useState<string | number | null>(null);
 
-  const loadData = useCallback(async () => {
-    const res = await fetch(`${API_URL}/keys`, { headers: authHeaders() });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Impossible de charger les mouvements de clés.");
-    setCles(Array.isArray(data) ? data : []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(heureActuelle()), 15_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    loadData().catch((error) => toast.error(error instanceof Error ? error.message : "Chargement des clés impossible."));
-  }, [loadData]);
+    let active = true;
+    serviceApi.listKeyTypes()
+      .then((types) => { if (active) setKeyTypes(types); })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement des types de clés impossible."));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
-    if (!form.trousseCle.trim()) { setPersonnes([]); return; }
-    const controller = new AbortController();
-    fetch(`${API_URL}/cles-habilitations/${encodeURIComponent(form.trousseCle.trim())}`, {
-      headers: authHeaders(), signal: controller.signal,
-    }).then(async (res) => {
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Chargement des habilitations impossible.");
-      setPersonnes(Array.isArray(data) ? data : []);
-    }).catch((error) => {
-      if (error.name !== "AbortError") { console.error("Erreur chargement habilitations:", error); setPersonnes([]); }
-    });
-    return () => controller.abort();
-  }, [form.trousseCle]);
+    if (!siteId) return;
+    let active = true;
+    serviceApi.listKeyTracking(siteId)
+      .then((rows) => {
+        if (active) {
+          setEntries(rows);
+          setEntriesForSite(siteId);
+        }
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement du suivi des clés impossible."));
+    return () => { active = false; };
+  }, [siteId]);
 
-  const reintegrationParPerception = new Map<number, any>();
-  cles.filter((c) => c.action === "Réintégration" && c.perception_id != null)
-    .forEach((row) => reintegrationParPerception.set(Number(row.perception_id), row));
+  useEffect(() => {
+    if (!siteId || !form.keyType) return;
+    let active = true;
+    const requestKey = `${siteId}:${form.keyType}`;
+    serviceApi.listKeyEmployees(form.keyType, siteId)
+      .then((rows) => {
+        if (active) {
+          setEmployees(rows);
+          setEmployeesFor(requestKey);
+        }
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement des employés habilités impossible."));
+    return () => { active = false; };
+  }, [form.keyType, siteId]);
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/keys`, {
-        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ ...form, action: "Perception" }),
+      await serviceApi.createKeyTracking({
+        ...form,
+        departureTime: heureActuelle(),
+        quantity: Number(form.quantity),
+        siteId,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { toast.error(data.error || "Échec de l’enregistrement."); return; }
-      toast.success("Perception enregistrée.");
-      setForm(formVide()); setIsHabilite(true);
-      await loadData();
+      toast.success("Sortie de clé enregistrée.");
+      setForm(nouveauFormulaire());
+      const rows = await serviceApi.listKeyTracking(siteId);
+      setEntries(rows);
+      setEntriesForSite(siteId);
     } catch (error) {
-      console.error("Erreur enregistrement:", error);
-      toast.error(error instanceof Error ? error.message : "Serveur injoignable.");
+      toast.error(error instanceof Error ? error.message : "Enregistrement de la sortie impossible.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  return <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs">
-    <form onSubmit={handleSubmit} className="lg:col-span-7 space-y-3 bg-card p-4 rounded-lg border shadow-sm">
-      <p className="font-semibold text-primary">Perception de Clé</p>
-      <div className="grid grid-cols-2 gap-3">
-        <Input required value={form.trousseCle} onChange={(e) => setForm({ ...form, trousseCle: e.target.value })} placeholder="Réf. Clé" className="h-9" />
-        <select required value={form.personneHabilitee} onChange={(e) => {
-          const person = personnes.find((item) => `${item.nom} ${item.prenom}` === e.target.value);
-          setForm({ ...form, personneHabilitee: e.target.value, rolePersonne: person ? person.role : "" });
-          setIsHabilite(!!person);
-        }} className="w-full h-9 rounded-md border px-3 bg-background">
-          <option value="">-- Personne habilitée --</option>
-          {personnes.map((person) => <option key={person.id} value={`${person.nom} ${person.prenom}`}>{person.nom} {person.prenom} ({person.role})</option>)}
-        </select>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Input readOnly value={form.rolePersonne} placeholder="Rôle automatique" className="h-9 bg-muted" />
-        <Input required value={form.agentGardien} onChange={(e) => setForm({ ...form, agentGardien: e.target.value })} placeholder="Matricule Agent" className="h-9" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Input value={form.lieu} onChange={(e) => setForm({ ...form, lieu: e.target.value })} placeholder="Lieu" className="h-9" />
-        <Input required type="time" value={form.heure} onChange={(e) => setForm({ ...form, heure: e.target.value })} className="h-9 font-mono" />
-      </div>
-      <Input value={form.observation} onChange={(e) => setForm({ ...form, observation: e.target.value })} placeholder="Observation..." className="h-9" />
-      <Button type="submit" className="w-full h-9" disabled={!isHabilite || !form.personneHabilitee}><KeyRound className="mr-2 h-4 w-4" /> Enregistrer</Button>
-    </form>
+  const handleReturn = async (entry: KeyTrackingEntry) => {
+    setReturningEntryId(entry.id);
+    try {
+      await serviceApi.returnKeyTracking(entry.id, { returnTime: heureActuelle(), siteId });
+      toast.success("Heure de retour enregistrée.");
+      const rows = await serviceApi.listKeyTracking(siteId);
+      setEntries(rows);
+      setEntriesForSite(siteId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Enregistrement du retour impossible.");
+    } finally {
+      setReturningEntryId(null);
+    }
+  };
 
-    <div className="lg:col-span-5 bg-card p-4 rounded-lg border shadow-sm space-y-3">
-      <p className="font-semibold text-primary">Clés en circulation</p>
-      <div className="space-y-2 max-h-[400px] overflow-y-auto">
-        {cles.filter((row) => row.action === "Perception").map((cle) => {
-          const reintegration = reintegrationParPerception.get(Number(cle.id));
-          if (reintegration) return <div key={cle.id} role="button" tabIndex={0}
-            onClick={() => setDetailsCle({ perception: cle, reintegration })}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setDetailsCle({ perception: cle, reintegration }); }}
-            className="p-2.5 border border-emerald-200 rounded bg-emerald-50/40 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
-            <div><p className="font-bold text-primary">{cle.trousse_cle}</p><p className="text-[11px] text-muted-foreground">{cle.personne_habilitee}</p></div>
-            <span className="flex items-center text-[11px] font-semibold text-emerald-700"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Rendue</span>
-          </div>;
-          return <div key={cle.id} className="p-2.5 border rounded bg-background flex justify-between items-center">
-            <div><p className="font-bold text-primary">{cle.trousse_cle}</p><p className="text-[11px] text-muted-foreground">{cle.personne_habilitee}</p></div>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelectedCle(cle)}><RotateCcw className="w-3 h-3 mr-1" /> Retour</Button>
-          </div>;
-        })}
-      </div>
+  const matchingEmployees = employeesFor === `${siteId}:${form.keyType}` ? employees : [];
+  const visibleEntries = entriesForSite === siteId ? entries : [];
+  const employeeOptions = matchingEmployees.map((employee) => ({
+    value: employee.id,
+    label: `${employee.lastName} ${employee.firstName}`,
+    searchTerms: [employee.lastName, employee.firstName],
+  }));
+  const keyTypeOptions = keyTypes.map((keyType) => ({
+    value: keyType,
+    label: keyType,
+    searchTerms: [keyType],
+  }));
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4 shadow-sm">
+        <h2 className="font-semibold text-primary">Enregistrer une sortie de clé</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Date</span>
+            <Input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
+          </label>
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Nom et prénom</span>
+            <SearchableSelect
+              value={form.employeeId}
+              options={employeeOptions}
+              placeholder={form.keyType ? "Sélectionner un employé habilité" : "Sélectionnez d’abord un type de clé"}
+              searchPlaceholder="Rechercher un employé..."
+              emptyMessage="Aucun employé correspondant."
+              disabled={!matchingEmployees.length}
+              onChange={(employeeId) => setForm({ ...form, employeeId })}
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Matricule</span>
+            <Input readOnly value={matchingEmployees.find((employee) => employee.id === form.employeeId)?.matricule ?? ""} placeholder="Automatique" />
+          </label>
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Heure de sortie</span>
+            <Input readOnly type="time" value={currentTime} aria-describedby="key-departure-time-help" />
+            <span id="key-departure-time-help" className="text-xs text-muted-foreground">Heure enregistrée au clic.</span>
+          </div>
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Type de clé</span>
+            <SearchableSelect
+              value={form.keyType}
+              options={keyTypeOptions}
+              placeholder="Sélectionner un type de clé"
+              searchPlaceholder="Rechercher un type de clé..."
+              emptyMessage="Aucun type de clé correspondant."
+              onChange={(keyType) => setForm({ ...form, keyType, employeeId: "" })}
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Nombre de clés</span>
+            <Input required type="number" min="1" max="10000" step="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} />
+          </label>
+        </div>
+        {!siteId && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
+        {form.keyType && !matchingEmployees.length && employeesFor === `${siteId}:${form.keyType}` && (
+          <p className="text-sm text-muted-foreground">Aucun employé actif n’est habilité à prendre ce type de clé sur ce site.</p>
+        )}
+        <div className="flex justify-end">
+          <Button type="submit" disabled={saving || !siteId || !form.keyType || !matchingEmployees.some((employee) => employee.id === form.employeeId)}>
+            <KeyRound className="mr-2 h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}
+          </Button>
+        </div>
+      </form>
+
+      <section className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
+        <h2 className="font-semibold text-primary">Historique et retour des clés</h2>
+        <div className="max-h-[520px] overflow-auto">
+          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 bg-muted">
+              <tr>
+                {["Date", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Heure de retour"].map((label) => (
+                  <th key={label} className="border-b px-3 py-2 font-medium">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleEntries.map((entry) => (
+                <tr key={entry.id} className="border-b last:border-0">
+                  <td className="px-3 py-2">{formaterDate(entry.date)}</td>
+                  <td className="px-3 py-2">{entry.lastName} {entry.firstName}</td>
+                  <td className="px-3 py-2">{entry.matricule}</td>
+                  <td className="px-3 py-2">{entry.departureTime}</td>
+                  <td className="px-3 py-2">{entry.keyType}</td>
+                  <td className="px-3 py-2">{entry.quantity}</td>
+                  <td className="px-3 py-2">
+                    {entry.returnTime ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                        <CheckCircle2 className="h-4 w-4" /> {entry.returnTime}
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        disabled={returningEntryId === entry.id}
+                        onClick={() => void handleReturn(entry)}
+                      >
+                        {returningEntryId === entry.id ? "Enregistrement…" : `Enregistrer le retour (${currentTime})`}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {siteId && !visibleEntries.length && (
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Aucun mouvement de clé enregistré pour ce site.</td></tr>
+              )}
+              {!siteId && (
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les mouvements.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
-
-    {selectedCle && <ReintegrationModal cle={selectedCle} onClose={() => setSelectedCle(null)} onSubmit={async (data) => {
-      try {
-        const res = await fetch(`${API_URL}/keys`, {
-          method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({
-            trousseCle: selectedCle.trousse_cle, action: "Réintégration", perceptionId: selectedCle.id,
-            personneHabilitee: data.memePersonne ? selectedCle.personne_habilitee : (data.reintegrateur || "PERDU"),
-            rolePersonne: data.memePersonne ? selectedCle.role_personne : data.roleReintegrateur,
-            agentGardien: data.agentGardien, lieu: selectedCle.lieu,
-            observation: data.memePersonne ? `Réintégré par ${selectedCle.personne_habilitee}` : `Tiers (${data.reintegrateur}) - ${data.obs}`,
-            heure: heureActuelle(),
-          }),
-        });
-        const result = await res.json().catch(() => ({}));
-        if (!res.ok) { toast.error(result.error || "Échec de la réintégration."); return; }
-        toast.success("Réintégration enregistrée."); setSelectedCle(null); await loadData();
-      } catch (error) {
-        console.error("Erreur réintégration:", error);
-        toast.error(error instanceof Error ? error.message : "Serveur injoignable.");
-      }
-    }} />}
-    {detailsCle && <ReintegrationDetailsModal perception={detailsCle.perception} reintegration={detailsCle.reintegration} onClose={() => setDetailsCle(null)} />}
-  </div>;
+  );
 }
