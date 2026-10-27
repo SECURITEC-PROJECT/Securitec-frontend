@@ -3,6 +3,18 @@ import { API_URL } from "@/lib/api";
 const apiBaseUrl = API_URL;
 const tokenKey = "securitec-access-token";
 
+export interface KeyTrackingEntry {
+  id: string | number;
+  date: string;
+  lastName: string;
+  firstName: string;
+  matricule: string;
+  keyType: string;
+  quantity: number;
+  departureTime: string;
+  returnTime: string | null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -63,8 +75,20 @@ export const serviceApi = {
   async listVehicles(siteId?: string) { return (await request<{ vehicles: any[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },
   async createVehicle(data: unknown) { return (await request<{ vehicle: any }>("/vehicles", { method: "POST", body: body(data) })).vehicle; },
   async exitVehicle(id: string) { return (await request<{ vehicle: any }>(`/vehicles/${id}/exit`, { method: "PATCH", body: "{}" })).vehicle; },
-  async listKeyTracking(siteId?: string) { return (await request<{ entries: any[] }>(`/access-control/keys${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
-  async createKeyTracking(data: unknown) { return (await request<{ entry: any }>("/access-control/keys", { method: "POST", body: body(data) })).entry; },
+  async listKeyTypes() { return (await request<{ keyTypes: string[] }>("/access-control/key-types")).keyTypes; },
+  async listKeyEmployees(keyType: string, siteId: string) {
+    const params = new URLSearchParams({ keyType, siteId });
+    return (await request<{ employees: { id: string; firstName: string; lastName: string; matricule: string; role: string }[] }>(`/access-control/key-employees?${params}`)).employees;
+  },
+  async listKeyTracking(siteId: string) {
+    return (await request<{ entries: KeyTrackingEntry[] }>(`/access-control/keys?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createKeyTracking(data: { date: string; employeeId: string; keyType: string; quantity: number; departureTime: string; siteId: string }) {
+    return (await request<{ entry: KeyTrackingEntry }>("/access-control/keys", { method: "POST", body: body(data) })).entry;
+  },
+  async returnKeyTracking(id: string | number, data: { returnTime: string; siteId: string }) {
+    return (await request<{ entry: { id: string | number; returnTime: string } }>(`/access-control/keys/${encodeURIComponent(String(id))}/return`, { method: "PATCH", body: body(data) })).entry;
+  },
   async listBreathTests(siteId?: string) { return (await request<{ entries: any[] }>(`/access-control/breath-tests${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createBreathTest(data: unknown) { return (await request<{ entry: any }>("/access-control/breath-tests", { method: "POST", body: body(data) })).entry; },
   async listLogistics(siteId?: string) { return (await request<{ entries: any[] }>(`/logistics${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
