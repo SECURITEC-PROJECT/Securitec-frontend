@@ -132,6 +132,13 @@ export const serviceApi = {
   async createLogistics(data: unknown) {
     return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
   },
+  async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT", data: unknown) {
+    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=${type}`, { method: "PUT", body: body(data) });
+  },
+  async deleteTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT", siteId: string) {
+    const params = new URLSearchParams({ type, siteId });
+    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
   async createEmptyBottleDelivery(data: unknown) {
     return request<{ entry: EmptyBottleDelivery }>("/logistics", { method: "POST", body: body(data) });
   },
