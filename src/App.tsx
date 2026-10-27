@@ -102,9 +102,6 @@ export default function App() {
           <Route path="dechets-levee" element={<DechetsLevee />} />
           <Route path="mouvements-aps" element={<MainCourante />} />
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
-          <Route path="dechargements-matiere-premiere" element={<FluxLogistique />} />
-          <Route path="depotage-fuel-gasoil" element={<FluxLogistique />} />
-          <Route path="dechargements-bennes-vides" element={<FluxLogistique />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<AgentAccueil />} />
