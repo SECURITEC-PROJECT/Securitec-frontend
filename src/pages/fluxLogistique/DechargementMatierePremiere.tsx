@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { Pencil, Search, Trash2 } from "lucide-react";
+import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -25,6 +25,14 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 const nowTime = () => new Date().toTimeString().slice(0, 5);
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character] || character);
 
 export default function DechargementMatierePremiere() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
@@ -46,6 +54,7 @@ export default function DechargementMatierePremiere() {
     error: string;
   }>({ siteId: "", entries: [], error: "" });
   const [search, setSearch] = useState("");
+  const [searchDate, setSearchDate] = useState("");
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
@@ -78,10 +87,12 @@ export default function DechargementMatierePremiere() {
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
-  const filteredEntries = entries.filter((entry) =>
-    [entry.date, entry.heurePointe, entry.vehicule, entry.designation, entry.document, entry.provenance]
-      .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
-  );
+  const filteredEntries = entries.filter((entry) => {
+    const matchesDate = !searchDate || entry.date?.slice(0, 10) === searchDate;
+    const matchesText = [entry.date, entry.heurePointe, entry.vehicule, entry.designation, entry.document, entry.provenance]
+      .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+    return matchesDate && matchesText;
+  });
 
   const clearForm = () => {
     setDate(today());
@@ -162,6 +173,59 @@ export default function DechargementMatierePremiere() {
     }
   };
 
+  const printEntry = (entry: MatierePremiereEntry) => {
+    const printWindow = window.open("", "_blank", "width=600,height=700");
+    if (!printWindow) {
+      toast.error("Autorisez les fenêtres contextuelles pour imprimer le bon.");
+      return;
+    }
+
+    const displayDate = entry.date?.slice(0, 10).split("-").reverse().join("/") || "—";
+    const rows = [
+      ["Date", displayDate],
+      ["Heure de pointe", entry.heurePointe || "—"],
+      ["Véhicule", entry.vehicule || "—"],
+      ["Désignation", entry.designation || "—"],
+      ["Quantité", entry.quantite == null ? "—" : String(entry.quantite)],
+      ["Bon de livraison / facture", entry.document || "—"],
+      ["Provenance", entry.provenance || "—"],
+    ];
+    const details = rows.map(([label, value]) =>
+      `<div class="row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
+    ).join("");
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8">
+          <title>Bon de déchargement matière première</title>
+          <style>
+            @page { size: A5 portrait; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { color: #172033; font: 14px Arial, sans-serif; }
+            main { max-width: 700px; margin: 0 auto; }
+            h1 { margin: 0 0 6px; text-align: center; font-size: 22px; }
+            .site { margin: 0 0 24px; text-align: center; color: #526078; }
+            .row { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d6dbe4; padding: 12px 4px; }
+            .row span { color: #526078; }
+            strong { max-width: 60%; text-align: right; overflow-wrap: anywhere; }
+            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #68758a; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>Déchargement matière première</h1>
+            <p class="site">${escapeHtml(selectedSiteName)}</p>
+            ${details}
+            <p class="footer">Document généré depuis Securitec</p>
+          </main>
+          <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
+        </body>
+      </html>`);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -224,15 +288,28 @@ export default function DechargementMatierePremiere() {
         </Panel>
       </div>
       <Panel title="Registre des déchargements">
-        <div className="mb-4 flex max-w-md items-center gap-2 rounded-md border bg-background px-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <Input
-            aria-label="Rechercher dans le registre"
-            className="border-0 px-0 shadow-none focus-visible:ring-0"
-            placeholder="Rechercher véhicule, désignation, document…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Input
+              aria-label="Rechercher dans le registre"
+              className="border-0 px-0 shadow-none focus-visible:ring-0"
+              placeholder="Rechercher véhicule, désignation, document…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="matiere-search-date" className="whitespace-nowrap">Filtrer par date</Label>
+            <Input
+              id="matiere-search-date"
+              type="date"
+              aria-label="Filtrer le registre par date"
+              className="w-auto"
+              value={searchDate}
+              onChange={(event) => setSearchDate(event.target.value)}
+            />
+          </div>
         </div>
         {entriesError ? (
           <p className="text-sm text-destructive">{entriesError}</p>
@@ -256,7 +333,7 @@ export default function DechargementMatierePremiere() {
                   <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={8}>Chargement du registre…</td></tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={8}>
-                    {entries.length === 0 ? "Aucun déchargement enregistré." : "Aucun résultat pour cette recherche."}
+                    {entries.length === 0 ? "Aucun déchargement enregistré." : "Aucun résultat pour ces critères."}
                   </td></tr>
                 ) : filteredEntries.map((entry) => (
                   <tr key={entry.id} className="hover:bg-muted/30">
@@ -269,6 +346,16 @@ export default function DechargementMatierePremiere() {
                     <td className="px-4 py-3">{entry.provenance || "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Imprimer ce déchargement"
+                          title="Imprimer"
+                          onClick={() => printEntry(entry)}
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"

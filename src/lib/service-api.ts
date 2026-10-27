@@ -108,6 +108,13 @@ export const serviceApi = {
     const params = new URLSearchParams({ siteId, type: "MATIERE_PREMIERE" });
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
+  async updateDepotageFuelLogistics(id: string, data: unknown) {
+    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=DEPOTAGE_FUEL`, { method: "PUT", body: body(data) });
+  },
+  async deleteDepotageFuelLogistics(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId, type: "DEPOTAGE_FUEL" });
+    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();
     if (siteId) params.set("siteId", siteId);
