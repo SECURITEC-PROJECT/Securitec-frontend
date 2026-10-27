@@ -90,6 +90,32 @@ export default function App() {
           <Route path="documents" element={<Documents />} />
           <Route path="employes" element={<Employes />} />
           <Route path="administration" element={<Administration />} />
+          
+          {/* Cahiers */}
+          <Route path="mouvements-cles" element={<ControleAcces />} />
+          <Route path="carte-grise-permis" element={<AgentAccueil />} />
+          <Route path="dechets-levee" element={<FluxLogistique />} />
+          <Route path="mouvements-aps" element={<MainCourante />} />
+          <Route path="dechargements-bennes-vides" element={<FluxLogistique />} />
+          <Route path="dechargements-matiere-premiere" element={<FluxLogistique />} />
+          <Route path="depotage-fuel-gasoil" element={<FluxLogistique />} />
+          <Route path="mouvements-vehicules" element={<AgentAccueil />} />
+          <Route path="pointage-aps" element={<MainCourante />} />
+          <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
+          <Route path="courrier" element={<MainCourante />} />
+          <Route path="anomalie" element={<FluxLogistique />} />
+          <Route path="test-alcool" element={<ControleAcces />} />
+          <Route path="consigne" element={<Passation />} />
+          <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
+          <Route path="materiels-sous-traitant" element={<MainCourante />} />
+          <Route path="enregistrements-ordures" element={<FluxLogistique />} />
+          <Route path="materiels-star" element={<MainCourante />} />
+          
+          {/* Fiches */}
+          <Route path="check-list-camion" element={<FluxLogistique />} />
+          <Route path="questionnaires-visiteurs" element={<AgentAccueil />} />
+          <Route path="recoter" element={<FluxLogistique />} />
+          <Route path="declaration-objets" element={<AgentAccueil />} />
         </Route>
 
         {/* Redirection par défaut */}

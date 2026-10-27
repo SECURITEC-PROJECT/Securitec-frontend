@@ -99,13 +99,11 @@ export default function FluxLogistique() {
 
   const displayedEntries = entries.filter((entry) => entry.type === tab);
   const displayedEvents = events.filter((entry) => entry.type === tab);
-  const anomalyNumber = isAgency ? 9 : 8;
-  const violationNumber = isAgency ? 10 : 9;
   const documentLabel = tab === "DECHARGEMENT"
     ? (isAgency ? "N° titre ou REV" : "N° titre")
     : (isAgency ? "N° titre ou facture" : "N° titre");
   const transporterLabel = isAgency ? "Transporteur ou client" : "Transporteur";
-  const eventTitle = tab === "ANOMALIE" ? `${anomalyNumber} · Anomalies` : `${violationNumber} · Violation de procédure`;
+  const eventTitle = tab === "ANOMALIE" ? "Anomalies" : "Violation de procédure";
 
   return <div>
     <PageHeader title="Flux logistiques" subtitle="Flux camions, inventaire, anomalies et violations de procédure du rapport journalier" />
@@ -113,7 +111,7 @@ export default function FluxLogistique() {
     {siteError && <p className="mb-4 text-sm text-destructive">{siteError}</p>}
     <div className="mb-5 flex flex-wrap gap-2 border-b pb-3" role="tablist" aria-label="Flux logistiques">
       {visibleTabs.map((value) => <Button key={value} role="tab" aria-selected={tab === value} variant={tab === value ? "default" : "secondary"} onClick={() => setTab(value)}>
-        {value === "DECHARGEMENT" ? "3 · Déchargement" : value === "CHARGEMENT" ? "4 · Chargement" : value === "INVENTAIRE" ? "5 · Inventaire" : value === "ANOMALIE" ? `${anomalyNumber} · Anomalies` : `${violationNumber} · Violation de procédure`}
+        {value === "DECHARGEMENT" ? "Déchargement" : value === "CHARGEMENT" ? "Chargement" : value === "INVENTAIRE" ? "Inventaire" : value === "ANOMALIE" ? "Anomalies" : "Violation de procédure"}
       </Button>)}
     </div>
 
