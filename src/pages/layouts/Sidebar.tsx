@@ -1,33 +1,46 @@
 import { Button } from "@/components/ui/button";
-import { BarChart3, BookOpen, Boxes, ChevronDown, ClipboardCheck, FileText, LayoutDashboard, LogOut, Repeat, Route as RouteIcon, ScanLine, Settings2, ShieldCheck, Users, Video, ContactRound, type LucideIcon } from "lucide-react";
+import { ChevronDown, LogOut, ShieldCheck } from "lucide-react";
+import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
+import { SIDEBAR_GROUPS } from "./navigation";
 
-const groups: { title: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
-  { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
-  { title: "POSTE DE GARDE", items: [
-      { to: "/dashboard/prise-de-poste", label: "Prise de poste", icon: ClipboardCheck },
-      { to: "/dashboard/passation", label: "Passation", icon: Repeat },
-      { to: "/dashboard/visiteurs", label: "Entrées / sorties", icon: Users },
-      { to: "/dashboard/controle-acces", label: "Contrôle d’accès", icon: ScanLine },
-      { to: "/dashboard/logistique", label: "Flux Logistiques", icon: Boxes },
-      { to: "/dashboard/rondes", label: "Rondes", icon: RouteIcon },
-      { to: "/dashboard/cameras", label: "Caméras", icon: Video },
-      { to: "/dashboard/main-courante", label: "Main courante", icon: BookOpen }
-    ] 
-  },
-  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus", icon: FileText }, { to: "/dashboard/documents", label: "Documents", icon: BookOpen }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }] },
-] as const;
+const sidebarRoutesByRole: Record<number, string[]> = {
+  1: ["*"],
+  2: [
+    "/dashboard", "/dashboard/statistiques", 
+    "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps", 
+    "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil", 
+    "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie", 
+    "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/test-alcool", "/dashboard/consigne", 
+    "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", 
+    "/dashboard/visiteurs", "/dashboard/materiels-star",
+    "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
+    "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/controle-acces", "/dashboard/logistique",
+    "/dashboard/employes", "/dashboard/administration", "/dashboard/documents"
+  ],
+  3: [
+    "/dashboard", "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/main-courante", "/dashboard/comptes-rendus",
+    "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
+    "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
+    "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
+    "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/test-alcool", "/dashboard/consigne",
+    "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures",
+    "/dashboard/materiels-star",
+    "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets"
+  ],
+};
 
 interface SidebarProps {
   open: boolean;
   setOpen: (val: boolean) => void;
-  user: any;
+  user: AuthenticatedUser | null;
   role: string;
   signOut: () => void;
 }
 
 export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarProps) {
   const location = useLocation();
+  const visibleRoutes = (user && sidebarRoutesByRole[user.role]) || sidebarRoutesByRole[3];
 
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
@@ -53,11 +66,11 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto">
-        {groups.map((g) => (
+        {SIDEBAR_GROUPS.map((g) => ({ ...g, items: g.items.filter((item) => visibleRoutes.includes("*") || visibleRoutes.includes(item.to)) })).filter((g) => g.items.length > 0).map((g) => (
           <div key={g.title}>
             <p className="mb-2 px-3 text-[10px] font-semibold text-muted-foreground">{g.title}</p>
             <div className="space-y-0.5">
-              {g.items.filter((n) => n.to !== "/dashboard/employes" || user?.role === 1).map((n) => {
+              {g.items.map((n) => {
                 const isActive = location.pathname === n.to;
                 const Icon = n.icon;
                 return (

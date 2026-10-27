@@ -1,19 +1,14 @@
 import { Button } from "@/components/ui/button";
+import type { AuthenticatedUser } from "@/lib/auth-api";
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import Footer from "./Footer";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-
-// Groupes de navigation pour retrouver le libellé de la page active
-const groups = [
-  { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble" }, { to: "/dashboard/statistiques", label: "Statistiques" }] },
-  { title: "POSTE DE GARDE", items: [{ to: "/dashboard/prise-de-poste", label: "Prise de poste" }, { to: "/dashboard/passation", label: "Passation" }, { to: "/dashboard/visiteurs", label: "Entrées / sorties" }, { to: "/dashboard/controle-acces", label: "Contrôle d’accès" }, { to: "/dashboard/rondes", label: "Rondes" }, { to: "/dashboard/cameras", label: "Caméras" }, { to: "/dashboard/main-courante", label: "Main courante" }] },
-  { title: "ÉQUIPE & DOCUMENTS", items: [{ to: "/dashboard/employes", label: "Employés" }, { to: "/dashboard/comptes-rendus", label: "Comptes rendus" }, { to: "/dashboard/documents", label: "Documents" }, { to: "/dashboard/administration", label: "Administration" }] },
-] as const;
+import { SIDEBAR_GROUPS } from "./navigation";
 
 interface LayoutPrincipalProps {
-  user: any;
+  user: AuthenticatedUser;
   onLogout: () => void;
 }
 
@@ -29,7 +24,7 @@ export default function LayoutPrincipal({ user, onLogout }: LayoutPrincipalProps
     navigate('/login', { replace: true });
   };
 
-  const current = groups.map((g) => g.items.find((n) => n.to === location.pathname)?.label).find(Boolean) ?? "Vue d’ensemble";
+  const current = SIDEBAR_GROUPS.map((g) => g.items.find((n) => n.to === location.pathname)?.label).find(Boolean) ?? "Vue d’ensemble";
 
   return (
     <div className="min-h-screen lg:flex">

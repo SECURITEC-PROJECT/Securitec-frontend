@@ -50,8 +50,8 @@ export default function MainCourante() {
       <div className="flex flex-wrap gap-2 border-b pb-3">
         {[
           ['standard', 'Journal & Entrée Standard'],
-          ['violation', '9 - Violation de Procédure'],
-          ['qqoqcp', '10 - Divers / Fait Notable (QQOQCP)']
+          ['violation', 'Violation de procédure'],
+          ['qqoqcp', 'Fait notable (QQOQCP)']
         ].map(([key, label]) => (
           <button
             key={key}
