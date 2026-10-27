@@ -98,8 +98,22 @@ export const serviceApi = {
   async updateWasteLogistics(id: string, data: unknown) {
     return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) });
   },
+  async updateMatierePremiereLogistics(id: string, data: unknown) {
+    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=MATIERE_PREMIERE`, { method: "PUT", body: body(data) });
+  },
   async deleteWasteLogistics(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async deleteMatierePremiereLogistics(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId, type: "MATIERE_PREMIERE" });
+    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
+  async updateDepotageFuelLogistics(id: string, data: unknown) {
+    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=DEPOTAGE_FUEL`, { method: "PUT", body: body(data) });
+  },
+  async deleteDepotageFuelLogistics(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId, type: "DEPOTAGE_FUEL" });
+    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();

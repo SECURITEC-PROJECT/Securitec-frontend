@@ -16,6 +16,8 @@ import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 import Passation from '@/pages/passation/Passation';
 import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
+import DechargementMatierePremiere from '@/pages/fluxLogistique/DechargementMatierePremiere';
+import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
@@ -99,8 +101,8 @@ export default function App() {
           <Route path="dechets-levee" element={<DechetsLevee />} />
           <Route path="mouvements-aps" element={<MainCourante />} />
           <Route path="dechargements-bennes-vides" element={<FluxLogistique />} />
-          <Route path="dechargements-matiere-premiere" element={<FluxLogistique />} />
-          <Route path="depotage-fuel-gasoil" element={<FluxLogistique />} />
+          <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
+          <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<AgentAccueil />} />
           <Route path="pointage-aps" element={<MainCourante />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
