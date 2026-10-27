@@ -59,6 +59,18 @@ export interface CourrierMovement {
   siteName: string;
 }
 
+export interface AlcoholCheck {
+  id: string;
+  date: string;
+  heure: string;
+  matricule: string;
+  personne: string;
+  fonction: string;
+  resultat: "Positif" | "Négatif";
+  siteId: string;
+  siteName: string;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -152,6 +164,19 @@ export const serviceApi = {
   },
   async listBreathTests(siteId?: string) { return (await request<{ entries: any[] }>(`/access-control/breath-tests${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createBreathTest(data: unknown) { return (await request<{ entry: any }>("/access-control/breath-tests", { method: "POST", body: body(data) })).entry; },
+  async listAlcoholChecks(siteId: string) {
+    return (await request<{ entries: AlcoholCheck[] }>(`/access-control/alcohol-checks?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createAlcoholCheck(data: { date: string; heure: string; matricule: string; personne: string; fonction: string; resultat: AlcoholCheck["resultat"]; siteId: string }) {
+    return (await request<{ entry: AlcoholCheck }>("/access-control/alcohol-checks", { method: "POST", body: body(data) })).entry;
+  },
+  async updateAlcoholCheck(id: string, data: { date: string; heure: string; matricule: string; personne: string; fonction: string; resultat: AlcoholCheck["resultat"]; siteId: string }) {
+    return (await request<{ entry: AlcoholCheck }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteAlcoholCheck(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return request<{ id: string; deleted: boolean }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
   async listLogistics(siteId?: string) { return (await request<{ entries: any[] }>(`/logistics${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createLogistics(data: unknown) {
     return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
