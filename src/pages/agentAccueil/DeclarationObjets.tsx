@@ -11,6 +11,7 @@ import {
   type ObjectDeclarationRecord,
 } from "@/lib/service-api";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 const today = () => {
   const date = new Date();
@@ -283,7 +284,7 @@ export default function DeclarationObjets() {
   };
 
   const deleteRecord = async (record: ObjectDeclarationRecord) => {
-    if (!siteId || !window.confirm(`Supprimer la déclaration de ${record.data.firstName} ? Cette action est définitive.`)) return;
+    if (!siteId || !(await confirmDeletion(`Supprimer la déclaration de ${record.data.firstName} ? Cette action est définitive.`))) return;
     setDeletingId(record.id);
     try {
       await serviceApi.deleteObjectDeclaration(record.id, siteId);

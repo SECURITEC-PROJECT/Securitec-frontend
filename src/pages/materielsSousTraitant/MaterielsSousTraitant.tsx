@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi, type SubcontractorMaterialMovement } from "@/lib/service-api";
+import { serviceApi, type Provider, type SubcontractorMaterialMovement } from "@/lib/service-api";
 import { toast } from "sonner";
 import { printRecord } from "@/lib/printRecord";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
-type FormData = { date: string; heureEntree: string; materiels: string; nombre: string; entreprise: string };
+type FormData = { date: string; heureEntree: string; materiels: string; nombre: string; prestataireId: string };
 const today = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -19,7 +20,7 @@ const currentTime = () => {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 };
-const blankForm = (): FormData => ({ date: today(), heureEntree: currentTime(), materiels: "", nombre: "1", entreprise: "" });
+const blankForm = (): FormData => ({ date: today(), heureEntree: currentTime(), materiels: "", nombre: "1", prestataireId: "" });
 const displayDate = (date: string) => {
   const [year, month, day] = date.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
@@ -30,6 +31,7 @@ export default function MaterielsSousTraitant() {
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
   const [entries, setEntries] = useState<SubcontractorMaterialMovement[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [loadedSiteId, setLoadedSiteId] = useState("");
   const [form, setForm] = useState<FormData>(blankForm);
   const [saving, setSaving] = useState(false);
@@ -42,7 +44,7 @@ export default function MaterielsSousTraitant() {
   const loading = Boolean(site?.id) && loadedSiteId !== site?.id;
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
   const filteredEntries = entries.filter((entry) =>
-    [entry.date, displayDate(entry.date), entry.heureEntree, entry.materiels, String(entry.nombre), entry.entreprise, entry.heureSortie ?? ""]
+    [entry.date, displayDate(entry.date), entry.heureEntree, entry.materiels, String(entry.nombre), entry.provider, entry.entreprise, entry.heureSortie ?? ""]
       .join(" ")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -54,6 +56,12 @@ export default function MaterielsSousTraitant() {
     setForm(blankForm());
     setEditingId(null);
   };
+
+  useEffect(() => {
+    serviceApi.listProviders()
+      .then(setProviders)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement des prestataires impossible."));
+  }, []);
 
   useEffect(() => {
     if (!site?.id) { setEntries([]); setLoadedSiteId(""); return; }
@@ -77,7 +85,7 @@ export default function MaterielsSousTraitant() {
         heureEntree: form.heureEntree,
         materiels: form.materiels.trim(),
         nombre,
-        entreprise: form.entreprise.trim(),
+        prestataireId: form.prestataireId,
         siteId: site.id,
       };
       const entry = editingId
@@ -100,13 +108,13 @@ export default function MaterielsSousTraitant() {
       heureEntree: entry.heureEntree,
       materiels: entry.materiels,
       nombre: String(entry.nombre),
-      entreprise: entry.entreprise,
+      prestataireId: entry.providerId,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const deleteEntry = async (entry: SubcontractorMaterialMovement) => {
-    if (!site?.id || !window.confirm(`Supprimer le mouvement de ${entry.entreprise} ? Cette action est définitive.`)) return;
+    if (!site?.id || !(await confirmDeletion(`Supprimer le mouvement de ${entry.provider} ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteSubcontractorMaterial(entry.id, site.id);
@@ -145,7 +153,7 @@ export default function MaterielsSousTraitant() {
       ["Heure d’entrée", entry.heureEntree],
       ["Matériels", entry.materiels],
       ["Nombre", String(entry.nombre)],
-      ["Entreprise", entry.entreprise],
+      ["Prestataire", entry.provider],
       ["Heure de sortie", entry.heureSortie || "—"],
     ]);
   };
@@ -165,11 +173,11 @@ export default function MaterielsSousTraitant() {
           <div className="space-y-1.5"><Label htmlFor="materiel-heure-entree">Heure d’entrée</Label><Input id="materiel-heure-entree" type="time" required value={form.heureEntree} onChange={(event) => setForm({ ...form, heureEntree: event.target.value })} /></div>
           <div className="space-y-1.5"><Label htmlFor="materiel-nombre">Nombre de matériels</Label><Input id="materiel-nombre" type="number" min="1" max="1000000" step="1" required value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} /></div>
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="materiel-description">Matériels</Label><Input id="materiel-description" required maxLength={20000} placeholder="Désignation des matériels" value={form.materiels} onChange={(event) => setForm({ ...form, materiels: event.target.value })} /></div>
-          <div className="space-y-1.5"><Label htmlFor="materiel-entreprise">Entreprise</Label><Input id="materiel-entreprise" required maxLength={255} placeholder="Nom de l’entreprise" value={form.entreprise} onChange={(event) => setForm({ ...form, entreprise: event.target.value })} /></div>
+          <div className="space-y-1.5"><Label htmlFor="materiel-prestataire">Prestataire</Label><select id="materiel-prestataire" required value={form.prestataireId} onChange={(event) => setForm({ ...form, prestataireId: event.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Sélectionner un prestataire</option>{providers.filter((provider) => provider.active || provider.id === form.prestataireId).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}{provider.active ? "" : " (inactif)"}</option>)}</select></div>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
           {editingId && <Button type="button" variant="outline" disabled={saving} onClick={resetForm}><X className="mr-2 size-4" />Annuler</Button>}
-          <Button type="submit" disabled={saving || !site?.id}>{editingId ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}{saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer l’entrée"}</Button>
+          <Button type="submit" disabled={saving || !site?.id || !providers.some((provider) => provider.active || provider.id === form.prestataireId)}>{editingId ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}{saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer l’entrée"}</Button>
         </div>
       </form>
     </Panel>
@@ -181,7 +189,7 @@ export default function MaterielsSousTraitant() {
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label="Rechercher un mouvement de matériel sous-traitant"
-            placeholder="Rechercher date, matériel, entreprise, nombre ou heure…"
+            placeholder="Rechercher date, matériel, prestataire, nombre ou heure…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="min-h-11 pl-9"
@@ -194,14 +202,14 @@ export default function MaterielsSousTraitant() {
       {loading ? <div className="subcontractor-materials-screen"><Empty text="Chargement du registre…" /></div> : entries.length === 0 ? <div className="subcontractor-materials-screen"><Empty text="Aucun matériel enregistré sur ce site." /></div> : (
         <div className="overflow-x-auto rounded-lg border subcontractor-materials-screen"><table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase text-muted-foreground"><tr>
-            {["Date", "Heure d’entrée", "Matériels", "Nombre", "Entreprise", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}
+            {["Date", "Heure d’entrée", "Matériels", "Nombre", "Prestataire", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}
           </tr></thead>
           <tbody className="divide-y divide-border/70">{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
             <td className="whitespace-nowrap px-3 py-3">{displayDate(entry.date)}</td>
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
             <td className="whitespace-pre-wrap break-words px-3 py-3">{entry.materiels}</td>
             <td className="px-3 py-3 text-center">{entry.nombre}</td>
-            <td className="break-words px-3 py-3">{entry.entreprise}</td>
+            <td className="break-words px-3 py-3">{entry.provider}</td>
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
             <td className="px-3 py-3"><div className="flex items-center gap-1">
               <Button type="button" variant="ghost" size="icon" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>

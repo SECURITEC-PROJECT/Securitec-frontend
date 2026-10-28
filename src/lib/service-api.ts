@@ -67,6 +67,8 @@ export interface SubcontractorMaterialMovement {
   materiels: string;
   nombre: number;
   entreprise: string;
+  providerId: string;
+  provider: string;
   heureSortie: string | null;
   siteId: string;
   createdAt?: string;
@@ -83,10 +85,32 @@ export interface StarMaterialEntry {
   heureEntree: string;
   prenom: string;
   matricule: string;
+  providerId: string;
+  provider: string;
   items: StarMaterialItem[];
   heureSortie: string | null;
   siteId: string;
   siteName: string;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  active: boolean;
+  employeeCount: number;
+  materialCount: number;
+}
+
+export interface EmployeeRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  matricule: string;
+  providerId: string;
+  provider: string;
+  active: boolean;
+  siteId: string | null;
+  siteName: string | null;
 }
 
 export type VisitorQuestionnaireAnswer = "ENY" | "TSIA" | "";
@@ -435,10 +459,10 @@ export const serviceApi = {
   async listSubcontractorMaterials(siteId: string) {
     return (await request<{ entries: SubcontractorMaterialMovement[] }>(`/materiels-sous-traitant?siteId=${encodeURIComponent(siteId)}`)).entries;
   },
-  async createSubcontractorMaterial(data: { date: string; heureEntree: string; materiels: string; nombre: number; entreprise: string; siteId: string }) {
+  async createSubcontractorMaterial(data: { date: string; heureEntree: string; materiels: string; nombre: number; prestataireId: string; siteId: string }) {
     return (await request<{ entry: SubcontractorMaterialMovement }>("/materiels-sous-traitant", { method: "POST", body: body(data) })).entry;
   },
-  async updateSubcontractorMaterial(id: string, data: { date: string; heureEntree: string; materiels: string; nombre: number; entreprise: string; siteId: string }) {
+  async updateSubcontractorMaterial(id: string, data: { date: string; heureEntree: string; materiels: string; nombre: number; prestataireId: string; siteId: string }) {
     return (await request<{ entry: SubcontractorMaterialMovement }>(`/materiels-sous-traitant/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   },
   async deleteSubcontractorMaterial(id: string, siteId: string) {
@@ -451,10 +475,10 @@ export const serviceApi = {
   async listStarMaterials(siteId: string) {
     return (await request<{ entries: StarMaterialEntry[] }>(`/materiels-star?siteId=${encodeURIComponent(siteId)}`)).entries;
   },
-  async createStarMaterial(data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; siteId: string }) {
+  async createStarMaterial(data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; prestataireId: string; siteId: string }) {
     return (await request<{ entry: StarMaterialEntry }>("/materiels-star", { method: "POST", body: body(data) })).entry;
   },
-  async updateStarMaterial(id: string, data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; siteId: string }) {
+  async updateStarMaterial(id: string, data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; prestataireId: string; siteId: string }) {
     return (await request<{ entry: StarMaterialEntry }>(`/materiels-star/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   },
   async deleteStarMaterial(id: string, siteId: string) {
@@ -510,10 +534,14 @@ export const serviceApi = {
   async updateCamera(id: string, data: unknown) { return (await request<{ camera: any }>(`/cameras/${id}`, { method: "PUT", body: body(data) })).camera; },
   async setCameraStatus(id: string, status: "EN_SERVICE" | "MAINTENANCE") { return (await request<{ camera: any }>(`/cameras/${id}`, { method: "PATCH", body: body({ status }) })).camera; },
   async deleteCamera(id: string) { return request<{ id: string; deleted: boolean }>(`/cameras/${id}`, { method: "DELETE" }); },
-  async listEmployees() { return (await request<{ employees: any[] }>("/employees")).employees; },
-  async createEmployee(data: unknown) { return (await request<{ employee: any }>("/employees", { method: "POST", body: body(data) })).employee; },
-  async updateEmployee(id: string, data: unknown) { return (await request<{ employee: any }>(`/employees/${id}`, { method: "PUT", body: body(data) })).employee; },
-  async setEmployeeActive(id: string, active: boolean) { return (await request<{ employee: any }>(`/employees/${id}`, { method: "PATCH", body: body({ active }) })).employee; },
+  async listProviders() { return (await request<{ providers: Provider[] }>("/providers")).providers; },
+  async createProvider(name: string) { return (await request<{ provider: Provider }>("/providers", { method: "POST", body: body({ name }) })).provider; },
+  async updateProvider(id: string, data: { name: string; active?: boolean }) { return (await request<{ provider: Provider }>(`/providers/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).provider; },
+  async deleteProvider(id: string) { return request<{ id: string; deleted: boolean; deactivated: boolean }>(`/providers/${encodeURIComponent(id)}`, { method: "DELETE" }); },
+  async listEmployees() { return (await request<{ employees: EmployeeRecord[] }>("/employees")).employees; },
+  async createEmployee(data: Omit<EmployeeRecord, "id" | "provider" | "active" | "siteName">) { return (await request<{ employee: EmployeeRecord }>("/employees", { method: "POST", body: body(data) })).employee; },
+  async updateEmployee(id: string, data: Omit<EmployeeRecord, "id" | "provider" | "active" | "siteName">) { return (await request<{ employee: EmployeeRecord }>(`/employees/${id}`, { method: "PUT", body: body(data) })).employee; },
+  async setEmployeeActive(id: string, active: boolean) { return (await request<{ employee: Pick<EmployeeRecord, "id" | "active"> }>(`/employees/${id}`, { method: "PATCH", body: body({ active }) })).employee; },
   async findEmployeeByMatricule(matricule: string) { return (await request<{ employee: any }>(`/employees/by-matricule/${encodeURIComponent(matricule)}`)).employee; },
   async listReports(date?: string) { return (await request<{ reports: any[] }>(`/service-reports${date ? `?date=${encodeURIComponent(date)}` : ""}`)).reports; },
   async createReport(data: unknown) { return (await request<{ report: any }>("/service-reports", { method: "POST", body: body(data) })).report; },

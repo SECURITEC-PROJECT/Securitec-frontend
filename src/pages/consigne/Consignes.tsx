@@ -7,6 +7,7 @@ import { ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } fr
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 type ConsigneForm = { date: string; heure: string; consigne: string; emetteur: string; destinataire: string };
 type ConsigneEntry = ConsigneForm & { id: string; createdAt?: string };
@@ -93,7 +94,7 @@ export default function Consignes() {
   };
 
   const deleteEntry = async (entry: ConsigneEntry) => {
-    if (!siteId || !window.confirm("Supprimer cette consigne ? Cette action est définitive.")) return;
+    if (!siteId || !(await confirmDeletion("Supprimer cette consigne ? Cette action est définitive."))) return;
     try {
       await serviceApi.deleteJournalConsigne(entry.id, siteId);
       setEntries((current) => current.filter((row) => row.id !== entry.id));

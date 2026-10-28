@@ -2,6 +2,8 @@ import { PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type VehicleMovement } from "@/lib/service-api";
+import { confirmDeletion } from "@/lib/deletion-toast";
+import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import FormVehicule from "./FormVehicule";
 import PresentsVehicules from "./PresentsVehicules";
@@ -63,9 +65,12 @@ export default function Vehicule() {
 
   const deleteVehicle = async (id: string) => {
     if (!site?.id) return;
+    const vehicle = vehicles.find((entry) => entry.id === id);
+    if (!vehicle || !(await confirmDeletion(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`))) return;
     await serviceApi.deleteVehicle(id, site.id);
     setRegistry((current) => ({ ...current, vehicles: current.vehicles.filter((vehicle) => vehicle.id !== id) }));
     if (editingVehicle?.id === id) setEditingVehicle(null);
+    toast.success("Mouvement véhicule supprimé.");
   };
 
   return (

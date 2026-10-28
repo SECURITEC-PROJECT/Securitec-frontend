@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CalendarDays, Clock3, Pencil, Printer, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 type TruckForm = {
   date: string;
@@ -132,7 +133,7 @@ export default function FluxLogistique() {
 
   const deleteTruck = async (entry: TruckEntry) => {
     if (!site?.id) return;
-    if (!window.confirm(`Supprimer l’enregistrement du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer l’enregistrement du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`))) return;
     try {
       await serviceApi.deleteTruckLogistics(entry.id, "DECHARGEMENT", site.id);
       setEntries((current) => current.filter((row) => row.id !== entry.id));

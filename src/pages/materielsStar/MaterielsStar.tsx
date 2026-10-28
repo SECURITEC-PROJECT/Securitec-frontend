@@ -6,15 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi, type StarMaterialEntry, type StarMaterialItem } from "@/lib/service-api";
+import { serviceApi, type Provider, type StarMaterialEntry, type StarMaterialItem } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 type MaterialForm = {
   date: string;
   heureEntree: string;
   prenom: string;
   matricule: string;
+  prestataireId: string;
   items: Array<{ designation: string; nombre: string }>;
 };
 
@@ -33,6 +35,7 @@ const emptyForm = (): MaterialForm => ({
   heureEntree: currentTime(),
   prenom: "",
   matricule: "",
+  prestataireId: "",
   items: [{ designation: "", nombre: "1" }],
 });
 
@@ -54,6 +57,7 @@ export default function MaterielsStar() {
     entries: [],
     error: "",
   });
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [editing, setEditing] = useState<StarMaterialEntry | null>(null);
   const [saving, setSaving] = useState(false);
@@ -73,10 +77,17 @@ export default function MaterielsStar() {
       entry.heureEntree,
       entry.prenom,
       entry.matricule,
+      entry.provider,
       formatItems(entry.items),
       entry.heureSortie ?? "",
     ].join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().includes(normalizedSearch),
   );
+
+  useEffect(() => {
+    serviceApi.listProviders()
+      .then(setProviders)
+      .catch((reason) => toast.error(reason instanceof Error ? reason.message : "Chargement des prestataires impossible."));
+  }, []);
 
   useEffect(() => {
     if (!site?.id) return;
@@ -127,6 +138,7 @@ export default function MaterielsStar() {
         heureEntree: form.heureEntree,
         prenom: form.prenom.trim(),
         matricule: form.matricule.trim(),
+        prestataireId: form.prestataireId,
         items,
         siteId: site.id,
       };
@@ -156,6 +168,7 @@ export default function MaterielsStar() {
       heureEntree: entry.heureEntree,
       prenom: entry.prenom,
       matricule: entry.matricule,
+      prestataireId: entry.providerId,
       items: entry.items.map((item) => ({ designation: item.designation, nombre: String(item.nombre) })),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -180,7 +193,7 @@ export default function MaterielsStar() {
 
   const deleteEntry = async (entry: StarMaterialEntry) => {
     if (!site?.id || !entry.heureSortie) return;
-    if (!window.confirm(`Supprimer le mouvement de ${entry.prenom} (${entry.matricule}) ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le mouvement de ${entry.prenom} (${entry.matricule}) ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteStarMaterial(entry.id, site.id);
@@ -203,6 +216,7 @@ export default function MaterielsStar() {
       ["Heure d’entrée", entry.heureEntree],
       ["Prénom", entry.prenom],
       ["Matricule", entry.matricule],
+      ["Prestataire", entry.provider],
       ["Matériels", formatItems(entry.items)],
       ["Heure de sortie", entry.heureSortie || "—"],
     ]);
@@ -255,6 +269,13 @@ export default function MaterielsStar() {
                   <Label htmlFor="star-material-id">Matricule</Label>
                   <Input id="star-material-id" required maxLength={100} value={form.matricule} onChange={(event) => setForm({ ...form, matricule: event.target.value })} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="star-material-provider">Prestataire</Label>
+                  <select id="star-material-provider" required value={form.prestataireId} onChange={(event) => setForm({ ...form, prestataireId: event.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                    <option value="">Sélectionner un prestataire</option>
+                    {providers.filter((provider) => provider.active || provider.id === form.prestataireId).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}{provider.active ? "" : " (inactif)"}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b pb-2">
@@ -284,7 +305,7 @@ export default function MaterielsStar() {
               {!site?.id && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
               <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
                 {editing && <Button type="button" variant="outline" disabled={saving} onClick={resetForm}><X className="mr-2 size-4" /> Annuler</Button>}
-                <Button type="submit" disabled={saving || !site?.id}>
+                <Button type="submit" disabled={saving || !site?.id || !providers.some((provider) => provider.active || provider.id === form.prestataireId)}>
                   {editing ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
                   {saving ? "Enregistrement…" : editing ? "Enregistrer les modifications" : "Enregistrer l’entrée"}
                 </Button>
@@ -308,7 +329,7 @@ export default function MaterielsStar() {
                   <div className="overflow-x-auto rounded-lg border star-materials-screen">
                     <table className="w-full min-w-[1050px] text-left text-sm">
                       <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
-                        <tr>{["Date", "Heure d’entrée", "Prénom", "Matricule", "Matériels / nombre", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
+                          <tr>{["Date", "Heure d’entrée", "Prénom", "Matricule", "Prestataire", "Matériels / nombre", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
                       </thead>
                       <tbody className="divide-y divide-border/70">
                         {filteredEntries.map((entry) => (
@@ -317,6 +338,7 @@ export default function MaterielsStar() {
                             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                             <td className="px-3 py-3 font-medium">{entry.prenom}</td>
                             <td className="px-3 py-3 font-mono text-xs">{entry.matricule}</td>
+                            <td className="px-3 py-3">{entry.provider}</td>
                             <td className="whitespace-pre-wrap px-3 py-3">{entry.items.map((item) => `${item.designation} — ${item.nombre}`).join("\n")}</td>
                             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                             <td className="whitespace-nowrap px-3 py-3">
@@ -330,7 +352,7 @@ export default function MaterielsStar() {
                             </td>
                           </tr>
                         ))}
-                        {!filteredEntries.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun mouvement ne correspond à votre recherche.</td></tr>}
+                        {!filteredEntries.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun mouvement ne correspond à votre recherche.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -341,10 +363,10 @@ export default function MaterielsStar() {
                   <h1 className="mb-1 text-xl font-bold">Registre des matériels Star</h1>
                   <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
                   <table>
-                    <thead><tr>{["Date", "Heure d’entrée", "Prénom", "Matricule", "Matériels / nombre", "Heure de sortie"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+                    <thead><tr>{["Date", "Heure d’entrée", "Prénom", "Matricule", "Prestataire", "Matériels / nombre", "Heure de sortie"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
                     <tbody>{entries.map((entry) => (
                       <tr key={entry.id}>
-                        <td>{displayDate(entry.date)}</td><td>{entry.heureEntree}</td><td>{entry.prenom}</td><td>{entry.matricule}</td>
+                        <td>{displayDate(entry.date)}</td><td>{entry.heureEntree}</td><td>{entry.prenom}</td><td>{entry.matricule}</td><td>{entry.provider}</td>
                         <td>{entry.items.map((item) => `${item.designation} — ${item.nombre}`).join("\n")}</td><td>{entry.heureSortie || "—"}</td>
                       </tr>
                     ))}</tbody>

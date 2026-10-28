@@ -9,6 +9,7 @@ import { printRecord } from "@/lib/printRecord";
 import { ClipboardList, Pencil, Printer, Scale, Search, Trash2, Truck } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 const today = () => {
   const date = new Date();
@@ -162,7 +163,7 @@ export default function DechetsLevee() {
 
   const deleteEntry = async (entry: DechetsEntry) => {
     if (!selectedSiteId) return;
-    if (!window.confirm(`Supprimer la sortie de déchets « ${entry.numeroPesage || entry.id} » ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer la sortie de déchets « ${entry.numeroPesage || entry.id} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteWasteLogistics(entry.id, selectedSiteId);

@@ -5,6 +5,7 @@ import type { SiteOption } from "@/hooks/useSites";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 interface SitePickerProps {
   id: string;
@@ -42,7 +43,7 @@ export default function SitePicker({ id, value, type, sites, canCreate, canDelet
   const archiveSelected = async () => {
     const selected = sites.find((site) => site.name === value);
     if (!selected || !onArchive) return;
-    const confirmed = window.confirm(`Retirer « ${selected.name} » de la liste des sites ? Les anciennes données garderont leur historique.`);
+    const confirmed = await confirmDeletion(`Retirer « ${selected.name} » de la liste des sites ? Les anciennes données garderont leur historique.`);
     if (!confirmed) return;
     try {
       await onArchive(selected.id);

@@ -7,6 +7,7 @@ import { ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } fr
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 type AnomalieForm = {
   date: string;
@@ -119,12 +120,12 @@ export default function Anomalie() {
   };
 
   const deleteEntry = async (entry: AnomalieEntry) => {
-    if (!siteId || !window.confirm("Supprimer cette anomalie ? Cette action est definitive.")) return;
+    if (!siteId || !(await confirmDeletion("Supprimer cette anomalie ? Cette action est définitive."))) return;
     try {
       await serviceApi.deleteLogisticsIncident(entry.id, siteId);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
       if (editingId === entry.id) cancelEdit();
-      toast.success("Anomalie supprimee.");
+      toast.success("Anomalie supprimée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression de l'anomalie impossible.");
     }

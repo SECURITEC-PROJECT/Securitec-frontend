@@ -5,16 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type Provider } from "@/lib/service-api";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { useSites } from "@/hooks/useSites";
 import { Pencil, Plus, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 
-type Employee = { id: string; firstName: string; lastName: string; matricule: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
-type EmployeeForm = { firstName: string; lastName: string; matricule: string; provider: string; siteId: string };
-const emptyForm: EmployeeForm = { firstName: "", lastName: "", matricule: "", provider: "", siteId: "" };
+type Employee = { id: string; firstName: string; lastName: string; matricule: string; providerId: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
+type EmployeeForm = { firstName: string; lastName: string; matricule: string; providerId: string; siteId: string };
+const emptyForm: EmployeeForm = { firstName: "", lastName: "", matricule: "", providerId: "", siteId: "" };
 
 export default function Employes() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [form, setForm] = useState<EmployeeForm>(emptyForm);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,7 +28,11 @@ export default function Employes() {
   const { sites, siteError, canCreateSite, canDeleteSite, addSite, archiveSite } = useSites();
 
   const refresh = useCallback(async () => {
-    try { setEmployees(await serviceApi.listEmployees()); }
+    try {
+      const [employeeRows, providerRows] = await Promise.all([serviceApi.listEmployees(), serviceApi.listProviders()]);
+      setEmployees(employeeRows);
+      setProviders(providerRows);
+    }
     catch (error) { toast.error(error instanceof Error ? error.message : "Impossible de charger les employés."); }
     finally { setLoading(false); }
   }, []);
@@ -46,7 +52,7 @@ export default function Employes() {
 
   const edit = (employee: Employee) => {
     setEditing(employee);
-    setForm({ firstName: employee.firstName, lastName: employee.lastName, matricule: employee.matricule, provider: employee.provider, siteId: employee.siteId || "" });
+    setForm({ firstName: employee.firstName, lastName: employee.lastName, matricule: employee.matricule, providerId: employee.providerId, siteId: employee.siteId || "" });
   };
 
   const toggleActive = async (employee: Employee) => {
@@ -71,7 +77,7 @@ export default function Employes() {
 
   const removeWorkSite = async () => {
     const site = sites.find((item) => item.id === form.siteId);
-    if (!site || !window.confirm(`Retirer le site « ${site.name} » de la liste ? Il sera archivé pour conserver les historiques.`)) return;
+    if (!site || !(await confirmDeletion(`Retirer le site « ${site.name} » de la liste ? Il sera archivé pour conserver les historiques.`))) return;
     try {
       await archiveSite(site.id);
       setForm((current) => ({ ...current, siteId: current.siteId === site.id ? "" : current.siteId }));
@@ -97,9 +103,9 @@ export default function Employes() {
           <div><Label htmlFor="employee-first-name">Prénom</Label><Input id="employee-first-name" required maxLength={100} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></div>
           <div><Label htmlFor="employee-last-name">Nom</Label><Input id="employee-last-name" required maxLength={100} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></div>
           <div><Label htmlFor="employee-matricule">Matricule</Label><Input id="employee-matricule" required maxLength={50} value={form.matricule} onChange={(event) => setForm({ ...form, matricule: event.target.value })} /></div>
-          <div><Label htmlFor="employee-provider">Société prestataire</Label><Input id="employee-provider" required maxLength={160} value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} placeholder="Nom du prestataire" /></div>
+          <div><Label htmlFor="employee-provider">Prestataire</Label><select id="employee-provider" required value={form.providerId} onChange={(event) => setForm({ ...form, providerId: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Sélectionner un prestataire</option>{providers.filter((provider) => provider.active || provider.id === form.providerId).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}{provider.active ? "" : " (inactif)"}</option>)}</select>{!providers.some((provider) => provider.active) && <p className="mt-1 text-xs text-muted-foreground">Créez ou réactivez un prestataire dans Administration avant d’ajouter un employé.</p>}</div>
           <div><Label htmlFor="employee-site">Site de travail</Label><div className="mt-1 flex gap-2"><select id="employee-site" required value={form.siteId} onChange={(event) => setForm({ ...form, siteId: event.target.value })} className="flex h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"><option value="">Sélectionner un site</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select>{canCreateSite && <Button type="button" variant="outline" size="icon" title="Ajouter un site" aria-label="Ajouter un site" onClick={() => setSiteDialogOpen(true)}><Plus className="h-4 w-4" /></Button>}{canDeleteSite && <Button type="button" variant="outline" size="icon" title="Retirer le site sélectionné" aria-label="Retirer le site sélectionné" disabled={!form.siteId} onClick={() => void removeWorkSite()}><Trash2 className="h-4 w-4" /></Button>}</div>{siteError && <p className="mt-1 text-xs text-destructive">{siteError}</p>}</div>
-          <Button className="w-full" disabled={saving}>{editing ? <Pencil /> : <Plus />}{saving ? "Enregistrement…" : editing ? "Enregistrer" : "Ajouter l’employé"}</Button>
+          <Button className="w-full" disabled={saving || !providers.some((provider) => provider.active || provider.id === form.providerId)}>{editing ? <Pencil /> : <Plus />}{saving ? "Enregistrement…" : editing ? "Enregistrer" : "Ajouter l’employé"}</Button>
           {editing && <Button type="button" variant="outline" className="w-full" onClick={() => { setEditing(null); setForm(emptyForm); }}>Annuler</Button>}
         </form>
       </Panel>

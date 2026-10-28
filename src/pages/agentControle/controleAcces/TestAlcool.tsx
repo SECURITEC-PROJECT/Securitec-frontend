@@ -7,6 +7,7 @@ import { serviceApi, type AlcoholCheck } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 const FUNCTIONS = ["CR", "ADM", "Qualite", "Labo", "Maintenance", "Logistique", "Pile & Face", "Sécurité", "Pronete", "Néa"] as const;
 type JobFunction = typeof FUNCTIONS[number];
@@ -240,7 +241,7 @@ export default function TestAlcool() {
 
   const deleteEntry = async (entry: AlcoholCheck) => {
     if (!siteId) return;
-    if (!window.confirm(`Supprimer le contrôle de ${entry.personne} (${entry.matricule}) ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le contrôle de ${entry.personne} (${entry.matricule}) ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteAlcoholCheck(entry.id, siteId);
