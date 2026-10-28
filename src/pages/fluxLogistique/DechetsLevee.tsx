@@ -18,6 +18,7 @@ const nowTime = () => new Date().toTimeString().slice(0, 5);
 interface DechetsEntry {
   id: string;
   date: string;
+  typeDechet?: "LEVURE" | "DRECHE" | null;
   heureSortie?: string | null;
   numeroPesage?: string | null;
   facture?: string | null;
@@ -34,6 +35,9 @@ const formatDate = (value: string) => {
   return `${day}/${month}/${year}`;
 };
 
+const formatWasteType = (type?: DechetsEntry["typeDechet"]) =>
+  type === "LEVURE" ? "Levure" : type === "DRECHE" ? "Drèche" : "—";
+
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -48,6 +52,7 @@ export default function DechetsLevee() {
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
   const [date, setDate] = useState(today);
+  const [typeDechet, setTypeDechet] = useState<"" | "LEVURE" | "DRECHE">("");
   const [heureSortie, setHeureSortie] = useState(nowTime);
   const [numeroPesage, setNumeroPesage] = useState("");
   const [facture, setFacture] = useState("");
@@ -94,12 +99,13 @@ export default function DechetsLevee() {
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
   const filteredEntries = entries.filter((entry) =>
-    [entry.numeroPesage, entry.facture, entry.vehicule, entry.destinataire, entry.siteName]
+    [formatWasteType(entry.typeDechet), entry.numeroPesage, entry.facture, entry.vehicule, entry.destinataire, entry.siteName]
       .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
   );
 
   const clearForm = () => {
     setDate(today());
+    setTypeDechet("");
     setHeureSortie(nowTime());
     setNumeroPesage("");
     setFacture("");
@@ -112,6 +118,7 @@ export default function DechetsLevee() {
   const startEditing = (entry: DechetsEntry) => {
     setEditingId(entry.id);
     setDate(entry.date.slice(0, 10));
+    setTypeDechet(entry.typeDechet || "");
     setHeureSortie(entry.heureSortie || "");
     setNumeroPesage(entry.numeroPesage || "");
     setFacture(entry.facture || "");
@@ -127,6 +134,7 @@ export default function DechetsLevee() {
     try {
       const payload = {
         date,
+        typeDechet,
         heureSortie,
         numeroPesage: numeroPesage.trim(),
         facture: facture.trim(),
@@ -194,6 +202,7 @@ export default function DechetsLevee() {
 
     const rows = [
       ["Date", formatDate(entry.date)],
+      ["Type", formatWasteType(entry.typeDechet)],
       ["Heure de sortie", entry.heureSortie || "—"],
       ["Véhicule", entry.vehicule || "—"],
       ["N° de pesage", entry.numeroPesage || "—"],
@@ -289,6 +298,20 @@ export default function DechetsLevee() {
                 <Input id="dechets-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="dechets-type">Désignation</Label>
+                <select
+                  id="dechets-type"
+                  required
+                  value={typeDechet}
+                  onChange={(event) => setTypeDechet(event.target.value as "" | "LEVURE" | "DRECHE")}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Sélectionner un type</option>
+                  <option value="LEVURE">Levure</option>
+                  <option value="DRECHE">Drèche</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="dechets-time">Heure de sortie</Label>
                 <Input id="dechets-time" type="time" required value={heureSortie} onChange={(event) => setHeureSortie(event.target.value)} />
               </div>
@@ -373,6 +396,7 @@ export default function DechetsLevee() {
                 <thead className="sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr>
                     <th className="px-4 py-3">Date</th>
+                    <th className="px-3 py-3">Désignation</th>
                     <th className="px-3 py-3">Heure de sortie</th>
                     <th className="px-3 py-3">Véhicule</th>
                     <th className="px-3 py-3">N° pesage</th>
@@ -386,6 +410,7 @@ export default function DechetsLevee() {
                   {filteredEntries.map((entry) => (
                     <tr key={entry.id} className="transition-colors hover:bg-muted/30">
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-medium">{formatDate(entry.date)}</td>
+                      <td className="px-3 py-3">{formatWasteType(entry.typeDechet)}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                       <td className="px-3 py-3 font-medium">{entry.vehicule || "—"}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.numeroPesage || "—"}</td>
@@ -417,7 +442,7 @@ export default function DechetsLevee() {
                   ))}
                   {filteredEntries.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                         Aucun résultat pour cette recherche.
                       </td>
                     </tr>
@@ -434,7 +459,7 @@ export default function DechetsLevee() {
             <table>
               <thead>
                 <tr>
-                  {["Date", "Heure de sortie", "Véhicule", "N° pesage", "Facture", "Poids (kg)", "Destinataire / client"].map((heading) => (
+                  {["Date", "Désignation", "Heure de sortie", "Véhicule", "N° pesage", "Facture", "Poids (kg)", "Destinataire / client"].map((heading) => (
                     <th key={heading}>{heading}</th>
                   ))}
                 </tr>
@@ -443,6 +468,7 @@ export default function DechetsLevee() {
                 {entries.map((entry) => (
                   <tr key={entry.id}>
                     <td>{formatDate(entry.date)}</td>
+                    <td>{formatWasteType(entry.typeDechet)}</td>
                     <td>{entry.heureSortie || "—"}</td>
                     <td>{entry.vehicule || "—"}</td>
                     <td>{entry.numeroPesage || "—"}</td>
