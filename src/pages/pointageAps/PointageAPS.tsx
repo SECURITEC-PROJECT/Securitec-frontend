@@ -1,11 +1,11 @@
 import { PageHeader } from "@/components/PageHeader";
 import { CalendarDays, Printer, RotateCcw, Save } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
 
-type Agent = { prenom: string; matricule: string; heureEntree: string; heureSortie: string; observation: string };
+type Agent = { nom: string; prenom: string; matricule: string; heureEntree: string; heureSortie: string; observation: string };
 type Poste = { name: string; count: number };
 
 const postesJour: Poste[] = [
@@ -22,7 +22,7 @@ const postesNuit: Poste[] = [
   { name: "MATO", count: 2 }, { name: "FITAVA", count: 1 }, { name: "VILLA G", count: 1 },
 ];
 
-const blankAgent = (): Agent => ({ prenom: "", matricule: "", heureEntree: "", heureSortie: "", observation: "" });
+const blankAgent = (): Agent => ({ nom: "", prenom: "", matricule: "", heureEntree: "", heureSortie: "", observation: "" });
 const normalizeAgents = (data: Record<string, Agent[]>, initial: Record<string, Agent[]>, service: "jour" | "nuit") => {
   const normalized = Object.fromEntries(Object.keys(initial).map((poste) => [poste, data[poste] ?? initial[poste]])) as Record<string, Agent[]>;
   if (service === "jour") {
@@ -101,6 +101,19 @@ export default function PointageAPS() {
     }
   };
 
+  const setAgentIdentity = (poste: string, index: number, identity: Pick<Agent, "nom" | "prenom">) => {
+    setAgentsByKey((current) => {
+      const currentAgents = current[contextKey] ?? initial;
+      return {
+        ...current,
+        [contextKey]: {
+          ...currentAgents,
+          [poste]: (currentAgents[poste] ?? []).map((agent, i) => i === index ? { ...agent, ...identity } : agent),
+        },
+      };
+    });
+  };
+
   return <div className="space-y-5">
     <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />
     <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service de pointage">
@@ -130,14 +143,24 @@ export default function PointageAPS() {
     </section>
     {loading && <p className="text-sm text-muted-foreground">Chargement du pointage enregistre...</p>}
     <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
-      <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
         <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>
-          <th className="w-36 border-b px-4 py-3">Poste</th><th className="w-56 border-b px-4 py-3">Pr&#233;nom</th><th className="w-36 border-b px-4 py-3">Matricule</th><th className="w-36 border-b px-4 py-3">Heure d&#8217;entr&#233;e</th><th className="w-36 border-b px-4 py-3">Heure de sortie</th><th className="border-b px-4 py-3">Observation</th>
+          <th className="w-36 border-b px-4 py-3">Poste</th><th className="w-48 border-b px-4 py-3">Nom</th><th className="w-48 border-b px-4 py-3">Pr&#233;nom</th><th className="w-36 border-b px-4 py-3">Matricule</th><th className="w-36 border-b px-4 py-3">Heure d&#8217;entr&#233;e</th><th className="w-36 border-b px-4 py-3">Heure de sortie</th><th className="border-b px-4 py-3">Observation</th>
         </tr></thead>
         <tbody>{postes.map((poste) => (agents[poste.name] ?? Array.from({ length: poste.count }, blankAgent)).map((agent, index) => <tr key={`${poste.name}-${index}`} className="group hover:bg-muted/30">
           {index === 0 && <th rowSpan={(agents[poste.name] ?? []).length || poste.count} className="border-b bg-muted/20 px-4 py-3 align-top font-semibold">{poste.name}<span className="mt-1 block text-xs font-normal text-muted-foreground">{(agents[poste.name] ?? []).length || poste.count} {(agents[poste.name] ?? []).length === 1 ? "agent" : "agents"}</span></th>}
-          <td className="border-b px-3 py-2"><input aria-label={`Prenom ${poste.name} ${index + 1}`} value={agent.prenom} onChange={(e) => update(poste.name, index, "prenom", e.target.value)} placeholder="Saisir un prenom" className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
-          <td className="border-b px-3 py-2"><input aria-label={`Matricule ${poste.name} ${index + 1}`} value={agent.matricule} onChange={(e) => update(poste.name, index, "matricule", e.target.value)} placeholder="Saisir un matricule" className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
+          <td className="border-b px-3 py-2"><input aria-label={`Nom ${poste.name} ${index + 1}`} value={agent.nom ?? ""} readOnly placeholder="Depuis matricule" className="h-9 w-full rounded-md border border-transparent bg-muted/30 px-2" /></td>
+          <td className="border-b px-3 py-2"><input aria-label={`Prenom ${poste.name} ${index + 1}`} value={agent.prenom ?? ""} readOnly placeholder="Depuis matricule" className="h-9 w-full rounded-md border border-transparent bg-muted/30 px-2" /></td>
+          <td className="border-b px-3 py-2"><MatriculeAgentInput
+            poste={poste.name}
+            index={index}
+            value={agent.matricule ?? ""}
+            onChange={(value) => {
+              update(poste.name, index, "matricule", value);
+              setAgentIdentity(poste.name, index, { nom: "", prenom: "" });
+            }}
+            onEmployeeFound={(identity) => setAgentIdentity(poste.name, index, identity)}
+          /></td>
           <td className="border-b px-3 py-2"><input aria-label={`Heure entree ${poste.name} ${index + 1}`} type="time" value={agent.heureEntree ?? ""} onChange={(e) => update(poste.name, index, "heureEntree", e.target.value)} className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
           <td className="border-b px-3 py-2"><input aria-label={`Heure sortie ${poste.name} ${index + 1}`} type="time" value={agent.heureSortie ?? ""} onChange={(e) => update(poste.name, index, "heureSortie", e.target.value)} className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
           <td className="border-b px-3 py-2"><input aria-label={`Observation ${poste.name} ${index + 1}`} value={agent.observation} onChange={(e) => update(poste.name, index, "observation", e.target.value)} placeholder="Observation" className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
@@ -146,4 +169,74 @@ export default function PointageAPS() {
     </div>
     <style>{`@media print { @page { size: landscape; margin: 12mm; } body { background: white !important; } button, .print\\:hidden { display: none !important; } input { border: 0 !important; } }`}</style>
   </div>;
+}
+
+function MatriculeAgentInput({
+  poste,
+  index,
+  value,
+  onChange,
+  onEmployeeFound,
+}: {
+  poste: string;
+  index: number;
+  value: string;
+  onChange: (value: string) => void;
+  onEmployeeFound: (identity: Pick<Agent, "nom" | "prenom">) => void;
+}) {
+  const [status, setStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
+  const onEmployeeFoundRef = useRef(onEmployeeFound);
+  const matricule = value.trim();
+
+  useEffect(() => {
+    onEmployeeFoundRef.current = onEmployeeFound;
+  }, [onEmployeeFound]);
+
+  useEffect(() => {
+    if (!matricule) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setStatus("loading");
+      serviceApi.lookupEmployeeByMatricule(matricule, controller.signal)
+        .then((employee) => {
+          if (controller.signal.aborted) return;
+          if (!employee) {
+            onEmployeeFoundRef.current({ nom: "", prenom: "" });
+            setStatus("missing");
+            return;
+          }
+          onEmployeeFoundRef.current({ nom: employee.nom, prenom: employee.prenom });
+          setStatus("found");
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setStatus("error");
+        });
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [matricule]);
+
+  return (
+    <div>
+      <input
+        aria-label={`Matricule ${poste} ${index + 1}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Saisir un matricule"
+        className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background"
+      />
+      {matricule && status !== "idle" && (
+        <span className={`block text-[10px] ${status === "found" ? "text-emerald-600" : status === "missing" || status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+          {status === "loading" && "Recherche…"}
+          {status === "found" && "Employé trouvé"}
+          {status === "missing" && "Matricule introuvable"}
+          {status === "error" && "Recherche impossible"}
+        </span>
+      )}
+    </div>
+  );
 }

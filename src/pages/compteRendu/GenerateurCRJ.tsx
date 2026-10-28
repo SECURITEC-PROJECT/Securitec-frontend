@@ -12,16 +12,21 @@ export interface CRJData {
   prestataire: string;
   siteNom: string;
   date: string;
-  agentsJour: Array<{ nom: string; matricule: string }>;
-  agentsNuit: Array<{ nom: string; matricule: string }>;
+  agentsPostes: Array<{
+    poste: string;
+    jour: Array<{ nom: string; matricule: string }>;
+    nuit: Array<{ nom: string; matricule: string }>;
+  }>;
+  pointageApsJourEnregistre: boolean;
+  pointageApsNuitEnregistre: boolean;
   cles: CleLigne[];
-  dechargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string }>;
-  chargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string }>;
+  dechargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string; heureDebut: string; heureFin: string; comptage: string; destination: string }>;
+  chargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string; heureDebut: string; heureFin: string; comptage: string; destination: string }>;
   stockExterieur?: {
     cv12: number; cv24: number; cv20: number; intercalaires: number;
     ev150: number; ev50: number; cr200: number; cr100: number;
   };
-  alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string; typeControle: string }>;
+  alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string; typeControle: string; taux?: string }>;
   rondes: Array<{ debut: string; fin: string; obs: string }>;
   pointsVigilance: Array<{ heure: string; typePoint: string; element: string; statut: string; agent: string; obs: string }>;
   anomalies: Array<{ heure: string; camion: string; transporteur: string; titre: string; obs: string }>;
@@ -38,14 +43,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
 
   // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
   const decalage = data.siteType === 'Agence' ? 1 : 0;
-
-  // Filtrage conforme à la consigne pour les alcootests
-  const alcootestsAffiches = data.alcootests.filter(item => {
-    if (item.typeControle === 'Ordinaire') {
-      return item.resultat !== 'Négatif'; // Seuls les positifs/refus en ordinaire
-    }
-    return true; // Tous les tests à la demande d'un service
-  });
+  const agentsPostes = Array.isArray(data.agentsPostes) ? data.agentsPostes : [];
 
   return (
     <div className="space-y-4">
@@ -74,11 +72,23 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* 1 - AGENTS DE SÉCURITÉ */}
         <div>
           <h4 className="font-bold border-b border-black mb-1">1 - AGENTS DE SECURITE</h4>
+          {(!data.pointageApsJourEnregistre || !data.pointageApsNuitEnregistre || !agentsPostes.length) && (
+            <p className="mb-1 text-[10px] text-amber-800 print:hidden">
+              {!agentsPostes.length && data.agentsPostes === undefined
+                ? "Les données du pointage APS ne sont pas présentes dans cette réponse CRJ. "
+                : ""}
+              Pointage APS manquant pour le service {[
+                !data.pointageApsJourEnregistre && "jour",
+                !data.pointageApsNuitEnregistre && "nuit",
+              ].filter(Boolean).join(" et ") || "jour et nuit"}. Enregistrez ce service dans le module Pointage APS pour compléter le tableau.
+            </p>
+          )}
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
-                <th colSpan={2} className="border border-black p-1">POSTE JOUR</th>
-                <th colSpan={2} className="border border-black p-1">POSTE NUIT</th>
+                <th rowSpan={2} className="border border-black p-1">POSTES</th>
+                <th colSpan={2} className="border border-black p-1">JOUR</th>
+                <th colSpan={2} className="border border-black p-1">NUIT</th>
               </tr>
               <tr className="bg-gray-50">
                 <th className="border border-black p-1">Nom & Prénom</th>
@@ -88,14 +98,17 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: Math.max(data.agentsJour.length, data.agentsNuit.length, 2) }).map((_, i) => (
-                <tr key={i}>
-                  <td className="border border-black p-1">{data.agentsJour[i]?.nom || '-'}</td>
-                  <td className="border border-black p-1 font-mono">{data.agentsJour[i]?.matricule || '-'}</td>
-                  <td className="border border-black p-1">{data.agentsNuit[i]?.nom || '-'}</td>
-                  <td className="border border-black p-1 font-mono">{data.agentsNuit[i]?.matricule || '-'}</td>
+              {agentsPostes.flatMap((poste) => poste.jour.map((agent, index) => (
+                <tr key={`${poste.poste}-${index}`}>
+                  {index === 0 && (
+                    <td rowSpan={poste.jour.length} className="border border-black p-1 font-semibold">{poste.poste}</td>
+                  )}
+                  <td className="border border-black p-1">{agent.nom || ""}</td>
+                  <td className="border border-black p-1 font-mono">{agent.matricule || ""}</td>
+                  <td className="border border-black p-1">{poste.nuit[index]?.nom || ""}</td>
+                  <td className="border border-black p-1 font-mono">{poste.nuit[index]?.matricule || ""}</td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
@@ -146,16 +159,20 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         </div>
 
         {/* 3 & 4 - FLUX LOGISTIQUES */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
           <div>
             <h4 className="font-bold border-b border-black mb-1">3 - DECHARGEMENT CAMIONS {data.siteType === 'Agence' && '+ VL + VD'}</h4>
             <table className="w-full border-collapse border border-black text-center text-[9px]">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="border border-black p-1">CAMION</th>
+                  <th className="border border-black p-1">CAMION / IMMATRICULATION</th>
                   <th className="border border-black p-1">TRANSPORTEUR</th>
-                  <th className="border border-black p-1">TITRE {data.siteType === 'Agence' && '/ REV'}</th>
+                  <th className="border border-black p-1">N° TITRE / FACTURE</th>
                   <th className="border border-black p-1">PLOMB</th>
+                  <th className="border border-black p-1">HD</th>
+                  <th className="border border-black p-1">HF</th>
+                  <th className="border border-black p-1">COMPTAGE</th>
+                  <th className="border border-black p-1">DESTINATION</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,10 +182,14 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1">{d.transporteur}</td>
                     <td className="border border-black p-1 font-mono">{d.titre}</td>
                     <td className="border border-black p-1 font-mono">{d.plomb}</td>
+                    <td className="border border-black p-1 font-mono">{d.heureDebut}</td>
+                    <td className="border border-black p-1 font-mono">{d.heureFin}</td>
+                    <td className="border border-black p-1">{d.comptage}</td>
+                    <td className="border border-black p-1">{d.destination}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={4} className="border border-black p-1 text-gray-500 italic">Aucun déchargement ce jour.</td>
+                    <td colSpan={8} className="border border-black p-1 text-gray-500 italic">Aucun déchargement ce jour.</td>
                   </tr>
                 )}
               </tbody>
@@ -180,10 +201,14 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
             <table className="w-full border-collapse border border-black text-center text-[9px]">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="border border-black p-1">CAMION</th>
+                  <th className="border border-black p-1">CAMION / IMMATRICULATION</th>
                   <th className="border border-black p-1">TRANSPORTEUR</th>
-                  <th className="border border-black p-1">TITRE {data.siteType === 'Agence' && '/ FACTURE'}</th>
+                  <th className="border border-black p-1">N° TITRE / FACTURE</th>
                   <th className="border border-black p-1">PLOMB</th>
+                  <th className="border border-black p-1">HD</th>
+                  <th className="border border-black p-1">HF</th>
+                  <th className="border border-black p-1">COMPTAGE</th>
+                  <th className="border border-black p-1">DESTINATION</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,10 +218,14 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1">{c.transporteur}</td>
                     <td className="border border-black p-1 font-mono">{c.titre}</td>
                     <td className="border border-black p-1 font-mono">{c.plomb}</td>
+                    <td className="border border-black p-1 font-mono">{c.heureDebut}</td>
+                    <td className="border border-black p-1 font-mono">{c.heureFin}</td>
+                    <td className="border border-black p-1">{c.comptage}</td>
+                    <td className="border border-black p-1">{c.destination}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={4} className="border border-black p-1 text-gray-500 italic">Aucun chargement ce jour.</td>
+                    <td colSpan={8} className="border border-black p-1 text-gray-500 italic">Aucun chargement ce jour.</td>
                   </tr>
                 )}
               </tbody>
@@ -226,30 +255,34 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* ALCOOTEST */}
         <div>
           <h4 className="font-bold border-b border-black mb-1">
-            {5 + decalage} - ALCOOTEST (Seuls les tests positifs ordinaires et tous les tests à la demande sont affichés)
+            {5 + decalage} - ALCOOTEST
           </h4>
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
                 <th className="border border-black p-1">HEURE</th>
                 <th className="border border-black p-1">PERSONNE TESTEE</th>
-                <th className="border border-black p-1">TYPE / APPARTENANCE</th>
-                <th className="border border-black p-1">DEMANDEUR (SUPERIEUR)</th>
-                <th className="border border-black p-1">RESULTAT</th>
+                <th className="border border-black p-1">STAR</th>
+                <th className="border border-black p-1">NON STAR</th>
+                <th className="border border-black p-1">DEMANDEUR</th>
+                <th className="border border-black p-1">POSITIF</th>
+                <th className="border border-black p-1">NEGATIF</th>
               </tr>
             </thead>
             <tbody>
-              {alcootestsAffiches.length > 0 ? alcootestsAffiches.map((a, i) => (
-                <tr key={i} className={a.resultat !== 'Négatif' ? 'bg-red-50 font-bold text-red-900' : ''}>
+              {data.alcootests.length > 0 ? data.alcootests.map((a, i) => (
+                <tr key={i} className={a.resultat === 'Positif' ? 'bg-red-50 font-bold text-red-900' : ''}>
                   <td className="border border-black p-1 font-mono">{a.heure}</td>
                   <td className="border border-black p-1">{a.nomPrenom}</td>
-                  <td className="border border-black p-1">{a.isStar ? 'STAR' : 'NON STAR'} ({a.typeControle})</td>
-                  <td className="border border-black p-1">{a.demandeur || 'N/A (Test Ordinaire)'}</td>
-                  <td className="border border-black p-1">{a.resultat}</td>
+                  <td className="border border-black p-1">{a.isStar ? 'X' : '-'}</td>
+                  <td className="border border-black p-1">{a.isStar ? '-' : 'X'}</td>
+                  <td className="border border-black p-1">{a.demandeur || a.typeControle || '-'}</td>
+                  <td className="border border-black p-1">{a.resultat === 'Positif' ? `X${a.taux ? ` (${a.taux} g/L)` : ''}` : '-'}</td>
+                  <td className="border border-black p-1">{a.resultat === 'Négatif' ? 'X' : '-'}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5} className="border border-black p-1 text-gray-500 italic">Aucun test d'alcoolémie positif ou sous demande hiérarchique à signaler ce jour.</td>
+                  <td colSpan={7} className="border border-black p-1 text-gray-500 italic">Aucun test d'alcoolémie enregistré ce jour.</td>
                 </tr>
               )}
             </tbody>

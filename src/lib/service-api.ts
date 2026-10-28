@@ -1,4 +1,4 @@
-import { API_URL } from "@/lib/api";
+import { API_URL, authHeaders } from "@/lib/api";
 import type { VisitorRecord } from "@/types/visitor";
 
 const apiBaseUrl = API_URL;
@@ -180,6 +180,14 @@ export interface TruckChecklist {
   id: string;
   date: string;
   rows: TruckChecklistRow[];
+}
+
+export interface EmployeeByMatricule {
+  id: string;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  prestataire: string | null;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -448,6 +456,16 @@ export const serviceApi = {
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
+  },
+  async lookupEmployeeByMatricule(matricule: string, signal?: AbortSignal) {
+    const response = await fetch(`${apiBaseUrl}/employes/${encodeURIComponent(matricule)}`, {
+      headers: authHeaders(),
+      signal,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
+    return result as EmployeeByMatricule;
   },
   async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]> }) {
     return request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(data) });
