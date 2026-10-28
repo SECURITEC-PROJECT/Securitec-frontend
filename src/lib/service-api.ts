@@ -97,6 +97,18 @@ export interface AlcoholCheck {
   personne: string;
   fonction: string;
   resultat: "Positif" | "Négatif";
+  tauxMesure: string | number | null;
+  civilite: "Monsieur" | "Madame";
+  typeAppareil: "Electronique" | "Ballon";
+  testeurNom: string | null;
+  testeurMatricule: string | null;
+  testeurFonction: string | null;
+  temoinNom: string | null;
+  temoinMatricule: string | null;
+  temoinFonction: string | null;
+  temoin2Nom: string | null;
+  temoin2Matricule: string | null;
+  temoin2Fonction: string | null;
   siteId: string;
   siteName: string;
 }
@@ -238,10 +250,10 @@ export const serviceApi = {
   async listAlcoholChecks(siteId: string) {
     return (await request<{ entries: AlcoholCheck[] }>(`/access-control/alcohol-checks?siteId=${encodeURIComponent(siteId)}`)).entries;
   },
-  async createAlcoholCheck(data: { date: string; heure: string; matricule: string; personne: string; fonction: string; resultat: AlcoholCheck["resultat"]; siteId: string }) {
+  async createAlcoholCheck(data: Omit<AlcoholCheck, "id" | "siteName">) {
     return (await request<{ entry: AlcoholCheck }>("/access-control/alcohol-checks", { method: "POST", body: body(data) })).entry;
   },
-  async updateAlcoholCheck(id: string, data: { date: string; heure: string; matricule: string; personne: string; fonction: string; resultat: AlcoholCheck["resultat"]; siteId: string }) {
+  async updateAlcoholCheck(id: string, data: Omit<AlcoholCheck, "id" | "siteName">) {
     return (await request<{ entry: AlcoholCheck }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   },
   async deleteAlcoholCheck(id: string, siteId: string) {
