@@ -1,10 +1,9 @@
 import { Panel } from "@/components/PageHeader";
-import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SiteOption } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
+import type { VisitorRecord } from "@/types/visitor";
 import { useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -12,30 +11,60 @@ const normalize = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 const emptyForm = {
-  full_name: "", company: "", id_document: "", host: "", site_name: "", site_type: "USINE",
-  reason: "", badge: "", vehicle: "", zone: "", document_type: "", equipment: "",
+  full_name: "", company: "",
+  reason: "", badge: "",
+  entryDate: new Date().toLocaleDateString("en-CA"), entryTime: new Date().toTimeString().slice(0, 5),
 };
+
+function dateTimeParts(value?: string | Date | null) {
+  if (!value) return { date: "", time: "" };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { date: "", time: "" };
+  return {
+    date: `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`,
+    time: `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`,
+  };
+}
+
+function formForVisitor(visitor: VisitorRecord | null): Record<string, string> {
+  if (!visitor) return emptyForm;
+  const entered = dateTimeParts(visitor.entered_at);
+  return {
+    ...emptyForm,
+    full_name: visitor.full_name || "",
+    company: visitor.company || "",
+    reason: visitor.reason || "",
+    badge: visitor.badge || "",
+    entryDate: entered.date || emptyForm.entryDate,
+    entryTime: entered.time,
+  };
+}
 
 // Titre de section (occupe toute la largeur de la grille)
 function Section({ children }: { children: ReactNode }) {
   return (
-    <p className="col-span-2 mt-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-0">
+    <p className="col-span-2 mt-2 border-b pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-0 lg:col-span-4">
       {children}
     </p>
   );
 }
 
 interface FormPietonProps {
-  onCreated: (visitor: any) => void;
-  sites: SiteOption[];
-  canCreateSite: boolean;
-  onAddSite: (name: string, type: SiteOption["type"]) => Promise<SiteOption>;
+  onCreated: (visitor: VisitorRecord) => void;
+  onUpdated: (visitor: VisitorRecord) => void;
+  editingVisitor: VisitorRecord | null;
+  onCancelEditing: () => void;
+  siteId: string;
+  siteName: string;
+  siteType: string;
   // Visiteurs déjà enregistrés : servent à suggérer les noms
-  knownVisitors: any[];
+  knownVisitors: VisitorRecord[];
 }
 
-export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite, knownVisitors }: FormPietonProps) {
-  const [f, setF] = useState<Record<string, string>>(emptyForm);
+export default function FormPieton({
+  onCreated, onUpdated, editingVisitor, onCancelEditing, siteId, siteName, siteType, knownVisitors,
+}: FormPietonProps) {
+  const [f, setF] = useState<Record<string, string>>(() => formForVisitor(editingVisitor));
   const [saving, setSaving] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [active, setActive] = useState(-1);
@@ -46,7 +75,7 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
     if (q.length < 2) return [];
 
     const seen = new Set<string>();
-    const matches: any[] = [];
+    const matches: VisitorRecord[] = [];
     for (const v of knownVisitors) {
       const name = String(v.full_name ?? "").trim();
       const key = normalize(name);
@@ -64,14 +93,12 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
     return matches.slice(0, 6);
   }, [f.full_name, knownVisitors]);
 
-  const selectSuggestion = (v: any) => {
+  const selectSuggestion = (v: VisitorRecord) => {
     setF((prev) => ({
       ...prev,
       full_name: String(v.full_name).trim(),
       // On complète les infos d'identité connues, sans écraser ce qui est déjà saisi
       company: prev.company || String(v.company ?? ""),
-      id_document: prev.id_document || String(v.id_document ?? "").slice(-4),
-      document_type: prev.document_type || String(v.document_type ?? ""),
     }));
     setShowSuggestions(false);
     setActive(-1);
@@ -98,10 +125,17 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
     const badge = f.badge.trim();
     setSaving(true);
     try {
-      const visitor = await serviceApi.createVisitor({ ...f, badge, siteName: f.site_name, siteType: f.site_type });
-      onCreated(visitor);
-      toast.success("Entrée visiteur enregistrée dans la base de données");
-      setF(emptyForm);
+      const payload = { ...f, badge, siteId, siteName, siteType };
+      if (editingVisitor) {
+        const visitor = await serviceApi.updateVisitor(String(editingVisitor.id), payload);
+        onUpdated(visitor);
+        toast.success("Passage visiteur modifié.");
+      } else {
+        const visitor = await serviceApi.createVisitor(payload);
+        onCreated(visitor);
+        toast.success("Entrée visiteur enregistrée dans la base de données");
+        setF(emptyForm);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
     } finally { setSaving(false); }
@@ -113,7 +147,7 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
     label: string,
     opts: { required?: boolean; maxLength?: number; placeholder?: string; span?: boolean } = {}
   ) => (
-    <div className={opts.span ? "col-span-2" : ""}>
+    <div className={opts.span ? "col-span-2 lg:col-span-4" : ""}>
       <Label htmlFor={k} className="text-xs">{label}</Label>
       <Input
         id={k}
@@ -131,23 +165,11 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
   );
 
   return (
-    <Panel title="Enregistrer une entrée">
-      <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-x-3 gap-y-2.5">
-        <Section>Site</Section>
-        <div>
-          <SitePicker id="visitor-site" value={f.site_name} type={f.site_type as SiteOption["type"]} sites={sites} canCreate={canCreateSite} onAdd={onAddSite} onChange={(siteName, siteType) => setF((previous) => ({ ...previous, site_name: siteName, site_type: siteType }))} />
-        </div>
-        <div>
-          <Label htmlFor="visitor-site-type" className="text-xs">Type de site</Label>
-          <select id="visitor-site-type" value={f.site_type} onChange={(e) => setF({ ...f, site_type: e.target.value })} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-            <option value="USINE">Usine</option>
-            <option value="AGENCE">Agence</option>
-          </select>
-        </div>
-
+    <Panel title={editingVisitor ? "Modifier un passage visiteur" : "Enregistrer une entrée"}>
+      <form onSubmit={(event) => void handleSubmit(event)} className="grid grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
         <Section>Visiteur</Section>
         {/* Nom et prénom avec suggestions des personnes déjà présentes */}
-        <div className="relative col-span-2">
+        <div className="relative col-span-2 lg:col-span-4">
           <Label htmlFor="full_name" className="text-xs">Nom et prénom *</Label>
           <Input
             id="full_name"
@@ -188,23 +210,44 @@ export default function FormPieton({ onCreated, sites, canCreateSite, onAddSite,
             </ul>
           )}
         </div>
-        {champ("company", "Société")}
-        {champ("document_type", "Type de pièce", { placeholder: "CIN, passeport…" })}
-        {champ("id_document", "Pièce d'identité", { maxLength: 4, placeholder: "4 derniers caractères" })}
-        {champ("badge", "N° badge")}
+        {champ("company", "Établissement")}
+        <div>
+          <Label htmlFor="badge" className="text-xs">Numéro de badge</Label>
+          <Input
+            id="badge"
+            type="number"
+            min="0"
+            step="1"
+            inputMode="numeric"
+            className="mt-1 h-9"
+            value={f.badge || ""}
+            onChange={(event) => setF((previous) => ({ ...previous, badge: event.target.value }))}
+          />
+        </div>
 
         <Section>Visite</Section>
-        {champ("host", "Personne visitée *", { required: true })}
-        {champ("zone", "Zone autorisée")}
         {champ("reason", "Motif *", { required: true, span: true })}
 
-        <Section>Véhicule et matériel</Section>
-        {champ("vehicle", "Immatriculation")}
-        {champ("equipment", "Matériel apporté", { placeholder: "PC, outillage…" })}
+        <Section>Date et heure d’entrée</Section>
+        <div>
+          <Label htmlFor="visitor-entry-date" className="text-xs">Date d’entrée *</Label>
+          <Input id="visitor-entry-date" type="date" required className="mt-1 h-9" value={f.entryDate} onChange={(event) => setF({ ...f, entryDate: event.target.value })} />
+        </div>
+        <div>
+          <Label htmlFor="visitor-entry-time" className="text-xs">Heure d’entrée *</Label>
+          <Input id="visitor-entry-time" type="time" required className="mt-1 h-9" value={f.entryTime} onChange={(event) => setF({ ...f, entryTime: event.target.value })} />
+        </div>
 
-        <Button type="submit" disabled={saving} className="col-span-2 mt-2 h-10 w-full">
-          {saving ? "Enregistrement…" : "Valider l'entrée"}
-        </Button>
+        <div className="col-span-2 mt-2 flex gap-2 lg:col-span-4">
+          {editingVisitor && (
+            <Button type="button" variant="outline" disabled={saving} onClick={onCancelEditing} className="h-10 flex-1">
+              Annuler
+            </Button>
+          )}
+          <Button type="submit" disabled={saving || !siteId} className="h-10 flex-1">
+            {saving ? "Enregistrement…" : editingVisitor ? "Enregistrer les modifications" : "Valider l'entrée"}
+          </Button>
+        </div>
       </form>
     </Panel>
   );

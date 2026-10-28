@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/api";
+import type { VisitorRecord } from "@/types/visitor";
 
 const apiBaseUrl = API_URL;
 const tokenKey = "securitec-access-token";
@@ -169,8 +170,13 @@ export const serviceApi = {
   async deleteJournalConsigne(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/consignes-journal/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
-  async listVisitors(siteId?: string) { return (await request<{ visitors: any[] }>(`/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).visitors; },
-  async createVisitor(data: unknown) { return (await request<{ visitor: any }>("/visitors", { method: "POST", body: body(data) })).visitor; },
+  async listVisitors(siteId?: string) { return (await request<{ visitors: VisitorRecord[] }>(`/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).visitors; },
+  async createVisitor(data: unknown) { return (await request<{ visitor: VisitorRecord }>("/visitors", { method: "POST", body: body(data) })).visitor; },
+  async updateVisitor(id: string, data: unknown) { return (await request<{ visitor: VisitorRecord }>(`/visitors/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).visitor; },
+  async deleteVisitor(id: string, siteId?: string) {
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    return request<{ id: string; deleted: boolean }>(`/visitors/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
+  },
   async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
   async listVehicles(siteId?: string) { return (await request<{ vehicles: VehicleMovement[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },
   async createVehicle(data: unknown) { return (await request<{ vehicle: VehicleMovement }>("/vehicles", { method: "POST", body: body(data) })).vehicle; },
