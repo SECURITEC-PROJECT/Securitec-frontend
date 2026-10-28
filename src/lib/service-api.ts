@@ -212,6 +212,11 @@ export interface EmployeeByMatricule {
   prestataire: string | null;
 }
 
+export interface ApsPostConfiguration {
+  name: string;
+  count: number;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -489,7 +494,10 @@ export const serviceApi = {
     return request<{ id: string; deleted: boolean }>(`/object-declarations/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
-    return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
+    return request<{ data: Record<string, any[]> | null; postes: ApsPostConfiguration[] | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
+  },
+  async saveApsPostConfiguration(data: { service: "jour" | "nuit"; siteId: string; postes: ApsPostConfiguration[] }) {
+    return request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-attendance/posts", { method: "PUT", body: body(data) });
   },
   async lookupEmployeeByMatricule(matricule: string, signal?: AbortSignal) {
     const response = await fetch(`${apiBaseUrl}/employes/${encodeURIComponent(matricule)}`, {
@@ -501,7 +509,7 @@ export const serviceApi = {
     if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
     return result as EmployeeByMatricule;
   },
-  async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]> }) {
+  async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]>; postes: ApsPostConfiguration[] }) {
     return request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(data) });
   },
   async listCameras(siteId?: string) { return (await request<{ cameras: any[] }>(`/cameras${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).cameras; },
