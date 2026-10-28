@@ -173,6 +173,15 @@ export default function DechargementMatierePremiere() {
     }
   };
 
+  const handlePrintRegistry = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des déchargements de matière première";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   const printEntry = (entry: MatierePremiereEntry) => {
     const printWindow = window.open("", "_blank", "width=600,height=700");
     if (!printWindow) {
@@ -218,7 +227,7 @@ export default function DechargementMatierePremiere() {
             <h1>Déchargement matière première</h1>
             <p class="site">${escapeHtml(selectedSiteName)}</p>
             ${details}
-            <p class="footer">Document généré depuis Securitec</p>
+            <p class="footer">Bon de déchargement</p>
           </main>
           <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
         </body>
@@ -285,8 +294,9 @@ export default function DechargementMatierePremiere() {
             </div>
           </form>
       </Panel>
+      <section id="raw-material-print-area">
       <Panel title="Registre des déchargements">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 raw-material-screen">
           <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <Input
@@ -308,11 +318,14 @@ export default function DechargementMatierePremiere() {
               onChange={(event) => setSearchDate(event.target.value)}
             />
           </div>
+          <Button type="button" variant="outline" className="print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+          </Button>
         </div>
         {entriesError ? (
-          <p className="text-sm text-destructive">{entriesError}</p>
+          <p className="raw-material-screen text-sm text-destructive">{entriesError}</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-lg border raw-material-screen">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -384,7 +397,53 @@ export default function DechargementMatierePremiere() {
             </table>
           </div>
         )}
+        {!loadingEntries && !entriesError && (
+          <div className="raw-material-print hidden">
+            <h1 className="mb-1 text-xl font-bold">Registre des déchargements de matière première</h1>
+            <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+            <table>
+              <thead>
+                <tr>
+                  {["Date", "Heure de pointe", "Véhicule", "Désignation", "Quantité", "Bon de livraison / facture", "Provenance"].map((heading) => (
+                    <th key={heading}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
+                    <td>{entry.heurePointe || "—"}</td>
+                    <td>{entry.vehicule || "—"}</td>
+                    <td>{entry.designation || "—"}</td>
+                    <td>{entry.quantite ?? "—"}</td>
+                    <td>{entry.document || "—"}</td>
+                    <td>{entry.provenance || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
+      </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #raw-material-print-area, #raw-material-print-area * { visibility: visible !important; }
+          #raw-material-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .raw-material-screen { display: none !important; }
+          .raw-material-print { display: block !important; }
+          .raw-material-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+          .raw-material-print th, .raw-material-print td { border: 1px solid #777; padding: 6px; text-align: left; vertical-align: top; }
+          .raw-material-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -186,6 +186,15 @@ export default function DepotageFuelGasoil() {
     }
   };
 
+  const handlePrintRegistry = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des dépotages fuel et gasoil";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   const printEntry = (entry: DepotageEntry) => {
     const printWindow = window.open("", "_blank", "width=600,height=700");
     if (!printWindow) {
@@ -232,7 +241,7 @@ export default function DepotageFuelGasoil() {
             <h1>Dépotage fuel et gasoil</h1>
             <p class="site">${escapeHtml(entry.siteName || selectedSiteName)}</p>
             ${details}
-            <p class="footer">Document généré depuis Securitec</p>
+            <p class="footer">Bon de dépotage</p>
           </main>
           <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
         </body>
@@ -323,8 +332,9 @@ export default function DepotageFuelGasoil() {
           </form>
       </Panel>
 
+      <section id="fuel-registry-print-area">
       <Panel title="Registre des dépotages">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 fuel-registry-screen">
           <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <Input
@@ -346,11 +356,14 @@ export default function DepotageFuelGasoil() {
               onChange={(event) => setSearchDate(event.target.value)}
             />
           </div>
+          <Button type="button" variant="outline" className="print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+          </Button>
         </div>
         {entriesError ? (
-          <p className="text-sm text-destructive">{entriesError}</p>
+          <p className="fuel-registry-screen text-sm text-destructive">{entriesError}</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-lg border fuel-registry-screen">
             <table className="w-full min-w-[1200px] text-left text-sm">
               <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -403,7 +416,55 @@ export default function DepotageFuelGasoil() {
             </table>
           </div>
         )}
+        {!loadingEntries && !entriesError && (
+          <div className="fuel-registry-print hidden">
+            <h1 className="mb-1 text-xl font-bold">Registre des dépotages fuel et gasoil</h1>
+            <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+            <table>
+              <thead>
+                <tr>
+                  {["Date", "Heure", "Titre", "Plomb", "Désignation", "Quantité", "Créé par", "Chauffeur", "Magasinier"].map((heading) => (
+                    <th key={heading}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
+                    <td>{entry.heurePointe || "—"}</td>
+                    <td>{entry.titre || "—"}</td>
+                    <td>{entry.plomb || "—"}</td>
+                    <td>{entry.designation || "—"}</td>
+                    <td>{entry.quantite ?? "—"}</td>
+                    <td>{entry.cree || "—"}</td>
+                    <td>{entry.chauffeur || "—"}</td>
+                    <td>{entry.magasinier || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
+      </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #fuel-registry-print-area, #fuel-registry-print-area * { visibility: visible !important; }
+          #fuel-registry-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .fuel-registry-screen { display: none !important; }
+          .fuel-registry-print { display: block !important; }
+          .fuel-registry-print table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+          .fuel-registry-print th, .fuel-registry-print td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; }
+          .fuel-registry-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

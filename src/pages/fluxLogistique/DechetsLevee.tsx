@@ -176,6 +176,15 @@ export default function DechetsLevee() {
     }
   };
 
+  const handlePrintRegistry = () => {
+    const originalTitle = document.title;
+    document.title = "Registre des sorties de déchets";
+    window.addEventListener("afterprint", () => {
+      document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   const printEntry = (entry: DechetsEntry) => {
     const printWindow = window.open("", "_blank", "width=420,height=420");
     if (!printWindow) {
@@ -223,7 +232,7 @@ export default function DechetsLevee() {
             <p class="subtitle">Bon de sortie · format 80 × 80 mm</p>
             ${entry.siteName ? `<p class="site">${escapeHtml(entry.siteName)}</p>` : ""}
             ${details}
-            <p class="footer">Document généré depuis Securitec</p>
+            <p class="footer">Bon de sortie</p>
           </main>
           <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
         </body>
@@ -328,9 +337,16 @@ export default function DechetsLevee() {
           </div>
         </form>
       </section>
-      <Panel title="Registre des sorties de déchets">
-        {entriesError && <p className="mb-3 text-sm text-destructive">{entriesError}</p>}
-        <div className="relative mb-4">
+      <section id="waste-registry-print-area">
+        <Panel title="Registre des sorties de déchets">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 waste-registry-screen">
+          <p className="text-sm text-muted-foreground">Historique des sorties pour le site sélectionné.</p>
+          <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrintRegistry}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+          </Button>
+        </div>
+        {entriesError && <p className="waste-registry-screen mb-3 text-sm text-destructive">{entriesError}</p>}
+        <div className="relative mb-4 waste-registry-screen">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre des déchets"
@@ -341,17 +357,17 @@ export default function DechetsLevee() {
             />
         </div>
         {!site?.id ? (
-          <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+          <p className="waste-registry-screen rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
             Sélectionnez un site pour afficher le registre.
           </p>
         ) : loadingEntries ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Chargement du registre…</p>
+          <p className="waste-registry-screen py-8 text-center text-sm text-muted-foreground">Chargement du registre…</p>
         ) : entries.length === 0 ? (
-          <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+          <p className="waste-registry-screen rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
             Aucune sortie de déchets enregistrée pour ce site.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="overflow-hidden rounded-lg border waste-registry-screen">
             <div className="max-h-[560px] overflow-auto">
               <table className="w-full min-w-[850px] text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -411,7 +427,53 @@ export default function DechetsLevee() {
             </div>
           </div>
         )}
+        {!loadingEntries && (
+          <div className="waste-registry-print hidden">
+            <h1 className="mb-1 text-xl font-bold">Registre des sorties de déchets</h1>
+            <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+            <table>
+              <thead>
+                <tr>
+                  {["Date", "Heure de sortie", "Véhicule", "N° pesage", "Facture", "Poids (kg)", "Destinataire / client"].map((heading) => (
+                    <th key={heading}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{formatDate(entry.date)}</td>
+                    <td>{entry.heureSortie || "—"}</td>
+                    <td>{entry.vehicule || "—"}</td>
+                    <td>{entry.numeroPesage || "—"}</td>
+                    <td>{entry.facture || "—"}</td>
+                    <td>{entry.poids == null ? "—" : Number(entry.poids).toLocaleString("fr-FR")}</td>
+                    <td>{entry.destinataire || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
+      </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #waste-registry-print-area, #waste-registry-print-area * { visibility: visible !important; }
+          #waste-registry-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .waste-registry-screen { display: none !important; }
+          .waste-registry-print { display: block !important; }
+          .waste-registry-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+          .waste-registry-print th, .waste-registry-print td { border: 1px solid #777; padding: 6px; text-align: left; }
+          .waste-registry-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useState } from "react";
-import AlcootestPanel from "./AlcootestPanel";
 import GestionClesPanel from "./GestionClesPanel";
 import { useSites } from "@/hooks/useSites";
 
@@ -15,7 +14,6 @@ export interface AccessBadge {
 }
 
 export default function ControleAcces() {
-  const [activeTab, setActiveTab] = useState<"cles" | "alcootest">("cles");
   const { sites, siteError } = useSites();
   const [siteId, setSiteId] = useState("");
 
@@ -26,8 +24,8 @@ export default function ControleAcces() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Contrôle d’accès"
-        subtitle="Suivi des clés et contrôles d’alcoolémie enregistrés dans la base de données."
+        title="Mouvements des clés"
+        subtitle="Enregistrement des sorties et suivi des retours de clés pour le site sélectionné."
       />
 
       <div className="max-w-md space-y-1">
@@ -40,21 +38,7 @@ export default function ControleAcces() {
         {!siteError && !sites.length && <p className="text-sm text-muted-foreground">Aucun site actif n’est associé ou disponible pour ce compte.</p>}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b pb-3">
-        {([["cles", "Suivi des clés"], ["alcootest", "Contrôles d’alcoolémie"]] as const).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setActiveTab(key)}
-            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${activeTab === key ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "cles" && <GestionClesPanel siteId={siteId} />}
-      {activeTab === "alcootest" && <AlcootestPanel siteId={siteId} />}
+      <GestionClesPanel siteId={siteId} />
     </div>
   );
 }

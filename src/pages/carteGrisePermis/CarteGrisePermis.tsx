@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { Search } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -114,6 +114,15 @@ export default function CarteGrisePermis() {
     } finally {
       setExitingId(null);
     }
+  };
+
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = "Registre carte grise et permis";
+    window.addEventListener("afterprint", () => {
+      document.title = originalTitle;
+    }, { once: true });
+    window.print();
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -282,14 +291,19 @@ export default function CarteGrisePermis() {
             </Button>
           </form>
 
-        <section className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
-          <h2 className="font-semibold text-primary">Registre carte grise / permis</h2>
+        <section id="carte-grise-print-area" className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-semibold text-primary">Registre carte grise / permis</h2>
+            <Button type="button" variant="outline" className="print:hidden" disabled={!records.length} onClick={handlePrint}>
+              <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+            </Button>
+          </div>
           {registryError && <p className="mb-3 text-sm text-destructive">{registryError}</p>}
           {loadingRecords ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Chargement du registre…</p>
           ) : (
             <div className="space-y-4">
-              <div className="relative">
+              <div className="relative carte-grise-screen">
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   aria-label="Rechercher dans le registre carte grise et permis"
@@ -305,7 +319,7 @@ export default function CarteGrisePermis() {
                   <p className="mt-1 text-sm text-muted-foreground">Les contrôles enregistrés apparaîtront ici.</p>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-lg border">
+                <div className="overflow-hidden rounded-lg border carte-grise-screen">
                   <div className="max-h-[560px] overflow-auto">
                     <table className="w-full min-w-[1050px] text-sm">
                     <thead className="sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -376,8 +390,58 @@ export default function CarteGrisePermis() {
               )}
             </div>
           )}
+          {!loadingRecords && (
+            <div className="carte-grise-print hidden">
+              <h1 className="mb-1 text-xl font-bold">Registre carte grise / permis</h1>
+              <p className="mb-4 text-sm">Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+              <table>
+                <thead>
+                  <tr>
+                    {["Entrée", "Sortie", "Statut", "Personne", "CIN", "Immatriculation", "Motif", "Détails", "Site"].map((heading) => (
+                      <th key={heading}>{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((record) => (
+                    <tr key={record.id}>
+                      <td>{formatDate(record.entered_at)} {formatTime(record.entered_at)}</td>
+                      <td>{record.exited_at ? `${formatDate(record.exited_at)} ${formatTime(record.exited_at)}` : "—"}</td>
+                      <td>{record.exited_at ? "Sorti" : "Présent"}</td>
+                      <td>{record.full_name || "—"}</td>
+                      <td>{record.id_document || "—"}</td>
+                      <td>{record.vehicle || "—"}</td>
+                      <td>{record.reason || "—"}</td>
+                      <td>{record.equipment || "—"}</td>
+                      <td>{record.site_name || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #carte-grise-print-area, #carte-grise-print-area * { visibility: visible !important; }
+          #carte-grise-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+            border: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+          }
+          .carte-grise-screen { display: none !important; }
+          .carte-grise-print { display: block !important; }
+          .carte-grise-print table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+          .carte-grise-print th, .carte-grise-print td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; }
+          .carte-grise-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }
