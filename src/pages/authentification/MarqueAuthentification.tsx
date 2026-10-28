@@ -1,12 +1,10 @@
-﻿import { ShieldCheck } from 'lucide-react';
+﻿import logoSecuritec from '@/assets/logo securitec.jpg';
 
 export default function MarqueAuthentification() {
   return (
     <aside className="auth-brand">
       <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-md bg-login-accent text-login-ink">
-          <ShieldCheck className="h-6 w-6" />
-        </span>
+        <img src={logoSecuritec} alt="SECURITEC Surveillance" className="h-14 w-12 rounded-md object-contain" />
         <div>
           <p className="text-xl font-bold">SECURITEC</p>
           <p className="text-xs text-login-muted">Digitalisation du poste de garde</p>

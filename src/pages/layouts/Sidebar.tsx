@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, LogOut, ShieldCheck } from "lucide-react";
 import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
+import logoSecuritec from "@/assets/logo securitec.jpg";
 import { SIDEBAR_GROUPS } from "./navigation";
 
 const sidebarRoutesByRole: Record<number, string[]> = {
@@ -45,9 +46,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
       <Link to="/dashboard" className="mb-6 flex items-center gap-2.5 px-2 text-sidebar-primary">
-        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <ShieldCheck className="h-6 w-6" />
-        </span>
+        <img src={logoSecuritec} alt="SECURITEC Surveillance" className="h-12 w-11 rounded-md object-contain" />
         <div>
           <span className="text-lg font-bold">SECURITEC<span className="text-primary">.</span></span>
           <p className="text-[10px] font-medium text-muted-foreground">GESTION DU POSTE DE GARDE</p>
