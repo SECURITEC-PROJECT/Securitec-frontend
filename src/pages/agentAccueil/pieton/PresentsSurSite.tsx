@@ -1,21 +1,20 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { rafraichirAnomalies, useAnomalies } from "@/hooks/useAnomalies";
-import { LogOut, PackageCheck } from "lucide-react";
+import type { VisitorRecord } from "@/types/visitor";
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatTime } from "./formatTime";
-import ModalSortieVisiteur from "./ModalSortieVisiteur";
 
 export default function PresentsSurSite({
   visitors,
   onExit,
 }: {
-  visitors: any[];
-  onExit: (id: string, details: { equipmentOut: boolean; extraEquipment: string }) => Promise<void>;
+  visitors: VisitorRecord[];
+  onExit: (id: string) => Promise<void>;
 }) {
-  const [selectedVisitor, setSelectedVisitor] = useState<any | null>(null);
-
+  const [exitingId, setExitingId] = useState<string | null>(null);
   // Anomalies : visiteurs encore présents après la fermeture du site
   const anomalies = useAnomalies();
   const enAnomalie = new Map(
@@ -26,18 +25,16 @@ export default function PresentsSurSite({
   const present = visitors.filter((v) => !v.exited_at);
 
   // Enregistrer la sortie d'un visiteur
-  const handleConfirmExit = async (
-    id: string | number,
-    name: string,
-    details: { equipmentOut: boolean; extraEquipment: string }
-  ) => {
+  const handleExit = async (id: string | number, name: string) => {
+    setExitingId(String(id));
     try {
-      await onExit(String(id), details);
+      await onExit(String(id));
       rafraichirAnomalies();
       toast.success(`Sortie enregistrée pour ${name}`);
-      setSelectedVisitor(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sortie impossible");
+    } finally {
+      setExitingId(null);
     }
   };
 
@@ -83,21 +80,16 @@ export default function PresentsSurSite({
                     </p>
                   )}
 
-                  {v.equipment && (
-                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-600">
-                      <PackageCheck className="h-3.5 w-3.5" />
-                      Matériel : {v.equipment}
-                    </p>
-                  )}
                 </div>
 
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setSelectedVisitor(v)}
+                  disabled={exitingId === String(v.id)}
+                  onClick={() => void handleExit(v.id, v.full_name)}
                 >
                   <LogOut className="mr-1 h-4 w-4" />
-                  Sortie
+                  {exitingId === String(v.id) ? "Enregistrement…" : "Sortir"}
                 </Button>
               </li>
             ))}
@@ -107,12 +99,6 @@ export default function PresentsSurSite({
         )}
       </Panel>
 
-      <ModalSortieVisiteur
-        visitor={selectedVisitor}
-        onClose={() => setSelectedVisitor(null)}
-        onConfirmExit={handleConfirmExit}
-        formatTime={formatTime}
-      />
     </>
   );
 }

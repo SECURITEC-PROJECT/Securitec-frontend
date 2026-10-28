@@ -236,11 +236,11 @@ export default function FluxLogistique() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="flux-nbr">Nombre (ex. 1 voyage)</Label>
-              <Input id="flux-nbr" required maxLength={255} value={truckForm.nbr} onChange={(event) => setTruckForm({ ...truckForm, nbr: event.target.value })} />
+              <Label htmlFor="flux-nbr">Nombre </Label>
+              <Input id="flux-nbr" required maxLength={255} placeholder="ex : 1 voyage" value={truckForm.nbr} onChange={(event) => setTruckForm({ ...truckForm, nbr: event.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="flux-invoice">Facture (4 chiffres maximum)</Label>
+              <Label htmlFor="flux-invoice">Facture</Label>
               <Input id="flux-invoice" required maxLength={4} pattern="\d{1,4}" inputMode="numeric" title="Saisissez 1 à 4 chiffres." value={truckForm.facture} onChange={(event) => setTruckForm({ ...truckForm, facture: event.target.value })} />
             </div>
           </div>
