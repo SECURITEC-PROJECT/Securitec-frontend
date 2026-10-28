@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
-import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -46,6 +46,7 @@ export default function ChargementsStarParticuliers() {
   const [editing, setEditing] = useState<StarParticulierLoading | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const siteNameSelected = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === siteNameSelected), [sites, siteNameSelected]);
   const siteId = site?.id || "";
@@ -53,6 +54,23 @@ export default function ChargementsStarParticuliers() {
   const visibleEntries = entriesSiteId === siteId
     ? entries.filter((entry) => entry.typeChargement === form.typeChargement)
     : [];
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredEntries = visibleEntries.filter((entry) =>
+    [
+      entry.heureSortie,
+      entry.camion,
+      entry.proprietaire,
+      entry.nomChauffeur,
+      entry.designation,
+      entry.quantiteTexte,
+      String(entry.poids),
+      entry.destinataire,
+      entry.lp,
+      entry.titre,
+      entry.plomb,
+      entry.typeChargement,
+    ].join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().includes(normalizedSearch),
+  );
 
   useEffect(() => {
     if (!siteId) return;
@@ -161,6 +179,15 @@ export default function ChargementsStarParticuliers() {
     }
   };
 
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = `Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : "particuliers"}`;
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Chargements Star et particuliers" subtitle="Enregistrement et suivi des chargements sortants." />
@@ -249,16 +276,32 @@ export default function ChargementsStarParticuliers() {
         </form>
       </Panel>
 
+      <section id="star-loading-print-area">
       <Panel title={`Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : "Particuliers"}`}>
-        {visibleEntries.length ? (
-          <div className="overflow-hidden rounded-lg border">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 star-loading-screen">
+          <div className="relative min-w-[260px] flex-1">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Rechercher un chargement"
+              placeholder="Rechercher véhicule, propriétaire, chauffeur, désignation, destination…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="min-h-11 pl-9"
+            />
+          </div>
+          <Button type="button" variant="outline" className="print:hidden" disabled={loading || !visibleEntries.length} onClick={handlePrint}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+          </Button>
+        </div>
+        {filteredEntries.length ? (
+          <div className="overflow-hidden rounded-lg border star-loading-screen">
             <div className="max-h-[560px] overflow-auto">
               <table className="w-full min-w-[1450px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr>{["Heure de sortie", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Quantité", "Poids", "Destination", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
-                  {visibleEntries.map((entry) => (
+                  {filteredEntries.map((entry) => (
                     <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie}</td>
                       <td className="px-3 py-3 font-medium">{entry.camion}</td>
@@ -284,8 +327,53 @@ export default function ChargementsStarParticuliers() {
               </table>
             </div>
           </div>
-        ) : <Empty text={loading ? "Chargement du registre…" : loadError ? "Le registre n’a pas pu être chargé." : "Aucun chargement enregistré pour ce site."} />}
+        ) : <div className="star-loading-screen"><Empty text={loading ? "Chargement du registre…" : loadError ? "Le registre n’a pas pu être chargé." : visibleEntries.length ? "Aucun chargement ne correspond à votre recherche." : "Aucun chargement enregistré pour ce site."} /></div>}
+        <div className="star-loading-print hidden">
+          <h1 className="mb-1 text-xl font-bold">Registre des chargements {form.typeChargement === "STAR" ? "STAR" : "particuliers"}</h1>
+          <p className="mb-4 text-sm">Site : {siteNameSelected || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+          <table>
+            <thead>
+              <tr>{["Heure de sortie", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Quantité", "Poids", "Destination", "LP", "Titre", "Plomb", "Chargement"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+            </thead>
+            <tbody>
+              {visibleEntries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.heureSortie || "—"}</td>
+                  <td>{entry.camion || "—"}</td>
+                  <td>{entry.proprietaire || "—"}</td>
+                  <td>{entry.nomChauffeur || "—"}</td>
+                  <td>{entry.designation || "—"}</td>
+                  <td>{entry.quantiteTexte || "—"}</td>
+                  <td>{entry.poids}</td>
+                  <td>{entry.destinataire || "—"}</td>
+                  <td>{entry.lp || "—"}</td>
+                  <td>{entry.titre || "—"}</td>
+                  <td>{entry.plomb || "—"}</td>
+                  <td>{entry.typeChargement === "STAR" ? "STAR" : "Particulier"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Panel>
+      </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #star-loading-print-area, #star-loading-print-area * { visibility: visible !important; }
+          #star-loading-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .star-loading-screen { display: none !important; }
+          .star-loading-print { display: block !important; }
+          .star-loading-print table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+          .star-loading-print th, .star-loading-print td { border: 1px solid #777; padding: 4px; text-align: left; vertical-align: top; }
+          .star-loading-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -105,6 +105,7 @@ export default function Vehicule() {
           />
           <RegistreVehicules
             rows={vehicles}
+            siteName={selectedSiteName}
             onEdit={setEditingVehicle}
             onDelete={deleteVehicle}
           />

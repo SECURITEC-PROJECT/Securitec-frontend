@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
-import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -50,6 +50,9 @@ const displayDate = (value: string) => {
     : "—";
 };
 
+const normalizeSearch = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+
 export default function DechargementBouteillesVides() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
@@ -60,9 +63,24 @@ export default function DechargementBouteillesVides() {
   const [time, setTime] = useState(currentTime);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
+  const normalizedSearch = normalizeSearch(search.trim());
+  const filteredEntries = entries.filter((entry) =>
+    normalizeSearch([
+      entry.date,
+      displayDate(entry.date),
+      entry.heureArrivee,
+      entry.immatriculationVehicule,
+      entry.nomChauffeur ?? "",
+      entry.numeroTitre,
+      entry.provenance,
+      String(entry.poids),
+      ...entry.detailsBouteilles.flatMap((line) => [line.designation, String(line.quantite)]),
+    ].join(" ")).includes(normalizedSearch),
+  );
   const siteProps = {
     id: "empty-bottles-site",
     value: selectedSiteName,
@@ -174,6 +192,15 @@ export default function DechargementBouteillesVides() {
     }
   };
 
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = "Registre des réceptions de bouteilles vides";
+    window.addEventListener("afterprint", () => {
+      document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   const updateLine = (index: number, patch: Partial<BottleLine>) => {
     setForm((current) => ({
       ...current,
@@ -278,15 +305,30 @@ export default function DechargementBouteillesVides() {
         </div>
       </form>
 
-      <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+      <section id="empty-bottles-print-area" className="space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-3">
           <div>
             <h2 className="font-semibold text-primary">Registre des réceptions</h2>
             <p className="mt-1 text-sm text-muted-foreground">Historique des déchargements pour le site sélectionné.</p>
           </div>
-          <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">{entries.length} réception{entries.length === 1 ? "" : "s"}</span>
+          <div className="flex flex-wrap items-center gap-2 empty-bottles-screen">
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">{filteredEntries.length} réception{filteredEntries.length === 1 ? "" : "s"}</span>
+            <Button type="button" variant="outline" className="print:hidden" disabled={!site?.id || !entries.length} onClick={handlePrint}>
+              <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+            </Button>
+          </div>
         </div>
-        <div className="max-h-[520px] overflow-auto">
+        <div className="relative empty-bottles-screen">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Rechercher une réception de bouteilles vides"
+            placeholder="Rechercher par date, véhicule, chauffeur, titre, provenance, format…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="min-h-11 pl-9"
+          />
+        </div>
+        <div className="max-h-[520px] overflow-auto empty-bottles-screen">
           <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-muted">
               <tr>
@@ -296,7 +338,7 @@ export default function DechargementBouteillesVides() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="border-b last:border-0">
                   <td className="px-3 py-2">{displayDate(entry.date)}</td>
                   <td className="px-3 py-2">{entry.heureArrivee}</td>
@@ -324,8 +366,10 @@ export default function DechargementBouteillesVides() {
                   </td>
                 </tr>
               ))}
-              {site?.id && !entries.length && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">Aucune réception enregistrée pour ce site.</td></tr>
+              {site?.id && !filteredEntries.length && (
+                <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                  {entries.length ? "Aucune réception ne correspond à votre recherche." : "Aucune réception enregistrée pour ce site."}
+                </td></tr>
               )}
               {!site?.id && (
                 <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les réceptions.</td></tr>
@@ -333,7 +377,54 @@ export default function DechargementBouteillesVides() {
             </tbody>
           </table>
         </div>
+        <div className="empty-bottles-print hidden">
+          <h1 className="mb-1 text-xl font-bold">Registre des réceptions de bouteilles vides</h1>
+          <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+          <table>
+            <thead>
+              <tr>
+                {["Date", "Heure d’arrivée", "Immatriculation", "Nom du chauffeur", "N° titre", "Désignation · quantité", "Provenance", "Poids"].map((heading) => (
+                  <th key={heading}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{displayDate(entry.date)}</td>
+                  <td>{entry.heureArrivee || "—"}</td>
+                  <td>{entry.immatriculationVehicule || "—"}</td>
+                  <td>{entry.nomChauffeur || "—"}</td>
+                  <td>{entry.numeroTitre || "—"}</td>
+                  <td>{entry.detailsBouteilles.map((line) => `${line.designation} : ${line.quantite}`).join(", ") || "—"}</td>
+                  <td>{entry.provenance || "—"}</td>
+                  <td>{entry.poids ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #empty-bottles-print-area, #empty-bottles-print-area * { visibility: visible !important; }
+          #empty-bottles-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+            border: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+          }
+          .empty-bottles-screen { display: none !important; }
+          .empty-bottles-print { display: block !important; }
+          .empty-bottles-print table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+          .empty-bottles-print th, .empty-bottles-print td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; }
+          .empty-bottles-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

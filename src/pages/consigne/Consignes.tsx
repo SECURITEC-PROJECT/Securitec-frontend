@@ -1,8 +1,9 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { ClipboardList, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,17 @@ export default function Consignes() {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredEntries = entries.filter((entry) =>
+    [entry.date, entry.heure, entry.emetteur, entry.destinataire, entry.consigne]
+      .join(" ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
+  );
 
   useEffect(() => {
     if (!siteId && sites.length) setSiteId(sites[0].id);
@@ -92,6 +104,15 @@ export default function Consignes() {
     }
   };
 
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des consignes";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   return <div className="space-y-6">
     <PageHeader title="Consignes" subtitle="Saisir et consulter les consignes du site." />
     <div className="max-w-sm space-y-1.5">
@@ -121,18 +142,31 @@ export default function Consignes() {
       </form>
     </section>
 
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
+    <section id="consignes-print-area" className="space-y-3">
+      <div className="flex items-center justify-between print:hidden">
         <div><h2 className="text-lg font-semibold">Consignes enregistrées</h2><p className="text-sm text-muted-foreground">{entries.length} consigne(s)</p></div>
-        <Button type="button" variant="outline" size="sm" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
+          <Button type="button" variant="outline" size="sm" disabled={loading || !entries.length} onClick={handlePrint}><Printer className="mr-2 size-4" />Imprimer le registre</Button>
+        </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="relative print:hidden">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Rechercher une consigne"
+          placeholder="Rechercher par date, heure, émetteur, destinataire ou consigne…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="min-h-11 pl-9"
+        />
+      </div>
+      <div className="overflow-x-auto rounded-xl border bg-card print:hidden">
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead className="bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
             {(["Date", "Heure", "Émetteur", "Destinataire", "Consigne"] as const).map((heading) => <th key={heading} className="border-b px-4 py-3">{heading}</th>)}
             <th className="w-28 border-b px-4 py-3 text-right">Actions</th>
           </tr></thead>
-          <tbody>{entries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+          <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
             <td className="whitespace-nowrap border-b px-4 py-3">{String(entry.date).slice(0, 10)}</td>
             <td className="whitespace-nowrap border-b px-4 py-3">{entry.heure}</td>
             <td className="whitespace-pre-wrap break-words border-b px-4 py-3">{entry.emetteur}</td>
@@ -144,9 +178,46 @@ export default function Consignes() {
             </div></td>
           </tr>)}
           {!loading && entries.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Aucune consigne enregistrée pour ce site.</td></tr>}
+          {!loading && entries.length > 0 && filteredEntries.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Aucune consigne ne correspond à votre recherche.</td></tr>}
           {loading && <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Chargement...</td></tr>}</tbody>
         </table>
       </div>
+      <div className="consignes-print hidden">
+        <h1 className="mb-1 text-xl font-bold">Registre des consignes</h1>
+        <p className="mb-4 text-sm">Site : {sites.find((site) => site.id === siteId)?.name || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+        <table>
+          <thead>
+            <tr>{["Date", "Heure", "Émetteur", "Destinataire", "Consigne"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => (
+              <tr key={entry.id}>
+                <td>{String(entry.date).slice(0, 10)}</td>
+                <td>{entry.heure || "—"}</td>
+                <td>{entry.emetteur || "—"}</td>
+                <td>{entry.destinataire || "—"}</td>
+                <td>{entry.consigne || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
+    <style>{`
+      @media print {
+        @page { size: landscape; margin: 12mm; }
+        body * { visibility: hidden !important; }
+        #consignes-print-area, #consignes-print-area * { visibility: visible !important; }
+        #consignes-print-area {
+          position: absolute !important;
+          inset: 0 auto auto 0 !important;
+          width: 100% !important;
+        }
+        .consignes-print { display: block !important; }
+        .consignes-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        .consignes-print th, .consignes-print td { border: 1px solid #777; padding: 6px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+        .consignes-print th { background: #eee !important; print-color-adjust: exact; }
+      }
+    `}</style>
   </div>;
 }

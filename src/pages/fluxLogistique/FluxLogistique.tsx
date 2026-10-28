@@ -58,9 +58,23 @@ export default function FluxLogistique() {
   const [truckForm, setTruckForm] = useState<TruckForm>(emptyTruck);
   const [editingTruck, setEditingTruck] = useState<TruckEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [registrySearch, setRegistrySearch] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = sites.find((item) => item.name === selectedSiteName);
   const canPrintEntries = pathname === "/dashboard/enregistrements-bon-facture-bon-sortie";
+  const filteredEntries = entries.filter((entry) =>
+    [
+      entry.date,
+      entry.camion,
+      entry.nomChauffeur,
+      entry.heureArrivee,
+      entry.designation,
+      entry.nbr,
+      entry.document,
+      entry.destinataire,
+      entry.siteName,
+    ].some((value) => value?.toLocaleLowerCase().includes(registrySearch.trim().toLocaleLowerCase())),
+  );
 
   useEffect(() => {
     if (!site?.id) return;
@@ -134,6 +148,15 @@ export default function FluxLogistique() {
     }
   };
 
+  const handlePrintRegistry = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Enregistrement bon, facture et bon de sortie";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   const printEntry = (entry: TruckEntry) => {
     const printWindow = window.open("", "_blank", "width=700,height=800");
     if (!printWindow) {
@@ -181,7 +204,7 @@ export default function FluxLogistique() {
             <h1>Bon / facture / bon de sortie</h1>
             <p class="site">${escapeHtml(entry.siteName || selectedSiteName || "—")}</p>
             ${details}
-            <p class="footer">Document généré depuis Securitec</p>
+            <p class="footer">Bon / facture / bon de sortie</p>
           </main>
           <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
         </body>
@@ -264,8 +287,23 @@ export default function FluxLogistique() {
         </form>
       </Panel>
 
+      <section id="truck-registry-print-area">
       <Panel title="Registre des réceptions">
-        <div className="overflow-hidden rounded-lg border">
+        {canPrintEntries && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 truck-registry-screen">
+            <Input
+              aria-label="Rechercher un enregistrement de bon ou facture"
+              placeholder="Rechercher véhicule, chauffeur, bon, facture ou destination…"
+              value={registrySearch}
+              onChange={(event) => setRegistrySearch(event.target.value)}
+              className="min-h-11 max-w-xl"
+            />
+            <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrintRegistry}>
+              <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+            </Button>
+          </div>
+        )}
+        <div className={`overflow-hidden rounded-lg border ${canPrintEntries ? "truck-registry-screen" : ""}`}>
           <div className="max-h-[560px] overflow-auto">
             <table className="w-full min-w-[1000px] text-left text-sm">
               <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -276,7 +314,7 @@ export default function FluxLogistique() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/70">
-                {entries.map((entry) => (
+                {(canPrintEntries ? filteredEntries : entries).map((entry) => (
                   <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
                     <td className="whitespace-nowrap px-3 py-3">{String(entry.date).slice(0, 10)}</td>
                     <td className="whitespace-nowrap px-3 py-3 font-medium">{entry.camion || "—"}</td>
@@ -304,14 +342,64 @@ export default function FluxLogistique() {
                     </td>
                   </tr>
                 ))}
-                {!entries.length && (
+                {!(canPrintEntries ? filteredEntries : entries).length && (
                   <tr><td colSpan={10} className="px-3 py-8 text-center text-sm text-muted-foreground">Aucune réception enregistrée.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+        {canPrintEntries && (
+          <div className="truck-registry-print hidden">
+            <h1 className="mb-1 text-xl font-bold">Registre des enregistrements bon / facture / bon de sortie</h1>
+            <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+            <table>
+              <thead>
+                <tr>
+                  {["Date", "Transport (véhicule)", "Nom chauffeur", "Heure d’entrée", "Désignation", "NBR", "Bon ou facture", "Destination", "Site"].map((heading) => (
+                    <th key={heading}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{String(entry.date).slice(0, 10)}</td>
+                    <td>{entry.camion || "—"}</td>
+                    <td>{entry.nomChauffeur || "—"}</td>
+                    <td>{entry.heureArrivee || "—"}</td>
+                    <td>{entry.designation || "—"}</td>
+                    <td>{entry.nbr || "—"}</td>
+                    <td>{entry.document || "—"}</td>
+                    <td>{entry.destinataire || "—"}</td>
+                    <td>{entry.siteName || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
+      </section>
+      {canPrintEntries && (
+        <style>{`
+          @media print {
+            @page { size: landscape; margin: 12mm; }
+            body * { visibility: hidden !important; }
+            #truck-registry-print-area, #truck-registry-print-area * { visibility: visible !important; }
+            #truck-registry-print-area {
+              position: absolute !important;
+              inset: 0 auto auto 0 !important;
+              width: 100% !important;
+            }
+            .truck-registry-screen { display: none !important; }
+            .truck-registry-print { display: block !important; }
+            .truck-registry-print table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+            .truck-registry-print th, .truck-registry-print td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; }
+            .truck-registry-print th { background: #eee !important; print-color-adjust: exact; }
+          }
+        `}</style>
+      )}
     </div>
   );
 }

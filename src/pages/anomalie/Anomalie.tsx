@@ -1,8 +1,9 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { ClipboardList, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -40,6 +41,18 @@ export default function Anomalie() {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredEntries = entries.filter((entry) =>
+    [entry.date, entry.time, entry.person, entry.observations, entry.facts, entry.measures]
+      .filter(Boolean)
+      .join(" ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
+  );
 
   useEffect(() => {
     if (!siteId && sites.length) setSiteId(sites[0].id);
@@ -117,6 +130,15 @@ export default function Anomalie() {
     }
   };
 
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des anomalies";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   return <div className="space-y-6">
     <PageHeader title="Anomalie" subtitle="Saisir et consulter les anomalies du site." />
     <div className="max-w-sm space-y-1.5">
@@ -147,18 +169,31 @@ export default function Anomalie() {
       </form>
     </section>
 
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
+    <section id="anomalies-print-area" className="space-y-3">
+      <div className="flex items-center justify-between print:hidden">
         <div><h2 className="text-lg font-semibold">Anomalies enregistrees</h2><p className="text-sm text-muted-foreground">{entries.length} signalement(s)</p></div>
-        <Button variant="outline" size="sm" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
+        <div className="flex gap-2 print:hidden">
+          <Button variant="outline" size="sm" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
+          <Button variant="outline" size="sm" disabled={loading || !entries.length} onClick={handlePrint}><Printer className="mr-2 size-4" />Imprimer le registre</Button>
+        </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="relative print:hidden">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Rechercher une anomalie"
+          placeholder="Rechercher par date, poste, nature, anomalie ou mesures…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="min-h-11 pl-9"
+        />
+      </div>
+      <div className="overflow-x-auto rounded-xl border bg-card print:hidden">
         <table className="w-full min-w-[1250px] table-fixed border-collapse text-left text-sm">
           <thead className="bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
             {(["Date", "Heure", "Poste", "Nature", "Anomalie", "Mesures prises"] as const).map((heading, index) => <th key={heading} className={`border-b px-4 py-3 ${[0, 1].includes(index) ? "w-24" : index === 2 ? "w-40" : index === 3 ? "w-48" : "w-[360px]"}`}>{heading}</th>)}
             <th className="w-28 border-b px-4 py-3 text-right">Actions</th>
           </tr></thead>
-          <tbody>{entries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+          <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
             <td className="whitespace-nowrap border-b px-4 py-3">{String(entry.date).slice(0, 10)}</td>
             <td className="whitespace-nowrap border-b px-4 py-3">{entry.time}</td>
             <td className="whitespace-pre-wrap break-words border-b px-4 py-3">{entry.person || "-"}</td>
@@ -171,9 +206,47 @@ export default function Anomalie() {
             </div></td>
           </tr>)}
           {!loading && entries.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Aucune anomalie enregistree pour ce site.</td></tr>}
+          {!loading && entries.length > 0 && filteredEntries.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Aucune anomalie ne correspond à votre recherche.</td></tr>}
           {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Chargement...</td></tr>}</tbody>
         </table>
       </div>
+      <div className="anomalies-print hidden">
+        <h1 className="mb-1 text-xl font-bold">Registre des anomalies</h1>
+        <p className="mb-4 text-sm">Site : {sites.find((site) => site.id === siteId)?.name || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+        <table>
+          <thead>
+            <tr>{["Date", "Heure", "Poste", "Nature", "Anomalie", "Mesures prises"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => (
+              <tr key={entry.id}>
+                <td>{String(entry.date).slice(0, 10)}</td>
+                <td>{entry.time || "—"}</td>
+                <td>{entry.person || "—"}</td>
+                <td>{entry.observations || "—"}</td>
+                <td>{entry.facts || "—"}</td>
+                <td>{entry.measures || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
+    <style>{`
+      @media print {
+        @page { size: landscape; margin: 12mm; }
+        body * { visibility: hidden !important; }
+        #anomalies-print-area, #anomalies-print-area * { visibility: visible !important; }
+        #anomalies-print-area {
+          position: absolute !important;
+          inset: 0 auto auto 0 !important;
+          width: 100% !important;
+        }
+        .anomalies-print { display: block !important; }
+        .anomalies-print table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+        .anomalies-print th, .anomalies-print td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+        .anomalies-print th { background: #eee !important; print-color-adjust: exact; }
+      }
+    `}</style>
   </div>;
 }

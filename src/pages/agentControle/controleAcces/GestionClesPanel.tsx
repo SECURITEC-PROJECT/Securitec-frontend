@@ -9,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { serviceApi, type KeyTrackingEntry } from "@/lib/service-api";
-import { Check, CheckCircle2, ChevronsUpDown, KeyRound } from "lucide-react";
+import { Check, CheckCircle2, ChevronsUpDown, KeyRound, Printer, Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -104,6 +104,9 @@ const dateActuelle = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
+const normaliserRecherche = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+
 const formaterDate = (value: string) => {
   const datePart = value.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return "—";
@@ -123,6 +126,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [employeesFor, setEmployeesFor] = useState("");
   const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
   const [entriesForSite, setEntriesForSite] = useState("");
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [returningEntryId, setReturningEntryId] = useState<string | number | null>(null);
 
@@ -205,8 +209,31 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     }
   };
 
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = "Historique des mouvements de clés";
+    window.addEventListener("afterprint", () => {
+      document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   const matchingEmployees = employeesFor === `${siteId}:${form.keyType}` ? employees : [];
   const visibleEntries = entriesForSite === siteId ? entries : [];
+  const normalizedSearch = normaliserRecherche(search.trim());
+  const filteredEntries = visibleEntries.filter((entry) =>
+    normaliserRecherche([
+      entry.date,
+      formaterDate(entry.date),
+      entry.lastName,
+      entry.firstName,
+      entry.matricule,
+      entry.departureTime,
+      entry.keyType,
+      String(entry.quantity),
+      entry.returnTime ?? "",
+    ].join(" ")).includes(normalizedSearch),
+  );
   const employeeOptions = matchingEmployees.map((employee) => ({
     value: employee.id,
     label: `${employee.lastName} ${employee.firstName}`,
@@ -275,9 +302,24 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         </div>
       </form>
 
-      <section className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
-        <h2 className="font-semibold text-primary">Historique et retour des clés</h2>
-        <div className="max-h-[520px] overflow-auto">
+      <section id="key-movements-print-area" className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold text-primary">Historique et retour des clés</h2>
+          <Button type="button" variant="outline" className="print:hidden" disabled={!siteId || !visibleEntries.length} onClick={handlePrint}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimer tous les mouvements
+          </Button>
+        </div>
+        <div className="relative key-movements-screen">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Rechercher un mouvement de clé"
+            placeholder="Rechercher par nom, matricule, type de clé, date ou heure…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="min-h-11 pl-9"
+          />
+        </div>
+        <div className="max-h-[520px] overflow-auto key-movements-screen">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-muted">
               <tr>
@@ -287,7 +329,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
               </tr>
             </thead>
             <tbody>
-              {visibleEntries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="border-b last:border-0">
                   <td className="px-3 py-2">{formaterDate(entry.date)}</td>
                   <td className="px-3 py-2">{entry.lastName} {entry.firstName}</td>
@@ -315,8 +357,10 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                   </td>
                 </tr>
               ))}
-              {siteId && !visibleEntries.length && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Aucun mouvement de clé enregistré pour ce site.</td></tr>
+              {siteId && entriesForSite === siteId && !filteredEntries.length && (
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                  {visibleEntries.length ? "Aucun mouvement ne correspond à votre recherche." : "Aucun mouvement de clé enregistré pour ce site."}
+                </td></tr>
               )}
               {!siteId && (
                 <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les mouvements.</td></tr>
@@ -324,7 +368,53 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             </tbody>
           </table>
         </div>
+        <div className="key-movements-print hidden">
+          <h1 className="mb-1 text-xl font-bold">Historique des mouvements de clés</h1>
+          <p className="mb-4 text-sm">Site : {siteId || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+          <table>
+            <thead>
+              <tr>
+                {["Date", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Heure de retour"].map((label) => (
+                  <th key={label}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleEntries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{formaterDate(entry.date)}</td>
+                  <td>{entry.lastName} {entry.firstName}</td>
+                  <td>{entry.matricule}</td>
+                  <td>{entry.departureTime}</td>
+                  <td>{entry.keyType}</td>
+                  <td>{entry.quantity}</td>
+                  <td>{entry.returnTime || "En attente"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #key-movements-print-area, #key-movements-print-area * { visibility: visible !important; }
+          #key-movements-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+            border: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+          }
+          .key-movements-screen { display: none !important; }
+          .key-movements-print { display: block !important; }
+          .key-movements-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+          .key-movements-print th, .key-movements-print td { border: 1px solid #777; padding: 6px; text-align: left; }
+          .key-movements-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }
