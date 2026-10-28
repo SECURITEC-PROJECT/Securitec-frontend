@@ -72,6 +72,23 @@ export interface SubcontractorMaterialMovement {
   createdAt?: string;
 }
 
+export interface StarMaterialItem {
+  designation: string;
+  nombre: number;
+}
+
+export interface StarMaterialEntry {
+  id: string;
+  date: string;
+  heureEntree: string;
+  prenom: string;
+  matricule: string;
+  items: StarMaterialItem[];
+  heureSortie: string | null;
+  siteId: string;
+  siteName: string;
+}
+
 export interface AlcoholCheck {
   id: string;
   date: string;
@@ -332,6 +349,22 @@ export const serviceApi = {
   async exitSubcontractorMaterial(id: string, siteId: string) {
     const params = new URLSearchParams({ siteId });
     return (await request<{ entry: Pick<SubcontractorMaterialMovement, "id" | "heureSortie"> }>(`/materiels-sous-traitant/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
+  },
+  async listStarMaterials(siteId: string) {
+    return (await request<{ entries: StarMaterialEntry[] }>(`/materiels-star?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createStarMaterial(data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; siteId: string }) {
+    return (await request<{ entry: StarMaterialEntry }>("/materiels-star", { method: "POST", body: body(data) })).entry;
+  },
+  async updateStarMaterial(id: string, data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; siteId: string }) {
+    return (await request<{ entry: StarMaterialEntry }>(`/materiels-star/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteStarMaterial(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/materiels-star/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async exitStarMaterial(id: string, siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return (await request<{ entry: Pick<StarMaterialEntry, "id" | "heureSortie"> }>(`/materiels-star/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);

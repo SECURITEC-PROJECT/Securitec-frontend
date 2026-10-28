@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
+import { printRecord } from "@/lib/printRecord";
 import { ClipboardList, Pencil, Printer, Scale, Search, Trash2, Truck } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -37,15 +38,6 @@ const formatDate = (value: string) => {
 
 const formatWasteType = (type?: DechetsEntry["typeDechet"]) =>
   type === "LEVURE" ? "Levure" : type === "DRECHE" ? "Drèche" : "—";
-
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;",
-  })[character] || character);
 
 export default function DechetsLevee() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
@@ -194,12 +186,6 @@ export default function DechetsLevee() {
   };
 
   const printEntry = (entry: DechetsEntry) => {
-    const printWindow = window.open("", "_blank", "width=420,height=420");
-    if (!printWindow) {
-      toast.error("Autorisez les fenêtres contextuelles pour imprimer le bon.");
-      return;
-    }
-
     const rows = [
       ["Date", formatDate(entry.date)],
       ["Type", formatWasteType(entry.typeDechet)],
@@ -209,44 +195,8 @@ export default function DechetsLevee() {
       ["Facture", entry.facture || "—"],
       ["Poids", entry.poids == null ? "—" : `${Number(entry.poids).toLocaleString("fr-FR")} kg`],
       ["Destinataire / client", entry.destinataire || "—"],
-    ];
-    const details = rows.map(([label, value]) =>
-      `<div class="row"><span class="label">${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
-    ).join("");
-
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
-      <html lang="fr">
-        <head>
-          <meta charset="utf-8">
-          <title>Bon de sortie déchets</title>
-          <style>
-            @page { size: 80mm 80mm; margin: 2mm; }
-            * { box-sizing: border-box; }
-            html, body { width: 76mm; min-height: 76mm; margin: 0; }
-            body { color: #111; font: 10px Arial, sans-serif; }
-            main { width: 76mm; min-height: 76mm; padding: 2mm; }
-            h1 { margin: 0 0 1mm; text-align: center; font-size: 15px; }
-            .subtitle { margin: 0 0 3mm; text-align: center; font-size: 9px; }
-            .site { margin: 0 0 2mm; text-align: center; font-weight: 700; }
-            .row { display: flex; justify-content: space-between; gap: 2mm; border-bottom: 1px dashed #999; padding: 1.5mm 0; }
-            .label { flex: 0 0 38%; }
-            strong { max-width: 60%; text-align: right; overflow-wrap: anywhere; }
-            .footer { margin-top: 3mm; text-align: center; font-size: 8px; }
-          </style>
-        </head>
-        <body>
-          <main>
-            <h1>Sortie de déchets</h1>
-            <p class="subtitle">Bon de sortie · format 80 × 80 mm</p>
-            ${entry.siteName ? `<p class="site">${escapeHtml(entry.siteName)}</p>` : ""}
-            ${details}
-            <p class="footer">Bon de sortie</p>
-          </main>
-          <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
-        </body>
-      </html>`);
-    printWindow.document.close();
+    ] as const;
+    printRecord("Sortie de déchets", entry.siteName || selectedSiteName, rows);
   };
 
   return (

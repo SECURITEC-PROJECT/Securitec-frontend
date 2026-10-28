@@ -8,6 +8,7 @@ import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { printRecord } from "@/lib/printRecord";
 
 const DESIGNATIONS = ["65 Cl", "50 Cl", "33 Cl", "30 Cl", "1 L"] as const;
 type Designation = typeof DESIGNATIONS[number];
@@ -201,6 +202,19 @@ export default function DechargementBouteillesVides() {
     window.print();
   };
 
+  const printEntry = (entry: EmptyBottleDelivery) => {
+    printRecord("Réception de bouteilles vides", selectedSiteName, [
+      ["Date", displayDate(entry.date)],
+      ["Heure d’arrivée", entry.heureArrivee || "—"],
+      ["Immatriculation", entry.immatriculationVehicule],
+      ["Nom du chauffeur", entry.nomChauffeur || "—"],
+      ["N° titre", entry.numeroTitre],
+      ["Désignation · quantité", entry.detailsBouteilles.map((line) => `${line.designation} : ${line.quantite}`).join("\n")],
+      ["Provenance", entry.provenance],
+      ["Poids", `${entry.poids} kg`],
+    ]);
+  };
+
   const updateLine = (index: number, patch: Partial<BottleLine>) => {
     setForm((current) => ({
       ...current,
@@ -356,6 +370,9 @@ export default function DechargementBouteillesVides() {
                   <td className="px-3 py-2">{entry.poids}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la réception" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
+                        <Printer className="h-4 w-4" />
+                      </Button>
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editEntry(entry)}>
                         <Pencil className="h-4 w-4" />
                       </Button>

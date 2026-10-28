@@ -3,6 +3,7 @@ import { PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
+import { printRecord } from "@/lib/printRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -192,6 +193,19 @@ export default function FluxLogistique() {
     printWindow.document.close();
   };
 
+  const printEntry = (entry: TruckEntry) => {
+    const date = String(entry.date || "").slice(0, 10);
+    const displayDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.split("-").reverse().join("/") : "—";
+    printRecord("Enregistrement de réception", entry.siteName || selectedSiteName, [
+      ["Date", displayDate],
+      ["Véhicule (matricule)", entry.immatriculationVehicule || "—"],
+      ["Heure de sortie", entry.heureSortie || "—"],
+      ["Désignation", entry.designation || "—"],
+      ["Nombre", entry.nbr || "—"],
+      ["Facture", entry.facture || "—"],
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Flux logistiques" subtitle="Enregistrement et suivi des déchargements." />
@@ -304,7 +318,7 @@ export default function FluxLogistique() {
                     <td className="px-3 py-3">{entry.siteName || "—"}</td>
                     <td className="whitespace-nowrap px-3 py-3">
                       <div className="flex items-center gap-1">
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la ligne" title="Imprimer la ligne" onClick={() => printEntries([entry], "Enregistrement de réception")}>
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la ligne" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                           <Printer className="h-4 w-4" />
                         </Button>
                         <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editTruck(entry)}>

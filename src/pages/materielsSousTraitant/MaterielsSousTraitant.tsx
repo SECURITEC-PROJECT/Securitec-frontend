@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type SubcontractorMaterialMovement } from "@/lib/service-api";
 import { toast } from "sonner";
+import { printRecord } from "@/lib/printRecord";
 
 type FormData = { date: string; heureEntree: string; materiels: string; nombre: string; entreprise: string };
 const today = () => {
@@ -138,6 +139,17 @@ export default function MaterielsSousTraitant() {
     window.print();
   };
 
+  const printEntry = (entry: SubcontractorMaterialMovement) => {
+    printRecord("Mouvement matériel sous-traitant", selectedSiteName, [
+      ["Date", displayDate(entry.date)],
+      ["Heure d’entrée", entry.heureEntree],
+      ["Matériels", entry.materiels],
+      ["Nombre", String(entry.nombre)],
+      ["Entreprise", entry.entreprise],
+      ["Heure de sortie", entry.heureSortie || "—"],
+    ]);
+  };
+
   return <div className="space-y-6">
     <PageHeader title="Matériels sous-traitant" subtitle="Enregistrer les entrées de matériel et leur heure de sortie." />
     <div className="max-w-xl">
@@ -192,6 +204,7 @@ export default function MaterielsSousTraitant() {
             <td className="break-words px-3 py-3">{entry.entreprise}</td>
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
             <td className="px-3 py-3"><div className="flex items-center gap-1">
+              <Button type="button" variant="ghost" size="icon" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
               <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>
               <Button type="button" variant="ghost" size="icon" aria-label="Supprimer le mouvement" title="Supprimer" className="text-destructive hover:text-destructive" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>
               {!entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
