@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type CourrierMovement } from "@/lib/service-api";
-import { LogOut, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { LogOut, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 
@@ -56,11 +56,21 @@ export default function Courrier() {
   const [saving, setSaving] = useState(false);
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const entries = registry.siteId === site?.id ? registry.entries : [];
   const error = registry.siteId === site?.id ? registry.error : "";
   const loading = Boolean(site?.id) && registry.siteId !== site?.id;
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredEntries = entries.filter((entry) =>
+    [entry.date, formatDate(entry.date), entry.heureEntree, entry.prenom, entry.designation, String(entry.nombre), entry.heureSortie ?? ""]
+      .join(" ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
+  );
 
   useEffect(() => {
     if (!site?.id) return;
@@ -171,6 +181,15 @@ export default function Courrier() {
     }
   };
 
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre du courrier";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Courrier" subtitle="Suivi des entrées et sorties de personnes et d’articles." />
@@ -231,9 +250,26 @@ export default function Courrier() {
             </form>
           </Panel>
 
+          <section id="courrier-registry-print-area">
           <Panel title="Registre des entrées et sorties">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 courrier-registry-screen">
+              <div className="relative min-w-[260px] flex-1">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  aria-label="Rechercher un mouvement courrier"
+                  placeholder="Rechercher par date, prénom, désignation ou heure…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="min-h-11 pl-9"
+                />
+              </div>
+              <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+              </Button>
+            </div>
             {entries.length ? (
-              <div className="overflow-hidden rounded-lg border">
+              <>
+              <div className="overflow-hidden rounded-lg border courrier-registry-screen">
                 <div className="max-h-[560px] overflow-auto">
                   <table className="w-full table-fixed text-left text-sm">
                     <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -248,7 +284,7 @@ export default function Courrier() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/70">
-                      {entries.map((entry) => (
+                      {filteredEntries.map((entry) => (
                         <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}</td>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
@@ -278,8 +314,38 @@ export default function Courrier() {
                   </table>
                 </div>
               </div>
-            ) : <Empty text={loading ? "Chargement du registre…" : "Aucun mouvement courrier enregistré sur ce site."} />}
+              {!filteredEntries.length && (
+                <p className="courrier-registry-screen py-6 text-center text-sm text-muted-foreground">Aucun mouvement ne correspond à votre recherche.</p>
+              )}
+              </>
+            ) : <div className="courrier-registry-screen"><Empty text={loading ? "Chargement du registre…" : "Aucun mouvement courrier enregistré sur ce site."} /></div>}
+            <div className="courrier-registry-print hidden">
+              <h1 className="mb-1 text-xl font-bold">Registre des entrées et sorties de courrier</h1>
+              <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+              <table>
+                <thead>
+                  <tr>
+                    {["Date", "Heure d’entrée", "Prénom", "Désignation", "Nombre", "Heure de sortie"].map((heading) => (
+                      <th key={heading}>{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{formatDate(entry.date.slice(0, 10))}</td>
+                      <td>{entry.heureEntree}</td>
+                      <td>{entry.prenom}</td>
+                      <td>{entry.designation}</td>
+                      <td>{entry.nombre}</td>
+                      <td>{entry.heureSortie || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Panel>
+          </section>
         </>
       )}
       {loading && (
@@ -287,6 +353,23 @@ export default function Courrier() {
           <p className="text-sm text-muted-foreground">Chargement des mouvements courrier…</p>
         </Panel>
       )}
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #courrier-registry-print-area, #courrier-registry-print-area * { visibility: visible !important; }
+          #courrier-registry-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .courrier-registry-screen { display: none !important; }
+          .courrier-registry-print { display: block !important; }
+          .courrier-registry-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+          .courrier-registry-print th, .courrier-registry-print td { border: 1px solid #777; padding: 6px; text-align: left; vertical-align: top; }
+          .courrier-registry-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

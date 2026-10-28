@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { LogOut, Package, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { LogOut, Package, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { Empty, PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
@@ -35,9 +35,19 @@ export default function MaterielsSousTraitant() {
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const loading = Boolean(site?.id) && loadedSiteId !== site?.id;
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredEntries = entries.filter((entry) =>
+    [entry.date, displayDate(entry.date), entry.heureEntree, entry.materiels, String(entry.nombre), entry.entreprise, entry.heureSortie ?? ""]
+      .join(" ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
+  );
 
   const resetForm = () => {
     setForm(blankForm());
@@ -119,6 +129,15 @@ export default function MaterielsSousTraitant() {
     } finally { setExitingId(null); }
   };
 
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des matériels sous-traitant";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
+
   return <div className="space-y-6">
     <PageHeader title="Matériels sous-traitant" subtitle="Enregistrer les entrées de matériel et leur heure de sortie." />
     <div className="max-w-xl">
@@ -143,13 +162,29 @@ export default function MaterielsSousTraitant() {
       </form>
     </Panel>
 
+    <section id="subcontractor-materials-print-area">
     <Panel title="Registre des matériels sous-traitant">
-      {loading ? <Empty text="Chargement du registre…" /> : entries.length === 0 ? <Empty text="Aucun matériel enregistré sur ce site." /> : (
-        <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[900px] text-left text-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 subcontractor-materials-screen">
+        <div className="relative min-w-[260px] flex-1">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Rechercher un mouvement de matériel sous-traitant"
+            placeholder="Rechercher date, matériel, entreprise, nombre ou heure…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="min-h-11 pl-9"
+          />
+        </div>
+        <Button type="button" variant="outline" className="print:hidden" disabled={loading || !entries.length} onClick={handlePrint}>
+          <Printer className="mr-2 size-4" /> Imprimer le registre
+        </Button>
+      </div>
+      {loading ? <div className="subcontractor-materials-screen"><Empty text="Chargement du registre…" /></div> : entries.length === 0 ? <div className="subcontractor-materials-screen"><Empty text="Aucun matériel enregistré sur ce site." /></div> : (
+        <div className="overflow-x-auto rounded-lg border subcontractor-materials-screen"><table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase text-muted-foreground"><tr>
             {["Date", "Heure d’entrée", "Matériels", "Nombre", "Entreprise", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}
           </tr></thead>
-          <tbody className="divide-y divide-border/70">{entries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+          <tbody className="divide-y divide-border/70">{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
             <td className="whitespace-nowrap px-3 py-3">{displayDate(entry.date)}</td>
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
             <td className="whitespace-pre-wrap break-words px-3 py-3">{entry.materiels}</td>
@@ -162,9 +197,52 @@ export default function MaterielsSousTraitant() {
               {!entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
               {entry.heureSortie && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Package className="size-3" />Sorti</span>}
             </div></td>
-          </tr>)}</tbody>
+          </tr>)}
+          {!filteredEntries.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun mouvement ne correspond à votre recherche.</td></tr>}
+          </tbody>
         </table></div>
       )}
+      {!loading && (
+        <div className="subcontractor-materials-print hidden">
+          <h1 className="mb-1 text-xl font-bold">Registre des matériels sous-traitant</h1>
+          <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+          <table>
+            <thead>
+              <tr>{["Date", "Heure d’entrée", "Matériels", "Nombre", "Entreprise", "Heure de sortie"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{displayDate(entry.date)}</td>
+                  <td>{entry.heureEntree || "—"}</td>
+                  <td>{entry.materiels || "—"}</td>
+                  <td>{entry.nombre}</td>
+                  <td>{entry.entreprise || "—"}</td>
+                  <td>{entry.heureSortie || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Panel>
+    </section>
+    <style>{`
+      @media print {
+        @page { size: landscape; margin: 12mm; }
+        body * { visibility: hidden !important; }
+        #subcontractor-materials-print-area, #subcontractor-materials-print-area * { visibility: visible !important; }
+        #subcontractor-materials-print-area {
+          position: absolute !important;
+          inset: 0 auto auto 0 !important;
+          width: 100% !important;
+        }
+        .subcontractor-materials-screen { display: none !important; }
+        .subcontractor-materials-print { display: block !important; }
+        .subcontractor-materials-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        .subcontractor-materials-print th, .subcontractor-materials-print td { border: 1px solid #777; padding: 6px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+        .subcontractor-materials-print th { background: #eee !important; print-color-adjust: exact; }
+      }
+    `}</style>
   </div>;
 }

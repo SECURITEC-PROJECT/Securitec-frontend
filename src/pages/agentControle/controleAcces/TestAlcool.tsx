@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type AlcoholCheck } from "@/lib/service-api";
-import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -55,6 +55,7 @@ export default function TestAlcool() {
   const [editing, setEditing] = useState<AlcoholCheck | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const site = useMemo(
     () => sites.find((item) => item.id === selectedSiteId) || sites[0],
     [sites, selectedSiteId],
@@ -62,6 +63,15 @@ export default function TestAlcool() {
   const siteId = site?.id || "";
   const visibleEntries = entriesSiteId === siteId ? entries : [];
   const loading = Boolean(siteId) && entriesSiteId !== siteId;
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+  const filteredEntries = visibleEntries.filter((entry) =>
+    [entry.date, formatDate(entry.date.slice(0, 10)), entry.heure, entry.matricule, entry.personne, entry.fonction, entry.resultat]
+      .join(" ")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase()
+      .includes(normalizedSearch),
+  );
 
   useEffect(() => {
     if (!siteId) return;
@@ -145,6 +155,15 @@ export default function TestAlcool() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des tests alcool";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
   };
 
   return (
@@ -231,9 +250,25 @@ export default function TestAlcool() {
         </form>
       </Panel>
 
+      <section id="alcohol-registry-print-area">
       <Panel title="Registre des tests alcool">
-        {visibleEntries.length ? (
-          <div className="overflow-hidden rounded-lg border">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 alcohol-registry-screen">
+          <div className="relative min-w-[260px] flex-1">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Rechercher un test alcool"
+              placeholder="Rechercher par date, matricule, personne, fonction ou résultat…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="min-h-11 pl-9"
+            />
+          </div>
+          <Button type="button" variant="outline" className="print:hidden" disabled={loading || !visibleEntries.length} onClick={handlePrint}>
+            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+          </Button>
+        </div>
+        {filteredEntries.length ? (
+          <div className="overflow-hidden rounded-lg border alcohol-registry-screen">
             <div className="max-h-[560px] overflow-auto">
               <table className="w-full table-fixed text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -248,7 +283,7 @@ export default function TestAlcool() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
-                  {visibleEntries.map((entry) => (
+                  {filteredEntries.map((entry) => (
                     <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heure}</td>
@@ -276,8 +311,47 @@ export default function TestAlcool() {
               </table>
             </div>
           </div>
-        ) : <Empty text={loading ? "Chargement des contrôles…" : "Aucun contrôle enregistré pour ce site."} />}
+        ) : <div className="alcohol-registry-screen"><Empty text={loading ? "Chargement des contrôles…" : visibleEntries.length ? "Aucun contrôle ne correspond à votre recherche." : "Aucun contrôle enregistré pour ce site."} /></div>}
+        <div className="alcohol-registry-print hidden">
+          <h1 className="mb-1 text-xl font-bold">Registre des tests alcool</h1>
+          <p className="mb-4 text-sm">Site : {site?.name || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+          <table>
+            <thead>
+              <tr>{["Date", "Heure", "Matricule", "Nom et prénom", "Fonction", "Résultat"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+            </thead>
+            <tbody>
+              {visibleEntries.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{formatDate(entry.date.slice(0, 10))}</td>
+                  <td>{entry.heure || "—"}</td>
+                  <td>{entry.matricule || "—"}</td>
+                  <td>{entry.personne || "—"}</td>
+                  <td>{entry.fonction || "—"}</td>
+                  <td>{entry.resultat || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Panel>
+      </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #alcohol-registry-print-area, #alcohol-registry-print-area * { visibility: visible !important; }
+          #alcohol-registry-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .alcohol-registry-screen { display: none !important; }
+          .alcohol-registry-print { display: block !important; }
+          .alcohol-registry-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+          .alcohol-registry-print th, .alcohol-registry-print td { border: 1px solid #777; padding: 6px; text-align: left; vertical-align: top; }
+          .alcohol-registry-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }

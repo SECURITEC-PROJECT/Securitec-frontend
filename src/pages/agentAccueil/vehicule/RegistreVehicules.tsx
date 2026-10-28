@@ -1,7 +1,7 @@
 import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Pencil, Search, Trash2 } from "lucide-react";
+import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { VehicleMovement } from "@/lib/service-api";
@@ -14,10 +14,12 @@ const formatDate = (value: string) => {
 
 export default function RegistreVehicules({
   rows,
+  siteName,
   onEdit,
   onDelete,
 }: {
   rows: VehicleMovement[];
+  siteName?: string;
   onEdit: (vehicle: VehicleMovement) => void;
   onDelete: (id: string) => Promise<void>;
 }) {
@@ -26,6 +28,15 @@ export default function RegistreVehicules({
   const filtered = rows.filter((vehicle) =>
     [vehicle.plate, vehicle.ownerName, vehicle.category].join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   );
+
+  const handlePrint = () => {
+    const originalTitle = window.document.title;
+    window.document.title = "Registre des mouvements véhicule";
+    window.addEventListener("afterprint", () => {
+      window.document.title = originalTitle;
+    }, { once: true });
+    window.print();
+  };
 
   const deleteEntry = async (vehicle: VehicleMovement) => {
     if (!window.confirm(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`)) return;
@@ -42,7 +53,9 @@ export default function RegistreVehicules({
 
   return (
     <Panel title="Registre des mouvements véhicule">
-      <div className="relative mb-4">
+      <section id="vehicle-registry-print-area">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 vehicle-registry-screen">
+        <div className="relative min-w-[260px] flex-1">
         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           aria-label="Rechercher un mouvement véhicule"
@@ -51,8 +64,12 @@ export default function RegistreVehicules({
           onChange={(event) => setSearch(event.target.value)}
           className="min-h-11 pl-9"
         />
+        </div>
+        <Button type="button" variant="outline" className="print:hidden" disabled={!rows.length} onClick={handlePrint}>
+          <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+        </Button>
       </div>
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-lg border vehicle-registry-screen">
         <div className="max-h-[560px] overflow-auto">
           <table className="w-full min-w-[1050px] text-left text-sm">
             <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -92,6 +109,51 @@ export default function RegistreVehicules({
           </table>
         </div>
       </div>
+      <div className="vehicle-registry-print hidden">
+        <h1 className="mb-1 text-xl font-bold">Registre des mouvements véhicule (entrée / sortie)</h1>
+        <p className="mb-4 text-sm">Site : {siteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
+        <table>
+          <thead>
+            <tr>
+              {["Date", "Matricule du véhicule", "Propriétaire (prénom)", "Type de propriétaire", "Personnes (entrée)", "Heure d’entrée", "Personnes (sortie)", "Heure de sortie"].map((heading) => (
+                <th key={heading}>{heading}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((vehicle) => (
+              <tr key={vehicle.id}>
+                <td>{formatDate(vehicle.entryDate)}</td>
+                <td>{vehicle.plate || "—"}</td>
+                <td>{vehicle.ownerName || "—"}</td>
+                <td>{vehicle.category || "—"}</td>
+                <td>{vehicle.passengersEntry ?? "—"}</td>
+                <td>{vehicle.entryTime || "—"}</td>
+                <td>{vehicle.passengersOut ?? "—"}</td>
+                <td>{vehicle.exitTime || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      </section>
+      <style>{`
+        @media print {
+          @page { size: landscape; margin: 12mm; }
+          body * { visibility: hidden !important; }
+          #vehicle-registry-print-area, #vehicle-registry-print-area * { visibility: visible !important; }
+          #vehicle-registry-print-area {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100% !important;
+          }
+          .vehicle-registry-screen { display: none !important; }
+          .vehicle-registry-print { display: block !important; }
+          .vehicle-registry-print table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+          .vehicle-registry-print th, .vehicle-registry-print td { border: 1px solid #777; padding: 6px; text-align: left; }
+          .vehicle-registry-print th { background: #eee !important; print-color-adjust: exact; }
+        }
+      `}</style>
     </Panel>
   );
 }
