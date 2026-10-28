@@ -121,6 +121,22 @@ export interface StarParticulierLoading {
   siteName: string;
 }
 
+export interface TruckChecklistRow {
+  vehicle: string;
+  carrier: string;
+  controlTime: string;
+  checks: Record<"starts" | "chocks" | "tires" | "leaks" | "cover" | "sideboards", "" | "OK" | "NOK">;
+  signature: string;
+  observation: string;
+  decision: "" | "Autorisé" | "Interdit";
+}
+
+export interface TruckChecklist {
+  id: string;
+  date: string;
+  rows: TruckChecklistRow[];
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -233,6 +249,13 @@ export const serviceApi = {
     return request<{ id: string; deleted: boolean }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
   async listLogistics(siteId?: string) { return (await request<{ entries: any[] }>(`/logistics${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
+  async getTruckChecklist(siteId: string, date: string) {
+    const params = new URLSearchParams({ siteId, date });
+    return (await request<{ entry: TruckChecklist | null }>(`/truck-checklists?${params}`)).entry;
+  },
+  async saveTruckChecklist(data: { siteId: string; date: string; rows: TruckChecklistRow[] }) {
+    return (await request<{ entry: TruckChecklist }>("/truck-checklists", { method: "PUT", body: body(data) })).entry;
+  },
   async createLogistics(data: unknown) {
     return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
   },
