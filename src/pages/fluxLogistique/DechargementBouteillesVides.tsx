@@ -8,6 +8,7 @@ import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
 
 const DESIGNATIONS = ["65 Cl", "50 Cl", "33 Cl", "30 Cl", "1 L"] as const;
@@ -179,7 +180,7 @@ export default function DechargementBouteillesVides() {
   };
 
   const deleteEntry = async (entry: EmptyBottleDelivery) => {
-    if (!site?.id || !window.confirm(`Supprimer la réception du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`)) return;
+    if (!site?.id || !(await confirmDeletion(`Supprimer la réception du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteEmptyBottleDelivery(entry.id, site.id);

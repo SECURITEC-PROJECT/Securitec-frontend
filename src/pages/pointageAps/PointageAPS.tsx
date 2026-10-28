@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { CalendarDays, Plus, Printer, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type ApsPostConfiguration } from "@/lib/service-api";
 
@@ -116,6 +117,9 @@ export default function PointageAPS() {
       toast.error(error instanceof Error ? error.message : "Enregistrement du pointage impossible.");
     } finally { setSaving(false); }
   };
+  const reset = async () => {
+    if (await confirmDeletion("Effacer les informations de pointage de cette date ?")) {
+      setAgentsByKey((current) => ({ ...current, [contextKey]: initial }));
   const reset = () => {
     if (window.confirm("Effacer les informations de pointage de cette date ?")) {
       setAgentsByKey((current) => ({

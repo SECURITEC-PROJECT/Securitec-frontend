@@ -9,6 +9,7 @@ import { printRecord } from "@/lib/printRecord";
 import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 interface MatierePremiereEntry {
   id: string;
@@ -151,7 +152,7 @@ export default function DechargementMatierePremiere() {
 
   const deleteEntry = async (entry: MatierePremiereEntry) => {
     if (!selectedSiteId) return;
-    if (!window.confirm(`Supprimer le déchargement « ${entry.designation || entry.id} » ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le déchargement « ${entry.designation || entry.id} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteMatierePremiereLogistics(entry.id, selectedSiteId);

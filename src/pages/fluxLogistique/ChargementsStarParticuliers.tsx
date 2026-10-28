@@ -9,6 +9,7 @@ import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
 
 type LoadingType = StarParticulierLoading["typeChargement"];
@@ -166,7 +167,7 @@ export default function ChargementsStarParticuliers() {
 
   const deleteEntry = async (entry: StarParticulierLoading) => {
     if (!siteId) return;
-    if (!window.confirm(`Supprimer le chargement ${entry.typeChargement} du véhicule « ${entry.camion} » ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le chargement ${entry.typeChargement} du véhicule « ${entry.camion} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteStarParticulierLoading(entry.id, siteId);

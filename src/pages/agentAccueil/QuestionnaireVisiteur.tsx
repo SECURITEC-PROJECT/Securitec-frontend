@@ -12,6 +12,7 @@ import {
   type VisitorQuestionnaireRecord,
 } from "@/lib/service-api";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 type QuestionId = "1" | "2" | "3" | "4" | "5" | "6";
 
@@ -202,7 +203,7 @@ export default function QuestionnaireVisiteur() {
   };
 
   const deleteRecord = async (record: VisitorQuestionnaireRecord) => {
-    if (!siteId || !window.confirm(`Supprimer le questionnaire de ${record.data.firstName} ${record.data.lastName} ? Cette action est définitive.`)) return;
+    if (!siteId || !(await confirmDeletion(`Supprimer le questionnaire de ${record.data.firstName} ${record.data.lastName} ? Cette action est définitive.`))) return;
     setDeletingId(record.id);
     try {
       await serviceApi.deleteVisitorQuestionnaire(record.id, siteId);

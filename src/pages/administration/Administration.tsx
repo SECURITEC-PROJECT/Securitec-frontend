@@ -7,19 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type Provider } from "@/lib/service-api";
+import { confirmDeletion } from "@/lib/deletion-toast";
 
 type Site = { id: string; name: string; type: "USINE" | "AGENCE" };
-type Employee = { id: string; firstName: string; lastName: string; matricule: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
+type Employee = { id: string; firstName: string; lastName: string; matricule: string; providerId: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
 type CameraItem = { id: string; name: string; status: string; siteId: string; siteName: string; zoneName: string };
 type Zone = { id: string; name: string; siteId: string; siteName: string };
 type UserAccount = { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null };
-type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Utilisateurs";
+type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Prestataires" | "Utilisateurs";
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>("Vue société");
   const [sites, setSites] = useState<Site[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [showInactiveProviders, setShowInactiveProviders] = useState(false);
+  const [providerName, setProviderName] = useState("");
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [savingProvider, setSavingProvider] = useState(false);
   const [cameras, setCameras] = useState<CameraItem[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [users, setUsers] = useState<UserAccount[]>([]);
@@ -50,7 +56,13 @@ export default function Administration() {
       const siteResult = await serviceApi.listSites();
       setSites(siteResult.sites);
       setCanManageSites(siteResult.canCreate && siteResult.canDelete);
-      if (siteResult.canCreate) setUsers(await serviceApi.listUsers());
+      if (siteResult.canCreate) {
+        const [userRows, providerRows] = await Promise.all([serviceApi.listUsers(), serviceApi.listProviders()]);
+        setUsers(userRows);
+        setProviders(providerRows);
+      } else {
+        setProviders([]);
+      }
       const employeeResult = await serviceApi.listEmployees();
       setEmployees(employeeResult);
       const cameraResults = await Promise.all(siteResult.sites.map(async (site) => {
@@ -87,6 +99,10 @@ export default function Administration() {
     });
   }, [users, userQuery, userRoleFilter]);
 
+  const displayedProviders = showInactiveProviders
+    ? providers
+    : providers.filter((provider) => provider.active);
+
   const resetUserForm = () => {
     setShowUserForm(false); setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
     setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin("");
@@ -104,7 +120,7 @@ export default function Administration() {
   };
 
   const deleteUser = async (user: UserAccount) => {
-    if (!window.confirm(`Désactiver le compte de ${user.name} ? Son accès sera supprimé et ses historiques conservés.`)) return;
+    if (!(await confirmDeletion(`Désactiver le compte de ${user.name} ? Son accès sera supprimé et ses historiques conservés.`))) return;
     try {
       await serviceApi.deleteUser(user.id);
       setUsers((current) => current.filter((item) => item.id !== user.id));
@@ -157,7 +173,7 @@ export default function Administration() {
   };
 
   const archiveSite = async (site: Site) => {
-    if (!window.confirm(`Archiver « ${site.name} » ? Le site sera retiré des listes actives et ses historiques seront conservés.`)) return;
+    if (!(await confirmDeletion(`Archiver « ${site.name} » ? Le site sera retiré des listes actives et ses historiques seront conservés.`))) return;
     try {
       await serviceApi.archiveSite(site.id);
       toast.success("Site archivé.");
@@ -167,7 +183,58 @@ export default function Administration() {
     }
   };
 
-  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", ...(canManageSites ? ["Utilisateurs" as const] : [])];
+  const saveProvider = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavingProvider(true);
+    try {
+      if (editingProviderId) {
+        const updated = await serviceApi.updateProvider(editingProviderId, { name: providerName.trim() });
+        setProviders((current) => current.map((provider) => provider.id === updated.id ? { ...provider, ...updated } : provider));
+        toast.success("Prestataire modifié.");
+      } else {
+        const created = await serviceApi.createProvider(providerName.trim());
+        setProviders((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+        toast.success("Prestataire ajouté.");
+      }
+      setProviderName("");
+      setEditingProviderId(null);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Enregistrement du prestataire impossible.");
+    } finally {
+      setSavingProvider(false);
+    }
+  };
+
+  const toggleProvider = async (provider: Provider) => {
+    try {
+      const updated = await serviceApi.updateProvider(provider.id, { name: provider.name, active: !provider.active });
+      setProviders((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+      toast.success(provider.active ? "Prestataire désactivé." : "Prestataire réactivé.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Modification du prestataire impossible.");
+    }
+  };
+
+  const deleteProvider = async (provider: Provider) => {
+    if (!(await confirmDeletion(`Supprimer « ${provider.name} » ? S’il est utilisé, il sera désactivé afin de préserver les historiques.`))) return;
+    try {
+      const result = await serviceApi.deleteProvider(provider.id);
+      if (result.deactivated) {
+        setProviders((current) => current.map((item) => item.id === provider.id ? { ...item, active: false } : item));
+        if (editingProviderId === provider.id) { setEditingProviderId(null); setProviderName(""); }
+        toast.success("Prestataire désactivé ; ses historiques sont conservés.");
+      }
+      else {
+        setProviders((current) => current.filter((item) => item.id !== provider.id));
+        toast.success("Prestataire supprimé.");
+      }
+      if (editingProviderId === provider.id) { setEditingProviderId(null); setProviderName(""); }
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Suppression du prestataire impossible.");
+    }
+  };
+
+  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", ...(canManageSites ? ["Prestataires" as const, "Utilisateurs" as const] : [])];
   return <div className="space-y-6">
     <PageHeader title="Administration de la société" subtitle="Vue globale des sites, des équipes et des équipements enregistrés dans la base." action={<Button variant="outline" onClick={() => void load(true)} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualiser</Button>} />
 
@@ -212,6 +279,28 @@ export default function Administration() {
         <Panel title={`Équipements enregistrés (${cameras.length} caméras · ${zones.length} zones)`}>
           <div className="mb-4 flex justify-end"><Button asChild variant="outline"><Link to="/dashboard/cameras">Gérer les caméras</Link></Button></div>
           {cameras.length ? <div className="divide-y">{cameras.map((camera) => <div key={camera.id} className="flex flex-wrap items-center gap-3 py-3"><Camera className="h-4 w-4 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm font-medium">{camera.name}</p><p className="text-xs text-muted-foreground">{camera.siteName} · {camera.zoneName}</p></div><Badge variant={camera.status === "EN_SERVICE" ? "secondary" : "outline"}>{camera.status === "EN_SERVICE" ? "En service" : camera.status}</Badge></div>)}</div> : <p className="py-5 text-sm text-muted-foreground">Aucune caméra enregistrée.</p>}
+        </Panel>
+      </div>}
+      {tab === "Prestataires" && canManageSites && <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel title={`Prestataires (${displayedProviders.length})`}>
+          <div className="mb-3 flex justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowInactiveProviders((visible) => !visible)}>
+              {showInactiveProviders ? "Masquer les prestataires inactifs" : `Afficher les prestataires inactifs (${providers.filter((provider) => !provider.active).length})`}
+            </Button>
+          </div>
+          {displayedProviders.length ? <div className="divide-y">{displayedProviders.map((provider) => <div key={provider.id} className="flex flex-wrap items-center gap-3 py-4">
+            <div className="min-w-0 flex-1"><p className="font-medium">{provider.name}</p><p className="text-xs text-muted-foreground">{provider.employeeCount} employé(s) · {provider.materialCount} mouvement(s) matériel</p></div>
+            <Badge variant={provider.active ? "secondary" : "outline"}>{provider.active ? "Actif" : "Inactif"}</Badge>
+            <Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${provider.name}`} title="Modifier" onClick={() => { setEditingProviderId(provider.id); setProviderName(provider.name); }}><Pencil className="h-4 w-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" aria-label={provider.active ? `Désactiver ${provider.name}` : `Réactiver ${provider.name}`} title={provider.active ? "Désactiver" : "Réactiver"} onClick={() => void toggleProvider(provider)}><RefreshCw className="h-4 w-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${provider.name}`} title="Supprimer" onClick={() => void deleteProvider(provider)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+          </div>)}</div> : <p className="py-6 text-center text-sm text-muted-foreground">{showInactiveProviders ? "Aucun prestataire enregistré." : "Aucun prestataire actif."}</p>}
+        </Panel>
+        <Panel title={editingProviderId ? "Modifier un prestataire" : "Ajouter un prestataire"}>
+          <form className="space-y-4" onSubmit={(event) => void saveProvider(event)}>
+            <div><Label htmlFor="provider-name">Nom du prestataire</Label><Input id="provider-name" required maxLength={160} value={providerName} onChange={(event) => setProviderName(event.target.value)} placeholder="Nom de la société" /></div>
+            <div className="flex gap-2"><Button className="flex-1" disabled={savingProvider}>{savingProvider ? "Enregistrement…" : editingProviderId ? "Enregistrer" : "Ajouter"}</Button>{editingProviderId && <Button type="button" variant="outline" onClick={() => { setEditingProviderId(null); setProviderName(""); }}>Annuler</Button>}</div>
+          </form>
         </Panel>
       </div>}
       {tab === "Utilisateurs" && canManageSites && <Panel title={`Comptes utilisateurs (${filteredUsers.length})`}>

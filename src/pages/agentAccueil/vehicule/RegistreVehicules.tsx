@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import type { VehicleMovement } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
 
@@ -53,7 +54,7 @@ export default function RegistreVehicules({
   };
 
   const deleteEntry = async (vehicle: VehicleMovement) => {
-    if (!window.confirm(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`))) return;
     setDeletingId(vehicle.id);
     try {
       await onDelete(vehicle.id);

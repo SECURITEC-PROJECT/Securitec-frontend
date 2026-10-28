@@ -6,6 +6,7 @@ import { serviceApi } from "@/lib/service-api";
 import type { VisitorRecord } from "@/types/visitor";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import FormPieton from "./FormPieton";
 import ListPieton from "./ListPieton";
 import PresentsSurSite from "./PresentsSurSite";
@@ -59,7 +60,7 @@ export default function Pieton() {
   };
 
   const deleteVisitor = async (visitor: VisitorRecord) => {
-    if (!window.confirm(`Supprimer le passage de « ${visitor.full_name} » ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le passage de « ${visitor.full_name} » ? Cette action est définitive.`))) return;
     try {
       await serviceApi.deleteVisitor(String(visitor.id), visitor.site_id);
       setRegistry((current) => ({ ...current, visitors: current.visitors.filter((entry) => entry.id !== visitor.id) }));

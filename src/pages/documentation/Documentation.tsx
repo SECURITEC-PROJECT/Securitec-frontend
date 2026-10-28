@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { Download, FileText, Loader2, Search, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type SiteDocument = { id: string; name: string; extension: string; mimeType: string; size: number; category: string; createdAt: string };
 const accept = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.odt,.ods";
@@ -71,9 +73,9 @@ export default function Documentation() {
   };
 
   const remove = async (doc: SiteDocument) => {
-    if (!window.confirm(`Supprimer « ${doc.name} » ?`)) return;
+    if (!(await confirmDeletion(`Supprimer « ${doc.name} » ?`))) return;
     setWorkingId(doc.id); setError("");
-    try { await serviceApi.deleteDocument(doc.id); setDocuments((current) => current.filter((item) => item.id !== doc.id)); }
+    try { await serviceApi.deleteDocument(doc.id); setDocuments((current) => current.filter((item) => item.id !== doc.id)); toast.success("Document supprimé."); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Suppression impossible."); }
     finally { setWorkingId(""); }
   };

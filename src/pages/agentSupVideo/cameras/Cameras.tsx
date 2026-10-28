@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { PageHeader } from "@/components/PageHeader";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
@@ -81,7 +82,7 @@ export default function Cameras() {
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Modification de l’état impossible."); }
   };
   const deleteCamera = async (camera: CameraItem) => {
-    if (!window.confirm(`Supprimer la caméra « ${camera.name} » ?`)) return;
+    if (!(await confirmDeletion(`Supprimer la caméra « ${camera.name} » ?`))) return;
     try {
       await serviceApi.deleteCamera(camera.id);
       setCameras((current) => current.filter((item) => item.id !== camera.id));

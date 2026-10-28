@@ -9,6 +9,7 @@ import { serviceApi, type CourrierMovement } from "@/lib/service-api";
 import { LogOut, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
 
 type MovementForm = {
@@ -165,7 +166,7 @@ export default function Courrier() {
 
   const deleteEntry = async (entry: CourrierMovement) => {
     if (!site?.id) return;
-    if (!window.confirm(`Supprimer le mouvement de ${entry.prenom} ? Cette action est définitive.`)) return;
+    if (!(await confirmDeletion(`Supprimer le mouvement de ${entry.prenom} ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteCourrierMovement(entry.id, site.id);
