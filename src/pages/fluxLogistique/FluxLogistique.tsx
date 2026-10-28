@@ -7,7 +7,7 @@ import { printRecord } from "@/lib/printRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Printer, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, Clock3, Pencil, Printer, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 type TruckForm = {
@@ -25,8 +25,14 @@ type TruckEntry = TruckForm & {
   siteName?: string;
 };
 
-const today = () => new Date().toLocaleDateString("en-CA");
-const nowTime = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const today = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+const nowTime = () => {
+  const date = new Date();
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+};
 const emptyTruck = (): TruckForm => ({
   date: today(),
   immatriculationVehicule: "",
@@ -225,20 +231,64 @@ export default function FluxLogistique() {
       <Panel title={editingTruck ? "Modifier une réception" : "Enregistrer un déchargement"}>
         <form className="space-y-5" onSubmit={(event) => void saveTruck(event)}>
           <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="flux-date">Date</Label>
-              <Input id="flux-date" type="date" required value={truckForm.date} onChange={(event) => setTruckForm({ ...truckForm, date: event.target.value })} />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="flux-date" className="text-base font-semibold">Date</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 px-3 text-sm"
+                  aria-label="Définir la date du jour"
+                  onClick={() => setTruckForm((current) => ({ ...current, date: today() }))}
+                >
+                  <CalendarDays className="h-5 w-5" aria-hidden="true" />
+                  Aujourd’hui
+                </Button>
+              </div>
+              <Input
+                id="flux-date"
+                type="date"
+                required
+                aria-describedby="flux-date-help"
+                className="h-11"
+                value={truckForm.date}
+                onChange={(event) => setTruckForm({ ...truckForm, date: event.target.value })}
+              />
+              <p id="flux-date-help" className="text-sm text-muted-foreground">Choisissez une date ou utilisez le calendrier.</p>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="flux-truck">Véhicule (matricule)</Label>
-              <Input id="flux-truck" required maxLength={100} placeholder="Ex. 1234 TAA" value={truckForm.immatriculationVehicule} onChange={(event) => setTruckForm({ ...truckForm, immatriculationVehicule: event.target.value })} />
+            <div className="space-y-2">
+              <Label htmlFor="flux-truck" className="text-base font-semibold">Véhicule (matricule)</Label>
+              <Input id="flux-truck" className="h-12 text-base" required maxLength={100} placeholder="Ex. 1234 TAA" value={truckForm.immatriculationVehicule} onChange={(event) => setTruckForm({ ...truckForm, immatriculationVehicule: event.target.value })} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="flux-exit-time">Heure de sortie</Label>
-              <Input id="flux-exit-time" type="time" required value={truckForm.heureSortie} onChange={(event) => setTruckForm({ ...truckForm, heureSortie: event.target.value })} />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="flux-exit-time" className="text-base font-semibold">Heure de sortie</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 px-3 text-sm"
+                  aria-label="Définir l’heure actuelle"
+                  onClick={() => setTruckForm((current) => ({ ...current, heureSortie: nowTime() }))}
+                >
+                  <Clock3 className="h-5 w-5" aria-hidden="true" />
+                  Maintenant
+                </Button>
+              </div>
+              <Input
+                id="flux-exit-time"
+                type="time"
+                required
+                aria-describedby="flux-time-help"
+                className="h-12 text-base"
+                value={truckForm.heureSortie}
+                onChange={(event) => setTruckForm({ ...truckForm, heureSortie: event.target.value })}
+              />
+              <p id="flux-time-help" className="text-sm text-muted-foreground">Saisissez l’heure ou utilisez le sélecteur.</p>
             </div>
-            <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
-              <Label htmlFor="flux-designation">Désignation</Label>
+            <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+              <Label htmlFor="flux-designation" className="text-base font-semibold">Désignation</Label>
               <textarea
                 id="flux-designation"
                 required
@@ -246,26 +296,26 @@ export default function FluxLogistique() {
                 rows={5}
                 value={truckForm.designation}
                 onChange={(event) => setTruckForm({ ...truckForm, designation: event.target.value })}
-                className="min-h-32 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="min-h-36 w-full resize-y rounded-md border border-input bg-background px-3 py-3 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="flux-nbr">Nombre </Label>
-              <Input id="flux-nbr" required maxLength={255} placeholder="ex : 1 voyage" value={truckForm.nbr} onChange={(event) => setTruckForm({ ...truckForm, nbr: event.target.value })} />
+            <div className="space-y-2">
+              <Label htmlFor="flux-nbr" className="text-base font-semibold">Nombre</Label>
+              <Input id="flux-nbr" className="h-12 text-base" required maxLength={255} placeholder="Ex. : 1 voyage" value={truckForm.nbr} onChange={(event) => setTruckForm({ ...truckForm, nbr: event.target.value })} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="flux-invoice">Facture</Label>
-              <Input id="flux-invoice" required maxLength={4} pattern="\d{1,4}" inputMode="numeric" title="Saisissez 1 à 4 chiffres." value={truckForm.facture} onChange={(event) => setTruckForm({ ...truckForm, facture: event.target.value })} />
+            <div className="space-y-2">
+              <Label htmlFor="flux-invoice" className="text-base font-semibold">Facture</Label>
+              <Input id="flux-invoice" className="h-12 text-base" required maxLength={4} pattern="\d{1,4}" inputMode="numeric" title="Saisissez 1 à 4 chiffres." value={truckForm.facture} onChange={(event) => setTruckForm({ ...truckForm, facture: event.target.value })} />
             </div>
           </div>
-          {!site?.id && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer une réception.</p>}
+          {!site?.id && <p className="text-base text-muted-foreground">Sélectionnez un site pour enregistrer une réception.</p>}
           <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
             {editingTruck && (
-              <Button type="button" variant="outline" disabled={saving} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); }}>
+              <Button type="button" variant="outline" className="h-11 px-5 text-base" disabled={saving} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); }}>
                 <X /> Annuler
               </Button>
             )}
-            <Button disabled={saving || !site?.id}>
+            <Button className="h-11 px-5 text-base" disabled={saving || !site?.id}>
               {editingTruck && <Pencil />}
               {saving ? "Enregistrement…" : editingTruck ? "Enregistrer les modifications" : "Enregistrer le déchargement"}
             </Button>
@@ -276,7 +326,7 @@ export default function FluxLogistique() {
       <Panel title="Registre des réceptions">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="relative w-full max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               aria-label="Rechercher dans le registre"

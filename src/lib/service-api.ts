@@ -89,6 +89,39 @@ export interface StarMaterialEntry {
   siteName: string;
 }
 
+export type VisitorQuestionnaireAnswer = "ENY" | "TSIA" | "";
+
+export interface VisitorQuestionnaireData {
+  code: string;
+  version: string;
+  page: string;
+  firstName: string;
+  lastName: string;
+  factory: string;
+  date: string;
+  reason: string;
+  origin: "MADAGASCAR" | "OTHER" | "";
+  originPlace: string;
+  originOther: string;
+  visitTime: string;
+  entryTime: string;
+  exitTime: string;
+  answers: Record<"1" | "2" | "3" | "4" | "5" | "6", VisitorQuestionnaireAnswer>;
+  agreement: boolean;
+  visitorSignature: string;
+  securitySignature: string;
+  managerSignature: string;
+}
+
+export interface VisitorQuestionnaireRecord {
+  id: string;
+  data: VisitorQuestionnaireData;
+  siteId: string;
+  siteName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AlcoholCheck {
   id: string;
   date: string;
@@ -400,6 +433,18 @@ export const serviceApi = {
   async exitStarMaterial(id: string, siteId: string) {
     const params = new URLSearchParams({ siteId });
     return (await request<{ entry: Pick<StarMaterialEntry, "id" | "heureSortie"> }>(`/materiels-star/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
+  },
+  async listVisitorQuestionnaires(siteId: string) {
+    return (await request<{ entries: VisitorQuestionnaireRecord[] }>(`/visitor-questionnaires?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createVisitorQuestionnaire(data: { data: VisitorQuestionnaireData; siteId: string }) {
+    return (await request<{ entry: VisitorQuestionnaireRecord }>("/visitor-questionnaires", { method: "POST", body: body(data) })).entry;
+  },
+  async updateVisitorQuestionnaire(id: string, data: { data: VisitorQuestionnaireData; siteId: string }) {
+    return (await request<{ entry: VisitorQuestionnaireRecord }>(`/visitor-questionnaires/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteVisitorQuestionnaire(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/visitor-questionnaires/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
