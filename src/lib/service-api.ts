@@ -122,6 +122,28 @@ export interface VisitorQuestionnaireRecord {
   updatedAt: string;
 }
 
+export interface ObjectDeclarationData {
+  date: string;
+  entryTime: string;
+  exitTime: string;
+  firstName: string;
+  company: string;
+  vehicleNumber: string;
+  objects: string;
+  entryAgent: string;
+  exitAgent: string;
+  referenceNumber: string;
+}
+
+export interface ObjectDeclarationRecord {
+  id: string;
+  data: ObjectDeclarationData;
+  siteId: string;
+  siteName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AlcoholCheck {
   id: string;
   date: string;
@@ -445,6 +467,18 @@ export const serviceApi = {
   },
   async deleteVisitorQuestionnaire(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/visitor-questionnaires/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async listObjectDeclarations(siteId: string) {
+    return (await request<{ entries: ObjectDeclarationRecord[] }>(`/object-declarations?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createObjectDeclaration(data: { data: ObjectDeclarationData; siteId: string }) {
+    return (await request<{ entry: ObjectDeclarationRecord }>("/object-declarations", { method: "POST", body: body(data) })).entry;
+  },
+  async updateObjectDeclaration(id: string, data: { data: ObjectDeclarationData; siteId: string }) {
+    return (await request<{ entry: ObjectDeclarationRecord }>(`/object-declarations/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteObjectDeclaration(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/object-declarations/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);

@@ -3,6 +3,7 @@ import { clearSession, restoreSession, type AuthenticatedUser } from '@/lib/auth
 import Administration from '@/pages/administration/Administration';
 import AgentAccueil from '@/pages/agentAccueil/AgentAccueil';
 import QuestionnaireVisiteur from '@/pages/agentAccueil/QuestionnaireVisiteur';
+import DeclarationObjets from '@/pages/agentAccueil/DeclarationObjets';
 import Vehicule from '@/pages/agentAccueil/vehicule/Vehicule';
 import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
 import TestAlcool from '@/pages/agentControle/controleAcces/TestAlcool';
@@ -136,7 +137,7 @@ export default function App() {
           <Route path="check-list-camion" element={<CheckListCamion />} />
           <Route path="questionnaires-visiteurs" element={<QuestionnaireVisiteur />} />
           <Route path="recoter" element={<FluxLogistique />} />
-          <Route path="declaration-objets" element={<AgentAccueil />} />
+          <Route path="declaration-objets" element={<DeclarationObjets />} />
         </Route>
 
         {/* Redirection par défaut */}
