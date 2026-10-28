@@ -7,6 +7,7 @@ import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatTime } from "./formatTime";
+import { printRecord } from "@/lib/printRecord";
 
 const formatDate = (dateStr: string | Date | null | undefined): string => {
   if (!dateStr) return "—";
@@ -97,6 +98,18 @@ export default function ListPieton({
     printWindow.document.close();
   };
 
+  const printVisitor = (visitor: VisitorRecord) => {
+    printRecord("Passage visiteur", visitor.site_name || "", [
+      ["Date", formatDate(visitor.entered_at)],
+      ["Nom et prénom", visitor.full_name || "—"],
+      ["Établissement", visitor.company || "—"],
+      ["Motif", visitor.reason || "—"],
+      ["N° badge", visitor.badge || "—"],
+      ["Heure d’entrée", formatTime(visitor.entered_at)],
+      ["Heure de sortie", formatTime(visitor.exited_at)],
+    ]);
+  };
+
   return (
     <Panel title="Registre complet">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -138,7 +151,7 @@ export default function ListPieton({
                 <td className="whitespace-nowrap py-2 pr-3 font-mono text-xs">{formatTime(visitor.exited_at)}</td>
                 <td className="whitespace-nowrap py-2">
                   <div className="flex items-center gap-1">
-                    <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le passage" title="Imprimer le passage" onClick={() => printVisitors([visitor], "Passage visiteur")}>
+                    <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le passage" title="Imprimer au format 80 × 80 mm" onClick={() => printVisitor(visitor)}>
                       <Printer className="h-4 w-4" />
                     </Button>
                     <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le passage" title="Modifier le passage" onClick={() => onEdit(visitor)}>

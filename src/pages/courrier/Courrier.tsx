@@ -9,6 +9,7 @@ import { serviceApi, type CourrierMovement } from "@/lib/service-api";
 import { LogOut, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { printRecord } from "@/lib/printRecord";
 
 type MovementForm = {
   date: string;
@@ -190,6 +191,17 @@ export default function Courrier() {
     window.print();
   };
 
+  const printEntry = (entry: CourrierMovement) => {
+    printRecord("Mouvement courrier", selectedSiteName, [
+      ["Date", formatDate(entry.date.slice(0, 10))],
+      ["Heure d’entrée", entry.heureEntree],
+      ["Prénom", entry.prenom],
+      ["Désignation", entry.designation],
+      ["Nombre", String(entry.nombre)],
+      ["Heure de sortie", entry.heureSortie || "—"],
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Courrier" subtitle="Suivi des entrées et sorties de personnes et d’articles." />
@@ -294,6 +306,9 @@ export default function Courrier() {
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1">
+                              <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
+                                <Printer className="h-4 w-4" />
+                              </Button>
                               <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => beginEdit(entry)}>
                                 <Pencil className="h-4 w-4" />
                               </Button>

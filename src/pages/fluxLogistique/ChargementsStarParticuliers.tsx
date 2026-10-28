@@ -9,6 +9,7 @@ import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { printRecord } from "@/lib/printRecord";
 
 type LoadingType = StarParticulierLoading["typeChargement"];
 type LoadingForm = Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId">;
@@ -188,6 +189,24 @@ export default function ChargementsStarParticuliers() {
     window.print();
   };
 
+  const printEntry = (entry: StarParticulierLoading) => {
+    printRecord(`Chargement ${entry.typeChargement === "STAR" ? "STAR" : "particulier"}`, siteNameSelected, [
+      ["Date", entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"],
+      ["Heure de sortie", entry.heureSortie],
+      ["Véhicule", entry.camion],
+      ["Propriétaire", entry.proprietaire],
+      ["Nom chauffeur", entry.nomChauffeur],
+      ["Désignation", entry.designation],
+      ["Quantité", entry.quantiteTexte],
+      ["Poids", String(entry.poids)],
+      ["Destination", entry.destinataire],
+      ["LP", entry.lp],
+      ["Titre", entry.titre],
+      ["Plomb", entry.plomb],
+      ["Chargement", entry.typeChargement === "STAR" ? "STAR" : "Particulier"],
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Chargements Star et particuliers" subtitle="Enregistrement et suivi des chargements sortants." />
@@ -317,6 +336,7 @@ export default function ChargementsStarParticuliers() {
                       <td className="px-3 py-3">{entry.typeChargement === "STAR" ? "STAR" : "Particulier"}</td>
                       <td className="whitespace-nowrap px-3 py-3">
                         <div className="flex items-center gap-1">
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le chargement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="h-4 w-4" /></Button>
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le chargement" title="Modifier le chargement" onClick={() => editEntry(entry)}><Pencil className="h-4 w-4" /></Button>
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer le chargement" title="Supprimer le chargement" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="h-4 w-4" /></Button>
                         </div>

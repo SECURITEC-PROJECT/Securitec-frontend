@@ -5,6 +5,7 @@ import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { VehicleMovement } from "@/lib/service-api";
+import { printRecord } from "@/lib/printRecord";
 
 const formatDate = (value: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "—";
@@ -36,6 +37,19 @@ export default function RegistreVehicules({
       window.document.title = originalTitle;
     }, { once: true });
     window.print();
+  };
+
+  const printEntry = (vehicle: VehicleMovement) => {
+    printRecord("Mouvement véhicule", siteName || "", [
+      ["Date", formatDate(vehicle.entryDate)],
+      ["Matricule du véhicule", vehicle.plate || "—"],
+      ["Propriétaire (prénom)", vehicle.ownerName || "—"],
+      ["Type de propriétaire", vehicle.category || "—"],
+      ["Personnes à l’entrée", String(vehicle.passengersEntry ?? "—")],
+      ["Heure d’entrée", vehicle.entryTime || "—"],
+      ["Personnes à la sortie", String(vehicle.passengersOut ?? "—")],
+      ["Heure de sortie", vehicle.exitTime || "—"],
+    ]);
   };
 
   const deleteEntry = async (vehicle: VehicleMovement) => {
@@ -92,6 +106,9 @@ export default function RegistreVehicules({
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{vehicle.exitTime || "—"}</td>
                   <td className="whitespace-nowrap px-3 py-3">
                     <div className="flex items-center gap-1">
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(vehicle)}>
+                        <Printer className="h-4 w-4" />
+                      </Button>
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => onEdit(vehicle)}>
                         <Pencil className="h-4 w-4" />
                       </Button>

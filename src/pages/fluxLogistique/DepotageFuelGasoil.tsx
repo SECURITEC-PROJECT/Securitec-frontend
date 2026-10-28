@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
+import { printRecord } from "@/lib/printRecord";
 import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -28,15 +29,6 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 const nowTime = () => new Date().toTimeString().slice(0, 5);
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;",
-  })[character] || character);
-
 export default function DepotageFuelGasoil() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
@@ -196,13 +188,8 @@ export default function DepotageFuelGasoil() {
   };
 
   const printEntry = (entry: DepotageEntry) => {
-    const printWindow = window.open("", "_blank", "width=600,height=700");
-    if (!printWindow) {
-      toast.error("Autorisez les fenêtres contextuelles pour imprimer le bon.");
-      return;
-    }
     const displayDate = entry.date?.slice(0, 10).split("-").reverse().join("/") || "—";
-    const rows = [
+    printRecord("Dépotage fuel et gasoil", entry.siteName || selectedSiteName, [
       ["Date", displayDate],
       ["Heure de pointe", entry.heurePointe || "—"],
       ["Titre", entry.titre || "—"],
@@ -212,41 +199,7 @@ export default function DepotageFuelGasoil() {
       ["Créé par", entry.cree || "—"],
       ["Chauffeur", entry.chauffeur || "—"],
       ["Magasinier", entry.magasinier || "—"],
-    ];
-    const details = rows.map(([label, value]) =>
-      `<div class="row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
-    ).join("");
-
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
-      <html lang="fr">
-        <head>
-          <meta charset="utf-8">
-          <title>Bon de dépotage fuel/gasoil</title>
-          <style>
-            @page { size: A5 portrait; margin: 12mm; }
-            * { box-sizing: border-box; }
-            body { color: #172033; font: 14px Arial, sans-serif; }
-            main { max-width: 700px; margin: 0 auto; }
-            h1 { margin: 0 0 6px; text-align: center; font-size: 22px; }
-            .site { margin: 0 0 24px; text-align: center; color: #526078; }
-            .row { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d6dbe4; padding: 10px 4px; }
-            .row span { color: #526078; }
-            strong { max-width: 60%; text-align: right; overflow-wrap: anywhere; }
-            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #68758a; }
-          </style>
-        </head>
-        <body>
-          <main>
-            <h1>Dépotage fuel et gasoil</h1>
-            <p class="site">${escapeHtml(entry.siteName || selectedSiteName)}</p>
-            ${details}
-            <p class="footer">Bon de dépotage</p>
-          </main>
-          <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
-        </body>
-      </html>`);
-    printWindow.document.close();
+    ]);
   };
 
   return (
