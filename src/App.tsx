@@ -25,6 +25,7 @@ import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
 import DechargementBouteillesVides from '@/pages/fluxLogistique/DechargementBouteillesVides';
 import DechargementMatierePremiere from '@/pages/fluxLogistique/DechargementMatierePremiere';
 import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
+import CheckListCamion from '@/pages/fluxLogistique/CheckListCamion';
 import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
@@ -129,7 +130,7 @@ export default function App() {
           <Route path="materiels-star" element={<MainCourante />} />
           
           {/* Fiches */}
-          <Route path="check-list-camion" element={<FluxLogistique />} />
+          <Route path="check-list-camion" element={<CheckListCamion />} />
           <Route path="questionnaires-visiteurs" element={<AgentAccueil />} />
           <Route path="recoter" element={<FluxLogistique />} />
           <Route path="declaration-objets" element={<AgentAccueil />} />
