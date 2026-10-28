@@ -146,9 +146,16 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     setShowEmployeeOptions(false);
   };
 
+  const handleEmployeeQueryChange = (value: string) => {
+    setEmployeeQuery(value);
+    setEmployee(null);
+    setEmployeeError("");
+    setShowEmployeeOptions(Boolean(value.trim()));
+  };
+
   const chooseEmployee = (selected: RegisterEmployeeOption) => {
     setEmployee(selected);
-    setEmployeeQuery(`${selected.firstName} ${selected.lastName} — ${selected.matricule}`);
+    setEmployeeQuery(selected.matricule);
     setShowEmployeeOptions(false);
     setEmployeeError("");
   };
@@ -333,12 +340,9 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
               autoComplete="off"
               placeholder="Rechercher un matricule ou un nom…"
               value={employeeQuery}
-              onFocus={() => setShowEmployeeOptions(true)}
-              onChange={(event) => {
-                setEmployee(null);
-                setEmployeeQuery(event.target.value);
-                setShowEmployeeOptions(true);
-              }}
+              onFocus={() => setShowEmployeeOptions(Boolean(employeeQuery.trim()))}
+              onChange={(event) => handleEmployeeQueryChange(event.target.value)}
+              onBlur={() => window.setTimeout(() => setShowEmployeeOptions(false), 120)}
             />
             {showEmployeeOptions && <div className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-lg">
               {visibleEmployees.length ? visibleEmployees.map((item) => (
