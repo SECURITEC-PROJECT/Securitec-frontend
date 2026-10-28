@@ -119,9 +119,6 @@ export default function PointageAPS() {
   };
   const reset = async () => {
     if (await confirmDeletion("Effacer les informations de pointage de cette date ?")) {
-      setAgentsByKey((current) => ({ ...current, [contextKey]: initial }));
-  const reset = () => {
-    if (window.confirm("Effacer les informations de pointage de cette date ?")) {
       setAgentsByKey((current) => ({
         ...current,
         [contextKey]: Object.fromEntries(Object.entries(agents).map(([name, rows]) => [name, rows.map(blankAgent)])),
