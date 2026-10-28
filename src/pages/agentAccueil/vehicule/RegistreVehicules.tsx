@@ -95,7 +95,16 @@ export default function RegistreVehicules({
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => onEdit(vehicle)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer le mouvement" title="Supprimer le mouvement" disabled={deletingId === vehicle.id} onClick={() => void deleteEntry(vehicle)}>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        aria-label={vehicle.exited_at ? "Supprimer le mouvement" : "La sortie doit être enregistrée avant la suppression"}
+                        title={vehicle.exited_at ? "Supprimer le mouvement" : "Enregistrez la sortie avant de supprimer ce mouvement"}
+                        disabled={!vehicle.exited_at || deletingId === vehicle.id}
+                        onClick={() => void deleteEntry(vehicle)}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
