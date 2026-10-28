@@ -97,6 +97,18 @@ export interface AlcoholCheck {
   personne: string;
   fonction: string;
   resultat: "Positif" | "Négatif";
+  tauxMesure: string | number | null;
+  civilite: "Monsieur" | "Madame";
+  typeAppareil: "Electronique" | "Ballon";
+  testeurNom: string | null;
+  testeurMatricule: string | null;
+  testeurFonction: string | null;
+  temoinNom: string | null;
+  temoinMatricule: string | null;
+  temoinFonction: string | null;
+  temoin2Nom: string | null;
+  temoin2Matricule: string | null;
+  temoin2Fonction: string | null;
   siteId: string;
   siteName: string;
 }
@@ -119,6 +131,22 @@ export interface StarParticulierLoading {
   plomb: string;
   siteId: string;
   siteName: string;
+}
+
+export interface TruckChecklistRow {
+  vehicle: string;
+  carrier: string;
+  controlTime: string;
+  checks: Record<"starts" | "chocks" | "tires" | "leaks" | "cover" | "sideboards", "" | "OK" | "NOK">;
+  signature: string;
+  observation: string;
+  decision: "" | "Autorisé" | "Interdit";
+}
+
+export interface TruckChecklist {
+  id: string;
+  date: string;
+  rows: TruckChecklistRow[];
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -222,10 +250,10 @@ export const serviceApi = {
   async listAlcoholChecks(siteId: string) {
     return (await request<{ entries: AlcoholCheck[] }>(`/access-control/alcohol-checks?siteId=${encodeURIComponent(siteId)}`)).entries;
   },
-  async createAlcoholCheck(data: { date: string; heure: string; matricule: string; personne: string; fonction: string; resultat: AlcoholCheck["resultat"]; siteId: string }) {
+  async createAlcoholCheck(data: Omit<AlcoholCheck, "id" | "siteName">) {
     return (await request<{ entry: AlcoholCheck }>("/access-control/alcohol-checks", { method: "POST", body: body(data) })).entry;
   },
-  async updateAlcoholCheck(id: string, data: { date: string; heure: string; matricule: string; personne: string; fonction: string; resultat: AlcoholCheck["resultat"]; siteId: string }) {
+  async updateAlcoholCheck(id: string, data: Omit<AlcoholCheck, "id" | "siteName">) {
     return (await request<{ entry: AlcoholCheck }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   },
   async deleteAlcoholCheck(id: string, siteId: string) {
@@ -233,6 +261,13 @@ export const serviceApi = {
     return request<{ id: string; deleted: boolean }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
   async listLogistics(siteId?: string) { return (await request<{ entries: any[] }>(`/logistics${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
+  async getTruckChecklist(siteId: string, date: string) {
+    const params = new URLSearchParams({ siteId, date });
+    return (await request<{ entry: TruckChecklist | null }>(`/truck-checklists?${params}`)).entry;
+  },
+  async saveTruckChecklist(data: { siteId: string; date: string; rows: TruckChecklistRow[] }) {
+    return (await request<{ entry: TruckChecklist }>("/truck-checklists", { method: "PUT", body: body(data) })).entry;
+  },
   async createLogistics(data: unknown) {
     return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
   },

@@ -54,7 +54,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
   { title: "FICHES", items: [
       { to: "/dashboard/check-list-camion", label: "Check-list camion", icon: ClipboardList },
       { to: "/dashboard/questionnaires-visiteurs", label: "Questionnaires visiteurs", icon: FileCheck },
-      { to: "/dashboard/recoter", label: "Reçoter", icon: ClipboardList },
+      { to: "/dashboard/alcootest", label: "Alcootest", icon: ClipboardList },
       { to: "/dashboard/declaration-objets", label: "Déclaration objets", icon: FileSignature },
       { to: "/dashboard/comptes-rendus", label: "Rapport journalier", icon: FileText },
     ]

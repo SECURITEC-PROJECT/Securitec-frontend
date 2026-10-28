@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
-import { Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { serviceApi } from "@/lib/service-api";
+import { Check, LoaderCircle, Plus, Printer, RotateCcw, Search, Save, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 
 type CheckId = "starts" | "chocks" | "tires" | "leaks" | "cover" | "sideboards";
 type CheckResult = "" | "OK" | "NOK";
 type AccessDecision = "" | "Autorisé" | "Interdit";
+const maxRows = 100;
 
 interface TruckChecklistRow {
   id: number;
@@ -52,16 +54,86 @@ export default function CheckListCamion() {
   const [date, setDate] = useState(today);
   const [rows, setRows] = useState(() => Array.from({ length: 8 }, (_, index) => blankRow(index + 1)));
   const nextRowId = useRef(9);
+  const [isDirty, setIsDirty] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; isError: boolean } | null>(null);
   const selectedSite = sites.find((site) => site.id === selectedSiteId) || sites[0];
 
   const updateRow = (id: number, update: Partial<TruckChecklistRow>) => {
     setRows((current) => current.map((row) => row.id === id ? { ...row, ...update } : row));
+    setIsDirty(true);
   };
 
   const updateCheck = (id: number, checkId: CheckId, result: CheckResult) => {
     setRows((current) => current.map((row) =>
       row.id === id ? { ...row, checks: { ...row.checks, [checkId]: result } } : row,
     ));
+    setIsDirty(true);
+  };
+
+  const handleSearch = async () => {
+    if (!selectedSite || !date) return;
+    if (isDirty && !window.confirm("Les modifications non enregistrées seront perdues. Continuer ?")) return;
+    setIsLoading(true);
+    setFeedback(null);
+    try {
+      const entry = await serviceApi.getTruckChecklist(selectedSite.id, date);
+      setLoadedKey(`${selectedSite.id}:${date}`);
+      if (entry) {
+        const loadedRows = entry.rows.map((row, index) => ({ ...row, id: index + 1 }));
+        setRows(loadedRows);
+        nextRowId.current = loadedRows.length + 1;
+        setFeedback({ message: `Fiche du ${new Date(`${entry.date}T00:00:00`).toLocaleDateString("fr-FR")} chargée.`, isError: false });
+      } else {
+        setRows(Array.from({ length: 8 }, (_, index) => blankRow(index + 1)));
+        nextRowId.current = 9;
+        setFeedback({ message: "Aucune fiche enregistrée pour cette date. Une nouvelle fiche est prête.", isError: false });
+      }
+      setIsDirty(false);
+    } catch (error) {
+      setFeedback({ message: error instanceof Error ? error.message : "Impossible de rechercher la fiche.", isError: true });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!selectedSite || !date) return;
+    if (!rows.length) {
+      setFeedback({ message: "Ajoutez au moins une ligne avant d’enregistrer la fiche.", isError: true });
+      return;
+    }
+    setIsSaving(true);
+    setFeedback(null);
+    try {
+      const currentKey = `${selectedSite.id}:${date}`;
+      if (loadedKey !== currentKey) {
+        const existing = await serviceApi.getTruckChecklist(selectedSite.id, date);
+        if (existing && !window.confirm("Une fiche existe déjà pour cette date. Voulez-vous la remplacer ?")) return;
+      }
+      const saved = await serviceApi.saveTruckChecklist({
+        siteId: selectedSite.id,
+        date,
+        rows: rows.map((row) => ({
+          vehicle: row.vehicle,
+          carrier: row.carrier,
+          controlTime: row.controlTime,
+          checks: row.checks,
+          signature: row.signature,
+          observation: row.observation,
+          decision: row.decision,
+        })),
+      });
+      setLoadedKey(currentKey);
+      setIsDirty(false);
+      setFeedback({ message: `Fiche du ${new Date(`${saved.date}T00:00:00`).toLocaleDateString("fr-FR")} enregistrée dans la base de données.`, isError: false });
+    } catch (error) {
+      setFeedback({ message: error instanceof Error ? error.message : "Impossible d’enregistrer la fiche.", isError: true });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePrint = () => {
@@ -75,6 +147,7 @@ export default function CheckListCamion() {
 
   const resetSheet = () => {
     setRows((current) => current.map((row) => blankRow(row.id)));
+    setIsDirty(true);
   };
 
   return (
@@ -92,7 +165,7 @@ export default function CheckListCamion() {
               value={selectedSite?.id || ""}
               onChange={(event) => setSelectedSiteId(event.target.value)}
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              disabled={sites.length <= 1}
+              disabled={sites.length <= 1 || isLoading || isSaving}
             >
               {!sites.length && <option value="">Aucun site disponible</option>}
               {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
@@ -101,27 +174,43 @@ export default function CheckListCamion() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="truck-checklist-date">Date de contrôle</Label>
-            <Input id="truck-checklist-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <Input id="truck-checklist-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} disabled={isLoading || isSaving} />
           </div>
+          <Button type="button" variant="outline" onClick={handleSearch} disabled={!selectedSite || !date || isLoading || isSaving}>
+            {isLoading ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Search className="mr-2 size-4" />}
+            Rechercher par date
+          </Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={resetSheet}>
+          <Button type="button" variant="outline" onClick={resetSheet} disabled={isLoading || isSaving}>
             <RotateCcw className="mr-2 size-4" /> Vider la fiche
           </Button>
           <Button type="button" variant="outline" onClick={() => {
+            if (rows.length >= maxRows) {
+              setFeedback({ message: `Une fiche ne peut pas dépasser ${maxRows} lignes.`, isError: true });
+              return;
+            }
             const id = nextRowId.current++;
             setRows((current) => [...current, blankRow(id)]);
-          }}>
+            setIsDirty(true);
+          }} disabled={rows.length >= maxRows || isLoading || isSaving}>
             <Plus className="mr-2 size-4" /> Ajouter une ligne
           </Button>
-          <Button type="button" onClick={handlePrint}>
+          <Button type="button" onClick={handleSave} disabled={!selectedSite || !date || isSaving || isLoading}>
+            {isSaving ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+            Enregistrer
+          </Button>
+          <Button type="button" onClick={handlePrint} disabled={isLoading || isSaving}>
             <Printer className="mr-2 size-4" /> Imprimer la fiche
           </Button>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground print:hidden">
-        Fiche temporaire : les informations saisies ne sont pas enregistrées dans la base de données.
-      </p>
+      {feedback && (
+        <p role={feedback.isError ? "alert" : "status"} className={`text-sm print:hidden ${feedback.isError ? "text-destructive" : "text-muted-foreground"}`}>
+          {feedback.isError ? null : <Check className="mr-1 inline size-4" />}
+          {feedback.message}
+        </p>
+      )}
 
       <section id="truck-checklist-sheet" className="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
         <header className="mb-4 border-b-2 border-slate-700 pb-3 text-center">
@@ -143,6 +232,7 @@ export default function CheckListCamion() {
           <span>{date ? new Date(`${date}T00:00:00`).toLocaleDateString("fr-FR") : "—"}</span>
         </div>
 
+        <fieldset disabled={isLoading || isSaving} className="contents">
         <div className="overflow-x-auto rounded-md border border-slate-500">
           <table className="w-full min-w-[1800px] border-collapse text-center text-xs text-slate-900">
             <thead>
@@ -223,7 +313,10 @@ export default function CheckListCamion() {
                     </select>
                   </td>
                   <td className="border border-slate-500 p-1 print:hidden">
-                    <Button type="button" size="icon" variant="ghost" aria-label={`Supprimer la ligne ${index + 1}`} onClick={() => setRows((current) => current.filter((item) => item.id !== row.id))}>
+                    <Button type="button" size="icon" variant="ghost" aria-label={`Supprimer la ligne ${index + 1}`} onClick={() => {
+                      setRows((current) => current.filter((item) => item.id !== row.id));
+                      setIsDirty(true);
+                    }}>
                       <Trash2 className="size-4 text-destructive" />
                     </Button>
                   </td>
@@ -232,6 +325,7 @@ export default function CheckListCamion() {
             </tbody>
           </table>
         </div>
+        </fieldset>
       </section>
       <style>{`
         @media print {
