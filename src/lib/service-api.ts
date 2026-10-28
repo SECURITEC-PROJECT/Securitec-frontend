@@ -234,6 +234,28 @@ export interface EmployeeByMatricule {
   nom: string;
   prenom: string;
   prestataire: string | null;
+  section?: string;
+}
+
+export interface RegisterEmployeeOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  matricule: string;
+  section: string;
+}
+
+export interface WasteScrapRegisterEntry {
+  id: string;
+  date: string;
+  heure: string;
+  prenom: string;
+  matricule: string;
+  section: string;
+  designation: string;
+  nombre?: number;
+  motif?: string;
+  siteId: string;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -408,6 +430,29 @@ export const serviceApi = {
   async deleteDepotageFuelLogistics(id: string, siteId: string) {
     const params = new URLSearchParams({ siteId, type: "DEPOTAGE_FUEL" });
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  },
+  async listRegisterEmployees(siteId: string) {
+    return (await request<{ employees: RegisterEmployeeOption[] }>(`/employees/options?siteId=${encodeURIComponent(siteId)}`)).employees;
+  },
+  async listWasteScrapEntries(kind: "ordures" | "ferrailles", siteId: string) {
+    const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
+    return (await request<{ entries: WasteScrapRegisterEntry[] }>(`${path}?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createWasteScrapEntry(kind: "ordures" | "ferrailles", data: {
+    date: string; heure: string; matricule: string; designation: string; siteId: string; nombre?: number; motif?: string;
+  }) {
+    const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
+    return (await request<{ entry: WasteScrapRegisterEntry }>(path, { method: "POST", body: body(data) })).entry;
+  },
+  async updateWasteScrapEntry(kind: "ordures" | "ferrailles", id: string, data: {
+    date: string; heure: string; matricule: string; designation: string; siteId: string; nombre?: number; motif?: string;
+  }) {
+    const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
+    return (await request<{ entry: WasteScrapRegisterEntry }>(`${path}/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteWasteScrapEntry(kind: "ordures" | "ferrailles", id: string, siteId: string) {
+    const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
+    return request<{ id: string; deleted: boolean }>(`${path}/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();

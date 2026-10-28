@@ -47,6 +47,8 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/chargements-star-particuliers", label: "Chargements Star et particuliers", icon: Truck },
       { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitant", icon: Wrench },
       { to: "/dashboard/enregistrements-ordures", label: "Enregistrements Ordures", icon: Trash2 },
+      { to: "/dashboard/ordures", label: "Ordures", icon: Trash2 },
+      { to: "/dashboard/ferrailles", label: "Ferrailles", icon: Wrench },
       { to: "/dashboard/visiteurs", label: "Visiteurs", icon: Users },
       { to: "/dashboard/materiels-star", label: "Matériels Star", icon: Package },
     ]
