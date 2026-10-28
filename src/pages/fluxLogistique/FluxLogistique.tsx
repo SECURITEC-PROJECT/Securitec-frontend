@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
@@ -6,19 +6,16 @@ import { serviceApi } from "@/lib/service-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil, Printer, Trash2, X } from "lucide-react";
+import { Pencil, Printer, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { useLocation } from "react-router-dom";
 
 type TruckForm = {
   date: string;
-  camion: string;
-  nomChauffeur: string;
-  heureArrivee: string;
+  immatriculationVehicule: string;
+  heureSortie: string;
   designation: string;
   nbr: string;
-  document: string;
-  destinataire: string;
+  facture: string;
 };
 
 type TruckEntry = TruckForm & {
@@ -31,13 +28,11 @@ const today = () => new Date().toLocaleDateString("en-CA");
 const nowTime = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const emptyTruck = (): TruckForm => ({
   date: today(),
-  camion: "",
-  nomChauffeur: "",
-  heureArrivee: nowTime(),
+  immatriculationVehicule: "",
+  heureSortie: nowTime(),
   designation: "",
   nbr: "",
-  document: "",
-  destinataire: "",
+  facture: "",
 });
 
 const escapeHtml = (value: string) =>
@@ -50,7 +45,6 @@ const escapeHtml = (value: string) =>
   })[character] || character);
 
 export default function FluxLogistique() {
-  const { pathname } = useLocation();
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
@@ -58,9 +52,22 @@ export default function FluxLogistique() {
   const [truckForm, setTruckForm] = useState<TruckForm>(emptyTruck);
   const [editingTruck, setEditingTruck] = useState<TruckEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = sites.find((item) => item.name === selectedSiteName);
-  const canPrintEntries = pathname === "/dashboard/enregistrements-bon-facture-bon-sortie";
+  const filteredEntries = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return entries;
+    return entries.filter((entry) => [
+      entry.date,
+      entry.immatriculationVehicule,
+      entry.heureSortie,
+      entry.designation,
+      entry.nbr,
+      entry.facture,
+      entry.siteName,
+    ].some((value) => String(value || "").toLocaleLowerCase().includes(query)));
+  }, [entries, search]);
 
   useEffect(() => {
     if (!site?.id) return;
@@ -83,7 +90,7 @@ export default function FluxLogistique() {
     }
     setSaving(true);
     try {
-      const payload = { ...truckForm, type: "DECHARGEMENT", siteId: site.id, siteName, siteType };
+      const payload = { ...truckForm, type: "DECHARGEMENT", siteId: site.id, siteName: selectedSiteName, siteType: site.type };
       if (editingTruck) {
         const { entry } = await serviceApi.updateTruckLogistics(editingTruck.id, "DECHARGEMENT", payload);
         setEntries((current) => current.map((row) => row.id === editingTruck.id
@@ -108,19 +115,17 @@ export default function FluxLogistique() {
     setEditingTruck(entry);
     setTruckForm({
       date: String(entry.date).slice(0, 10),
-      camion: entry.camion || "",
-      nomChauffeur: entry.nomChauffeur || "",
-      heureArrivee: entry.heureArrivee || "",
+      immatriculationVehicule: entry.immatriculationVehicule || "",
+      heureSortie: entry.heureSortie || "",
       designation: entry.designation || "",
       nbr: entry.nbr || "",
-      document: entry.document || "",
-      destinataire: entry.destinataire || "",
+      facture: entry.facture || "",
     });
   };
 
   const deleteTruck = async (entry: TruckEntry) => {
     if (!site?.id) return;
-    if (!window.confirm(`Supprimer la réception du véhicule « ${entry.camion} » ? Cette action est définitive.`)) return;
+    if (!window.confirm(`Supprimer l’enregistrement du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`)) return;
     try {
       await serviceApi.deleteTruckLogistics(entry.id, "DECHARGEMENT", site.id);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
@@ -134,55 +139,53 @@ export default function FluxLogistique() {
     }
   };
 
-  const printEntry = (entry: TruckEntry) => {
+  const printEntries = (items: TruckEntry[], title: string) => {
     const printWindow = window.open("", "_blank", "width=700,height=800");
     if (!printWindow) {
       toast.error("Autorisez les fenêtres contextuelles pour imprimer les données.");
       return;
     }
 
-    const date = String(entry.date || "").slice(0, 10);
-    const displayDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.split("-").reverse().join("/") : "—";
-    const rows = [
-      ["Date", displayDate],
-      ["Transport (véhicule)", entry.camion || "—"],
-      ["Nom chauffeur", entry.nomChauffeur || "—"],
-      ["Heure d’entrée", entry.heureArrivee || "—"],
-      ["Désignation", entry.designation || "—"],
-      ["NBR", entry.nbr || "—"],
-      ["Bon ou facture", entry.document || "—"],
-      ["Destination", entry.destinataire || "—"],
-    ];
-    const details = rows.map(([label, value]) =>
-      `<div class="row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
-    ).join("");
+    const tableRows = items.map((entry) => {
+      const date = String(entry.date || "").slice(0, 10);
+      const displayDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.split("-").reverse().join("/") : "—";
+      const cells = [
+        displayDate,
+        entry.immatriculationVehicule || "—",
+        entry.heureSortie || "—",
+        entry.designation || "—",
+        entry.nbr || "—",
+        entry.facture || "—",
+      ];
+      return `<tr>${cells.map((value) => `<td>${escapeHtml(String(value))}</td>`).join("")}</tr>`;
+    }).join("");
 
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
       <html lang="fr">
         <head>
           <meta charset="utf-8">
-          <title>Enregistrement bon / facture / bon de sortie</title>
+          <title>${escapeHtml(title)}</title>
           <style>
-            @page { size: A5 portrait; margin: 12mm; }
+            @page { size: landscape; margin: 12mm; }
             * { box-sizing: border-box; }
             body { color: #172033; font: 14px Arial, sans-serif; }
-            main { max-width: 700px; margin: 0 auto; }
-            h1 { margin: 0 0 6px; text-align: center; font-size: 21px; }
-            .site { margin: 0 0 24px; text-align: center; color: #526078; }
-            .row { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d6dbe4; padding: 12px 4px; }
-            .row span { color: #526078; }
-            strong { max-width: 65%; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
-            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #68758a; }
+            h1 { margin: 0 0 6px; font-size: 21px; }
+            .site { margin: 0 0 20px; color: #526078; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px; border: 1px solid #d6dbe4; text-align: left; vertical-align: top; }
+            th { background: #edf1f5; font-size: 11px; text-transform: uppercase; }
+            td { white-space: pre-wrap; overflow-wrap: anywhere; }
+            tr { break-inside: avoid; }
           </style>
         </head>
         <body>
-          <main>
-            <h1>Bon / facture / bon de sortie</h1>
-            <p class="site">${escapeHtml(entry.siteName || selectedSiteName || "—")}</p>
-            ${details}
-            <p class="footer">Document généré depuis Securitec</p>
-          </main>
+          <h1>${escapeHtml(title)}</h1>
+          <p class="site">Site : ${escapeHtml(items[0]?.siteName || selectedSiteName || "—")}</p>
+          <table>
+            <thead><tr><th>Date</th><th>Véhicule (matricule)</th><th>Heure de sortie</th><th>Désignation</th><th>Nombre</th><th>Facture</th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
           <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
         </body>
       </html>`);
@@ -213,16 +216,12 @@ export default function FluxLogistique() {
               <Input id="flux-date" type="date" required value={truckForm.date} onChange={(event) => setTruckForm({ ...truckForm, date: event.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="flux-truck">Transport (numéro du véhicule)</Label>
-              <Input id="flux-truck" required maxLength={160} placeholder="Ex. 1234 TAA" value={truckForm.camion} onChange={(event) => setTruckForm({ ...truckForm, camion: event.target.value })} />
+              <Label htmlFor="flux-truck">Véhicule (matricule)</Label>
+              <Input id="flux-truck" required maxLength={100} placeholder="Ex. 1234 TAA" value={truckForm.immatriculationVehicule} onChange={(event) => setTruckForm({ ...truckForm, immatriculationVehicule: event.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="flux-driver">Nom du chauffeur</Label>
-              <Input id="flux-driver" required maxLength={255} value={truckForm.nomChauffeur} onChange={(event) => setTruckForm({ ...truckForm, nomChauffeur: event.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="flux-entry-time">Heure d’entrée</Label>
-              <Input id="flux-entry-time" type="time" required value={truckForm.heureArrivee} onChange={(event) => setTruckForm({ ...truckForm, heureArrivee: event.target.value })} />
+              <Label htmlFor="flux-exit-time">Heure de sortie</Label>
+              <Input id="flux-exit-time" type="time" required value={truckForm.heureSortie} onChange={(event) => setTruckForm({ ...truckForm, heureSortie: event.target.value })} />
             </div>
             <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
               <Label htmlFor="flux-designation">Désignation</Label>
@@ -237,16 +236,12 @@ export default function FluxLogistique() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="flux-nbr">NBR</Label>
+              <Label htmlFor="flux-nbr">Nombre (ex. 1 voyage)</Label>
               <Input id="flux-nbr" required maxLength={255} value={truckForm.nbr} onChange={(event) => setTruckForm({ ...truckForm, nbr: event.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="flux-document">Numéro de bon ou facture</Label>
-              <Input id="flux-document" required maxLength={160} value={truckForm.document} onChange={(event) => setTruckForm({ ...truckForm, document: event.target.value })} />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="flux-destination">Destination</Label>
-              <Input id="flux-destination" required maxLength={255} value={truckForm.destinataire} onChange={(event) => setTruckForm({ ...truckForm, destinataire: event.target.value })} />
+              <Label htmlFor="flux-invoice">Facture (4 chiffres maximum)</Label>
+              <Input id="flux-invoice" required maxLength={4} pattern="\d{1,4}" inputMode="numeric" title="Saisissez 1 à 4 chiffres." value={truckForm.facture} onChange={(event) => setTruckForm({ ...truckForm, facture: event.target.value })} />
             </div>
           </div>
           {!site?.id && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer une réception.</p>}
@@ -265,35 +260,53 @@ export default function FluxLogistique() {
       </Panel>
 
       <Panel title="Registre des réceptions">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative w-full max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              aria-label="Rechercher dans le registre"
+              placeholder="Rechercher date, véhicule, désignation, facture…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!entries.length}
+            onClick={() => printEntries(entries, "Registre des réceptions")}
+          >
+            <Printer className="h-4 w-4" />
+            Imprimer tout le registre
+          </Button>
+        </div>
         <div className="overflow-hidden rounded-lg border">
           <div className="max-h-[560px] overflow-auto">
-            <table className="w-full min-w-[1000px] text-left text-sm">
+            <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                 <tr>
-                  {["Date", "Transport (véhicule)", "Nom chauffeur", "Heure d’entrée", "Désignation", "NBR", "Bon ou facture", "Destination", "Site", "Actions"].map((label) => (
+                  {["Date", "Véhicule (matricule)", "Heure de sortie", "Désignation", "Nombre", "Facture", "Site", "Actions"].map((label) => (
                     <th key={label} className="whitespace-nowrap border-b px-3 py-3 font-medium">{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/70">
-                {entries.map((entry) => (
+                {filteredEntries.map((entry) => (
                   <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
                     <td className="whitespace-nowrap px-3 py-3">{String(entry.date).slice(0, 10)}</td>
-                    <td className="whitespace-nowrap px-3 py-3 font-medium">{entry.camion || "—"}</td>
-                    <td className="px-3 py-3">{entry.nomChauffeur || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-3">{entry.heureArrivee || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-3 font-medium">{entry.immatriculationVehicule || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-3">{entry.heureSortie || "—"}</td>
                     <td className="max-w-md whitespace-pre-wrap px-3 py-3">{entry.designation || "—"}</td>
                     <td className="px-3 py-3">{entry.nbr || "—"}</td>
-                    <td className="px-3 py-3">{entry.document || "—"}</td>
-                    <td className="px-3 py-3">{entry.destinataire || "—"}</td>
+                    <td className="px-3 py-3">{entry.facture || "—"}</td>
                     <td className="px-3 py-3">{entry.siteName || "—"}</td>
                     <td className="whitespace-nowrap px-3 py-3">
                       <div className="flex items-center gap-1">
-                      {canPrintEntries && (
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer les données" title="Imprimer" onClick={() => printEntry(entry)}>
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la ligne" title="Imprimer la ligne" onClick={() => printEntries([entry], "Enregistrement de réception")}>
                           <Printer className="h-4 w-4" />
                         </Button>
-                      )}
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editTruck(entry)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -304,8 +317,10 @@ export default function FluxLogistique() {
                     </td>
                   </tr>
                 ))}
-                {!entries.length && (
-                  <tr><td colSpan={10} className="px-3 py-8 text-center text-sm text-muted-foreground">Aucune réception enregistrée.</td></tr>
+                {!filteredEntries.length && (
+                  <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    {entries.length ? "Aucun résultat pour cette recherche." : "Aucune réception enregistrée."}
+                  </td></tr>
                 )}
               </tbody>
             </table>
