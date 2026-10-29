@@ -285,6 +285,13 @@ export interface ApsPostConfiguration {
   count: number;
 }
 
+export interface ApsMovementAgent {
+  nom: string;
+  matricule: string;
+}
+
+export type ApsMovementData = Record<string, ApsMovementAgent[]>;
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
   const headers = new Headers(init.headers);
@@ -632,6 +639,29 @@ export const serviceApi = {
   },
   async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]>; postes: ApsPostConfiguration[] }) {
     return request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(data) });
+  },
+  async getApsMovements(date: string, service: "jour" | "nuit", siteId: string) {
+    return request<{ data: ApsMovementData | null; postes: ApsPostConfiguration[] | null }>(
+      `/aps-movements?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`,
+    );
+  },
+  async saveApsMovementPostConfiguration(data: { siteId: string; postes: ApsPostConfiguration[] }) {
+    return request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-movements/posts", {
+      method: "PUT",
+      body: body(data),
+    });
+  },
+  async saveApsMovements(data: {
+    date: string;
+    service: "jour" | "nuit";
+    siteId: string;
+    data: ApsMovementData;
+    postes: ApsPostConfiguration[];
+  }) {
+    return request<{ saved: boolean; updatedAt: string }>("/aps-movements", {
+      method: "PUT",
+      body: body(data),
+    });
   },
   async listCameras(siteId?: string) { return (await request<{ cameras: any[] }>(`/cameras${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).cameras; },
   async listCameraZones(siteId?: string) { return (await request<{ zones: any[] }>(`/camera-zones${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).zones; },

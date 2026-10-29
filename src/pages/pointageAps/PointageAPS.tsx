@@ -45,7 +45,7 @@ const normalizeAgents = (
   return normalized;
 };
 
-export default function PointageAPS() {
+export default function PointageAPS({ showHeader = true }: { showHeader?: boolean }) {
   const { sites, siteError } = useSites();
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [siteId, setSiteId] = useState("");
@@ -185,7 +185,7 @@ export default function PointageAPS() {
   };
 
   return <div className="space-y-5">
-    <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />
+    {showHeader && <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />}
     <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service de pointage">
       {(["jour", "nuit"] as const).map((item) => <button key={item} role="tab" aria-selected={service === item} onClick={() => setService(item)} className={`rounded-md px-5 py-2 text-sm font-medium capitalize transition-colors ${service === item ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-background"}`}>{item}</button>)}
     </div>
