@@ -115,6 +115,16 @@ export interface EmployeeRecord {
   siteName: string | null;
 }
 
+export interface SiteDocument {
+  id: string;
+  name: string;
+  extension: string;
+  mimeType: string;
+  size: number;
+  category: string;
+  createdAt: string;
+}
+
 export interface VigilanceEntry {
   id: string;
   typePoint: string;
@@ -302,16 +312,17 @@ export const serviceApi = {
   async createUser(data: { name: string; identifier: string; role: number; pin: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>("/users", { method: "POST", body: body(data) })).user; },
   async updateUser(id: string, data: { name: string; identifier: string; role: number; pin?: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>(`/users/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).user; },
   async deleteUser(id: string) { return request<{ id: string; deleted: boolean }>(`/users/${encodeURIComponent(id)}`, { method: "DELETE" }); },
-  async listDocuments(siteId: string) { return (await request<{ documents: any[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
+  async listDocuments(siteId: string) { return (await request<{ documents: SiteDocument[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
   async uploadDocument(siteId: string, file: File, category: string) {
     const token = sessionStorage.getItem(tokenKey);
     const headers = new Headers({ "Content-Type": file.type || "application/octet-stream", "X-Site-Id": siteId,
       "X-File-Name": encodeURIComponent(file.name), "X-File-Category": category });
     if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(`${apiBaseUrl}/documents`, { method: "POST", headers, body: file });
-    const result = await response.json().catch(() => ({}));
+    const result = await response.json().catch(() => ({})) as { document?: SiteDocument; error?: string };
     if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
-    return result.document as any;
+    if (!result.document) throw new Error("La réponse du serveur ne contient pas le document importé.");
+    return result.document;
   },
   async downloadDocument(id: string) {
     const token = sessionStorage.getItem(tokenKey);

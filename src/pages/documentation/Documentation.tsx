@@ -2,13 +2,12 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type SiteDocument } from "@/lib/service-api";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { Download, FileText, Loader2, Search, Trash2, Upload } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-type SiteDocument = { id: string; name: string; extension: string; mimeType: string; size: number; category: string; createdAt: string };
 const accept = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.odt,.ods";
 const categories = ["Consigne", "Procédure", "Compte rendu", "Formulaire", "Autre"];
 const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} Ko` : `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
@@ -25,18 +24,28 @@ export default function Documentation() {
   const [workingId, setWorkingId] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => { if (!siteId && sites.length) setSiteId(sites[0].id); }, [siteId, sites]);
+  const selectedSiteId = siteId || sites[0]?.id || "";
 
-  const refresh = useCallback(async () => {
-    if (!siteId) { setDocuments([]); return; }
+  const refresh = async () => {
+    if (!selectedSiteId) return;
     setLoading(true);
     setError("");
-    try { setDocuments(await serviceApi.listDocuments(siteId)); }
+    try { setDocuments(await serviceApi.listDocuments(selectedSiteId)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Chargement des documents impossible."); }
     finally { setLoading(false); }
-  }, [siteId]);
+  };
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!selectedSiteId) return;
+    let active = true;
+    serviceApi.listDocuments(selectedSiteId)
+      .then((result) => { if (active) setDocuments(result); })
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? reason.message : "Chargement des documents impossible.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [selectedSiteId]);
 
   const displayed = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -45,14 +54,16 @@ export default function Documentation() {
 
   const upload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!file || !siteId) return;
+    if (!file || !selectedSiteId) return;
     setError(""); setUploading(true);
     try {
-      await serviceApi.uploadDocument(siteId, file, category);
+      await serviceApi.uploadDocument(selectedSiteId, file, category);
       setFile(null);
       const input = document.getElementById("document-file") as HTMLInputElement | null;
       if (input) input.value = "";
       await refresh();
+      toast.success("Document importé.");
+      toast.success("Document importé.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Import du fichier impossible."); }
     finally { setUploading(false); }
   };
@@ -88,7 +99,7 @@ export default function Documentation() {
       <form className="space-y-4" onSubmit={upload}>
         <div>
           <label htmlFor="document-site" className="mb-1 block text-sm font-medium">Site</label>
-          <select id="document-site" value={siteId} onChange={(event) => setSiteId(event.target.value)} required className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+          <select id="document-site" value={selectedSiteId} onChange={(event) => { setSiteId(event.target.value); setDocuments([]); setLoading(true); }} required className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
             {!sites.length && <option value="">Aucun site disponible</option>}
             {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
@@ -102,11 +113,11 @@ export default function Documentation() {
           </div>
           <div>
             <label htmlFor="document-file" className="mb-1 block text-sm font-medium">Fichier</label>
-            <Input id="document-file" type="file" accept={accept} required disabled={!siteId || uploading} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+            <Input id="document-file" type="file" accept={accept} required disabled={!selectedSiteId || uploading} onChange={(event) => setFile(event.target.files?.[0] || null)} />
           </div>
         </div>
         <p className="text-xs text-muted-foreground">PDF, Word, Excel, PowerPoint, CSV, texte et OpenDocument · 15 Mo maximum.</p>
-        <Button type="submit" disabled={!file || !siteId || uploading}>{uploading ? <Loader2 className="animate-spin" /> : <Upload />} Importer le fichier</Button>
+        <Button type="submit" disabled={!file || !selectedSiteId || uploading}>{uploading ? <Loader2 className="animate-spin" /> : <Upload />} Importer le fichier</Button>
       </form>
     </section>
 
