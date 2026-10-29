@@ -3,8 +3,9 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
+import { serviceApi, type ChauffeurRecord, type EmptyBottleDelivery } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -64,6 +65,7 @@ const displayDate = (value: string) => {
 
 const normalizeSearch = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+const normalizeName = (value: string) => normalizeSearch(value.trim()).replace(/\s+/g, " ");
 
 export default function DechargementBouteillesVides() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
@@ -76,9 +78,25 @@ export default function DechargementBouteillesVides() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
+    siteId: string;
+    chauffeurs: ChauffeurRecord[];
+    error: string;
+  }>({ siteId: "", chauffeurs: [], error: "" });
+  const [chauffeurSuggestionsOpen, setChauffeurSuggestionsOpen] = useState(false);
+  const [activeChauffeurSuggestion, setActiveChauffeurSuggestion] = useState(0);
+  const [selectedChauffeurId, setSelectedChauffeurId] = useState("");
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
+  const registeredChauffeurs = chauffeurRegistry.siteId === site?.id
+    ? chauffeurRegistry.chauffeurs
+    : [];
+  const chauffeurLoading = Boolean(site?.id) && chauffeurRegistry.siteId !== site?.id;
+  const chauffeurError = chauffeurRegistry.siteId === site?.id ? chauffeurRegistry.error : "";
+  const matchingChauffeurs = registeredChauffeurs.filter((driver) =>
+    !normalizeName(form.nomChauffeur) || normalizeName(driver.nomPrenom).includes(normalizeName(form.nomChauffeur)),
+  ).slice(0, 8);
   const normalizedSearch = normalizeSearch(search.trim());
   const filteredEntries = entries.filter((entry) =>
     normalizeSearch([
@@ -126,15 +144,68 @@ export default function DechargementBouteillesVides() {
     return () => { active = false; };
   }, [site?.id]);
 
+  useEffect(() => {
+    let active = true;
+    const siteId = site?.id;
+    if (!siteId) return () => { active = false; };
+    serviceApi.listChauffeurs(siteId)
+      .then((chauffeurs) => {
+        if (active) setChauffeurRegistry({ siteId, chauffeurs, error: "" });
+      })
+      .catch((error) => {
+        if (active) setChauffeurRegistry({
+          siteId,
+          chauffeurs: [],
+          error: error instanceof Error ? error.message : "Chargement des chauffeurs impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [site?.id]);
+
+  const selectChauffeur = (driver: ChauffeurRecord) => {
+    setSelectedChauffeurId(driver.id);
+    setForm((current) => ({
+      ...current,
+      nomChauffeur: driver.nomPrenom,
+      immatriculationVehicule: driver.matricule || "",
+    }));
+    setChauffeurSuggestionsOpen(false);
+  };
+
+  const changeChauffeurName = (nomChauffeur: string) => {
+    setSelectedChauffeurId("");
+    setForm((current) => ({ ...current, nomChauffeur, immatriculationVehicule: "" }));
+    setActiveChauffeurSuggestion(0);
+    setChauffeurSuggestionsOpen(true);
+    const exactMatches = registeredChauffeurs.filter(
+      (driver) => normalizeName(driver.nomPrenom) === normalizeName(nomChauffeur),
+    );
+    if (exactMatches.length === 1) selectChauffeur(exactMatches[0]);
+  };
+
   const resetForm = () => {
     setForm(emptyForm());
     setEditingEntry(null);
+    setSelectedChauffeurId("");
+    setChauffeurSuggestionsOpen(false);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!site?.id) {
       toast.error("Sélectionnez un site de travail.");
+      return;
+    }
+    if (chauffeurLoading) {
+      toast.error("Veuillez attendre le chargement des fiches chauffeurs.");
+      return;
+    }
+    if (chauffeurError) {
+      toast.error("Impossible de vérifier les chauffeurs enregistrés. Réessayez après le chargement.");
+      return;
+    }
+    if (!registeredChauffeurs.some((driver) => driver.id === selectedChauffeurId)) {
+      toast.error("Sélectionnez un chauffeur enregistré pour remplir son immatriculation.");
       return;
     }
     setSaving(true);
@@ -177,6 +248,7 @@ export default function DechargementBouteillesVides() {
 
   const editEntry = (entry: EmptyBottleDelivery) => {
     const details = Array.isArray(entry.detailsBouteilles) ? entry.detailsBouteilles : [];
+    setSelectedChauffeurId("");
     setEditingEntry(entry);
     setForm({
       date: String(entry.date).slice(0, 10),
@@ -192,6 +264,12 @@ export default function DechargementBouteillesVides() {
         quantite: String(line.quantite),
       })),
     });
+    const matchedChauffeurs = registeredChauffeurs.filter((driver) =>
+      normalizeName(driver.nomPrenom) === normalizeName(entry.nomChauffeur || "")
+      && (driver.matricule || "").trim().toLocaleLowerCase() === entry.immatriculationVehicule.trim().toLocaleLowerCase(),
+    );
+    if (matchedChauffeurs.length === 1) setSelectedChauffeurId(matchedChauffeurs[0].id);
+    setChauffeurSuggestionsOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -274,12 +352,80 @@ export default function DechargementBouteillesVides() {
                 <Input id="empty-bottles-end" type="time" value={form.heureFin} onChange={(event) => setForm({ ...form, heureFin: event.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="empty-bottles-registration">Immatriculation du véhicule</Label>
-                <Input id="empty-bottles-registration" required maxLength={100} value={form.immatriculationVehicule} onChange={(event) => setForm({ ...form, immatriculationVehicule: event.target.value })} />
+                <Label htmlFor="empty-bottles-driver">Nom du chauffeur</Label>
+                <Popover open={chauffeurSuggestionsOpen && matchingChauffeurs.length > 0} onOpenChange={setChauffeurSuggestionsOpen}>
+                  <PopoverAnchor asChild>
+                    <Input
+                      id="empty-bottles-driver"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={chauffeurSuggestionsOpen && matchingChauffeurs.length > 0}
+                      aria-controls="empty-bottles-driver-suggestions"
+                      aria-activedescendant={matchingChauffeurs[activeChauffeurSuggestion] ? `empty-bottles-driver-option-${activeChauffeurSuggestion}` : undefined}
+                      required
+                      maxLength={255}
+                      autoComplete="off"
+                      placeholder={chauffeurLoading ? "Chargement des chauffeurs…" : "Rechercher un chauffeur enregistré"}
+                      value={form.nomChauffeur}
+                      onFocus={() => setChauffeurSuggestionsOpen(true)}
+                      onChange={(event) => changeChauffeurName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (!matchingChauffeurs.length) return;
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveChauffeurSuggestion((current) => (current + 1) % matchingChauffeurs.length);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveChauffeurSuggestion((current) => (current - 1 + matchingChauffeurs.length) % matchingChauffeurs.length);
+                        } else if (event.key === "Enter" && chauffeurSuggestionsOpen) {
+                          event.preventDefault();
+                          const driver = matchingChauffeurs[activeChauffeurSuggestion];
+                          if (driver) selectChauffeur(driver);
+                        } else if (event.key === "Escape") {
+                          setChauffeurSuggestionsOpen(false);
+                        }
+                      }}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    id="empty-bottles-driver-suggestions"
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] p-1"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <ul role="listbox" aria-label="Chauffeurs enregistrés" className="max-h-52 overflow-y-auto">
+                      {matchingChauffeurs.map((driver, index) => (
+                        <li key={driver.id} role="presentation">
+                          <button
+                            id={`empty-bottles-driver-option-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={index === activeChauffeurSuggestion}
+                            className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeChauffeurSuggestion ? "bg-accent" : ""}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => selectChauffeur(driver)}
+                          >
+                            {driver.nomPrenom}
+                            {driver.matricule && <span className="ml-2 text-muted-foreground">— {driver.matricule}</span>}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                {chauffeurError
+                  ? <p role="alert" className="text-xs text-destructive">{chauffeurError}</p>
+                  : chauffeurLoading
+                    ? <p className="text-xs text-muted-foreground">Chargement des fiches chauffeurs du site…</p>
+                    : !registeredChauffeurs.length
+                      ? <p className="text-xs text-muted-foreground">Aucun chauffeur enregistré pour ce site.</p>
+                      : form.nomChauffeur.trim() && !selectedChauffeurId
+                        ? <p role="alert" className="text-xs text-destructive">Choisissez un chauffeur enregistré pour remplir son immatriculation.</p>
+                        : <p className="text-xs text-muted-foreground">Choisissez un chauffeur enregistré ; son immatriculation sera remplie automatiquement.</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="empty-bottles-driver">Nom du chauffeur</Label>
-                <Input id="empty-bottles-driver" required maxLength={255} value={form.nomChauffeur} onChange={(event) => setForm({ ...form, nomChauffeur: event.target.value })} />
+                <Label htmlFor="empty-bottles-registration">Immatriculation du véhicule</Label>
+                <Input id="empty-bottles-registration" required maxLength={100} value={form.immatriculationVehicule} readOnly className="bg-muted/50" placeholder="Remplie depuis la fiche chauffeur" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-title">N° de titre</Label>
