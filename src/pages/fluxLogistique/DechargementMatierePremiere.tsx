@@ -38,8 +38,6 @@ const designationGroups = [
       "Azote liquide",
       "Argon",
       "Citrate de sodium",
-      "Fuel oil",
-      "Gasoil",
       "Couvertte canette",
     ],
   },

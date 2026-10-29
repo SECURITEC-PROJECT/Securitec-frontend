@@ -31,6 +31,7 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 const nowTime = () => new Date().toTimeString().slice(0, 5);
+const fuelDesignations = ["Fuel oil", "Gasoil"];
 const normalizeName = (value: string) =>
   value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toLocaleLowerCase("fr");
 
@@ -326,7 +327,16 @@ export default function DepotageFuelGasoil() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fuel-designation">Désignation</Label>
-                <Input id="fuel-designation" required maxLength={160} value={designation} onChange={(event) => setDesignation(event.target.value)} />
+                <select
+                  id="fuel-designation"
+                  required
+                  value={fuelDesignations.includes(designation) ? designation : ""}
+                  onChange={(event) => setDesignation(event.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Sélectionner une désignation</option>
+                  {fuelDesignations.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fuel-quantite">Quantité</Label>
