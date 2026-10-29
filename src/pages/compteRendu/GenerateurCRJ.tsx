@@ -36,14 +36,14 @@ export interface CRJData {
   alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string }>;
   rondes: Array<{ debut: string; fin: string; obs: string }>;
   pointsVigilance: Array<{ heure: string; typePoint: string; element: string; statut: string; agent: string; obs: string }>;
-  anomalies: Array<{ heure: string; camion: string; transporteur: string; titre: string; obs: string }>;
+  anomalies: Array<{ date: string; heure: string; poste: string; nature: string; anomalie: string; mesures: string }>;
   violations: Array<{ heure: string; nomPrenom: string; obs: string; mesures: string }>;
   divers: Array<{ dateHeure: string; faits: string; mesures: string }>;
 }
 
 const dash = (v?: string) => (v && v.trim() ? v : '-');
 
-type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "vigilance" | "rondes";
+type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "vigilance" | "rondes";
 
 function PrintSectionTitle({ id, title, onPrint }: { id: PrintSectionId; title: string; onPrint: (id: PrintSectionId) => void }) {
   return (
@@ -345,6 +345,40 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
               )) : (
                 <tr>
                   <td colSpan={7} className="border border-black p-1 text-gray-500 italic">Aucun test d'alcoolémie enregistré ce jour.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ANOMALIES */}
+        <div data-print-section="anomalies" data-print-selected={printSection === "anomalies" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="anomalies" title={`${6 + decalage} - ANOMALIES`} onPrint={handlePrintSection} />
+          <table className="w-full border-collapse border border-black text-center text-[9px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-black p-1">DATE</th>
+                <th className="border border-black p-1">HEURE</th>
+                <th className="border border-black p-1">POSTE</th>
+                <th className="border border-black p-1">NATURE</th>
+                <th className="border border-black p-1">ANOMALIE</th>
+                <th className="border border-black p-1">MESURES PRISES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.anomalies.length > 0 ? data.anomalies.map((anomalie, index) => (
+                <tr key={`${anomalie.date}-${anomalie.heure}-${index}`}>
+                  <td className="border border-black p-1">{anomalie.date}</td>
+                  <td className="border border-black p-1 font-mono">{anomalie.heure}</td>
+                  <td className="border border-black p-1 text-left">{anomalie.poste}</td>
+                  <td className="border border-black p-1 text-left">{anomalie.nature}</td>
+                  <td className="border border-black p-1 text-left">{anomalie.anomalie}</td>
+                  <td className="border border-black p-1 text-left">{anomalie.mesures}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={6} className="border border-black p-1 text-gray-500 italic">Aucune anomalie enregistrée ce jour.</td>
                 </tr>
               )}
             </tbody>
