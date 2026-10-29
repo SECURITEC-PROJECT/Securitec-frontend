@@ -125,6 +125,19 @@ export interface SiteDocument {
   createdAt: string;
 }
 
+export interface ChauffeurRecord {
+  id: string;
+  nomPrenom: string;
+  telephone: string | null;
+  cin: string | null;
+  numeroPermis: string | null;
+  expirationPermis: string | null;
+  vehicule: string | null;
+  matricule: string | null;
+  siteId: string;
+  createdAt: string;
+}
+
 export interface VigilanceEntry {
   id: string;
   typePoint: string;
@@ -371,6 +384,16 @@ export const serviceApi = {
   async createUser(data: { name: string; identifier: string; role: number; pin: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>("/users", { method: "POST", body: body(data) })).user; },
   async updateUser(id: string, data: { name: string; identifier: string; role: number; pin?: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>(`/users/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).user; },
   async deleteUser(id: string) { return request<{ id: string; deleted: boolean }>(`/users/${encodeURIComponent(id)}`, { method: "DELETE" }); },
+  async listChauffeurs(siteId: string) { return (await request<{ chauffeurs: ChauffeurRecord[] }>(`/chauffeurs?siteId=${encodeURIComponent(siteId)}`)).chauffeurs; },
+  async createChauffeur(data: Omit<ChauffeurRecord, "id" | "siteId" | "createdAt"> & { siteId: string }) {
+    return (await request<{ chauffeur: ChauffeurRecord }>("/chauffeurs", { method: "POST", body: body(data) })).chauffeur;
+  },
+  async updateChauffeur(id: string, data: Omit<ChauffeurRecord, "id" | "siteId" | "createdAt"> & { siteId: string }) {
+    return (await request<{ chauffeur: ChauffeurRecord }>(`/chauffeurs/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).chauffeur;
+  },
+  async deleteChauffeur(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/chauffeurs/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
   async listDocuments(siteId: string) { return (await request<{ documents: SiteDocument[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
   async uploadDocument(siteId: string, file: File, category: string) {
     const token = sessionStorage.getItem(tokenKey);
