@@ -295,6 +295,21 @@ export interface ApsMovementEvent {
   siteId: string;
 }
 
+export interface ApsServiceHandover {
+  id: string;
+  date: string;
+  materiel: string;
+  chaineEst: string;
+  chaineOuest: string;
+  clesRendus: string;
+  clesNonRendus: string;
+  etatDesLieux: string;
+  consigne: string;
+  evenement: string;
+  remarque: string;
+  siteId: string;
+}
+
 export interface ApsMovementAgent {
   nom: string;
   matricule: string;
@@ -693,6 +708,29 @@ export const serviceApi = {
   async deleteApsMovementEvent(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(
       `/aps-movements/events/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
+      { method: "DELETE" },
+    );
+  },
+  async listApsServiceHandovers(siteId: string, date: string) {
+    return (await request<{ entries: ApsServiceHandover[] }>(
+      `/aps-movements/service-handovers?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
+    )).entries;
+  },
+  async createApsServiceHandover(data: Omit<ApsServiceHandover, "id">) {
+    return (await request<{ entry: ApsServiceHandover }>("/aps-movements/service-handovers", {
+      method: "POST",
+      body: body(data),
+    })).entry;
+  },
+  async updateApsServiceHandover(id: string, data: Omit<ApsServiceHandover, "id">) {
+    return (await request<{ entry: ApsServiceHandover }>(`/aps-movements/service-handovers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: body(data),
+    })).entry;
+  },
+  async deleteApsServiceHandover(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(
+      `/aps-movements/service-handovers/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
       { method: "DELETE" },
     );
   },

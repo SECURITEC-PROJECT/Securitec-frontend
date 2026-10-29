@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import MouvementApsEvenements from "@/pages/pointageAps/MouvementApsEvenements";
+import PassationServiceAPS from "@/pages/pointageAps/PassationServiceAPS";
 import { useSites } from "@/hooks/useSites";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import {
@@ -229,7 +230,7 @@ export default function MouvementsAPS() {
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 print:hidden" aria-label="Modules des mouvements APS">
           <TabsTrigger value="pointage-aps">Pointage APS (Jour et Nuit)</TabsTrigger>
           <TabsTrigger value="module-2">Mouvement</TabsTrigger>
-          <TabsTrigger value="module-3">Module 3</TabsTrigger>
+          <TabsTrigger value="module-3">Passation de service</TabsTrigger>
           <TabsTrigger value="module-4">Module 4</TabsTrigger>
         </TabsList>
         <TabsContent value="pointage-aps" className="mt-0 space-y-5">
@@ -348,10 +349,16 @@ export default function MouvementsAPS() {
             activeSiteName={sites.find((site) => site.id === activeSiteId)?.name ?? ""}
           />
         </TabsContent>
-        {(["module-3", "module-4"] as const).map((module, index) => (
+        <TabsContent value="module-3" className="mt-0">
+          <PassationServiceAPS
+            activeSiteId={activeSiteId}
+            activeSiteName={sites.find((site) => site.id === activeSiteId)?.name ?? ""}
+          />
+        </TabsContent>
+        {(["module-4"] as const).map((module) => (
           <TabsContent key={module} value={module} className="mt-0">
             <section className="rounded-xl border bg-card p-6 text-center shadow-sm">
-              <h2 className="text-lg font-semibold">Module {index + 3}</h2>
+              <h2 className="text-lg font-semibold">Module 4</h2>
               <p className="mt-2 text-sm text-muted-foreground">Ce module sera configuré prochainement.</p>
             </section>
           </TabsContent>
