@@ -11,8 +11,17 @@ import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
 
-const DESIGNATIONS = ["65 Cl", "50 Cl", "33 Cl", "30 Cl", "1 L"] as const;
-type Designation = typeof DESIGNATIONS[number];
+const DESIGNATION_GROUPS = [
+  { label: "Bouteilles vides", options: ["Bouteilles vides - 65 Cl", "Bouteilles vides - 50 Cl", "Bouteilles vides - 33 Cl"] },
+  { label: "Fût", options: ["Fût - 30 L", "Fût - 20 L"] },
+  { label: "Cageau jaune", options: ["Cageau jaune - C20", "Cageau jaune - C24"] },
+  { label: "Bouteilles neuves", options: ["Bouteilles neuves - 65 Cl", "Bouteilles neuves - 50 Cl", "Bouteilles neuves - 33 Cl"] },
+  { label: "Palettes neuves", options: ["Palette neuve - 1310 x 1055", "Palette neuve - 1000 x 1200", "Palette neuve - 800 x 1200"] },
+  { label: "Palettes réparées", options: ["Palette réparée - 1310 x 1055", "Palette réparée - 1000 x 1200", "Palette réparée - 800 x 1200"] },
+] as const;
+const DESIGNATIONS = DESIGNATION_GROUPS.flatMap((group) => group.options);
+const LEGACY_DESIGNATIONS = ["65 Cl", "50 Cl", "33 Cl", "30 Cl", "1 L"] as const;
+type Designation = typeof DESIGNATIONS[number] | typeof LEGACY_DESIGNATIONS[number];
 type BottleLine = { designation: Designation | ""; quantite: string };
 type DeliveryForm = {
   date: string;
@@ -297,7 +306,7 @@ export default function DechargementBouteillesVides() {
           <section className="space-y-3 border-t pt-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-sm font-semibold">Comptage des bouteilles</h3>
+                <h3 className="text-sm font-semibold">Comptage des articles</h3>
                 <p className="mt-1 text-xs text-muted-foreground">Ajoutez les formats présents dans cette réception.</p>
               </div>
               <Button type="button" variant="outline" size="sm" disabled={form.detailsBouteilles.length >= DESIGNATIONS.length} onClick={() => setForm((current) => ({ ...current, detailsBouteilles: [...current.detailsBouteilles, { designation: "", quantite: "" }] }))}>
@@ -315,7 +324,18 @@ export default function DechargementBouteillesVides() {
                       <Label htmlFor={`empty-bottles-designation-${index}`}>Désignation</Label>
                       <select id={`empty-bottles-designation-${index}`} required value={line.designation} onChange={(event) => updateLine(index, { designation: event.target.value as Designation | "" })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                         <option value="">Choisir un format</option>
-                        {DESIGNATIONS.map((designation) => <option key={designation} value={designation} disabled={usedDesignations.has(designation)}>{designation}</option>)}
+                        {DESIGNATION_GROUPS.map((group) => (
+                          <optgroup key={group.label} label={group.label}>
+                            {group.options.map((designation) => (
+                              <option key={designation} value={designation} disabled={usedDesignations.has(designation)}>
+                                {designation.split(" - ").slice(1).join(" - ")}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        {LEGACY_DESIGNATIONS.includes(line.designation as typeof LEGACY_DESIGNATIONS[number]) && (
+                          <option value={line.designation}>{line.designation} (ancien format)</option>
+                        )}
                       </select>
                     </div>
                     <div className="space-y-1.5">
