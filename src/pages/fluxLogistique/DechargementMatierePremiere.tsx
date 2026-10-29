@@ -3,6 +3,7 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
@@ -10,6 +11,53 @@ import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+
+const designationGroups = [
+  {
+    label: "Matières premières",
+    options: [
+      "Maîs Pilsen",
+      "Maîs dégermée",
+      "Granulé HDPE",
+      "Suc Blanche",
+      "Houblon Extrait",
+      "Clarcel CBL",
+      "Soude caustique",
+      "Chlorure de calcium",
+      "Arome",
+      "Capsule Beaufort",
+      "Capsule Gold",
+      "Capsule Queen's",
+      "Capsule THB",
+      "Lubranol SM",
+      "Caramel colorant",
+      "Hurexol",
+      "Hypochloryte de sodium",
+      "Acide sulfuriques",
+      "Azote liquide",
+      "Argon",
+      "Citrate de sodium",
+      "Fuel oil",
+      "Gasoil",
+      "Couvertte canette",
+    ],
+  },
+  {
+    label: "Barquette",
+    options: ["Canette GOLD blanche 50", "Canette GOLD 50CL", "Canette THB 50CL", "Canette Beaufort 50CL"],
+  },
+  {
+    label: "Etiquette",
+    options: ["THB 65CL", "Gold Blanche 50CL", "Beaufort 33CL", "Gold Blanche 33CL", "Queen's 65CL"],
+  },
+  {
+    label: "Collerette",
+    options: ["Gold Blanche 33CL", "Beaufort 33CL", "Gold Blanche 50CL", "THB 65CL", "Queen's 65CL"],
+  },
+] as const;
+const designationOptions = designationGroups.flatMap(({ label, options }) =>
+  label === "Matières premières" ? [...options] : options.map((option) => `${label} - ${option}`),
+);
 
 interface MatierePremiereEntry {
   id: string;
@@ -53,6 +101,7 @@ export default function DechargementMatierePremiere() {
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const selectedSiteType = site?.type || siteType;
   const selectedSiteId = site?.id || "";
+  const isLegacyDesignation = designation && !designationOptions.includes(designation);
 
   useEffect(() => {
     let active = true;
@@ -224,7 +273,29 @@ export default function DechargementMatierePremiere() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiere-designation">Désignation</Label>
-                <Input id="matiere-designation" required maxLength={160} value={designation} onChange={(event) => setDesignation(event.target.value)} />
+                <Select value={designation || undefined} onValueChange={setDesignation} required>
+                  <SelectTrigger id="matiere-designation">
+                    <SelectValue placeholder="Choisir une désignation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {designationGroups.map(({ label, options }) => (
+                      <SelectGroup key={label}>
+                        <SelectLabel>{label}</SelectLabel>
+                        {options.map((option) => {
+                          const value = label === "Matières premières" ? option : `${label} - ${option}`;
+                          const display = label === "Matières premières" ? option : option;
+                          return <SelectItem key={value} value={value}>{display}</SelectItem>;
+                        })}
+                      </SelectGroup>
+                    ))}
+                    {isLegacyDesignation && (
+                      <SelectGroup>
+                        <SelectLabel>Ancienne désignation</SelectLabel>
+                        <SelectItem value={designation}>{designation}</SelectItem>
+                      </SelectGroup>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiere-quantite">Quantité</Label>
