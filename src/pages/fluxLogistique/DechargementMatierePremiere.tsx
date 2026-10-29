@@ -3,9 +3,10 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type ChauffeurRecord } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
 import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -96,12 +97,43 @@ export default function DechargementMatierePremiere() {
   }>({ siteId: "", entries: [], error: "" });
   const [search, setSearch] = useState("");
   const [searchDate, setSearchDate] = useState("");
+  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
+    siteId: string;
+    chauffeurs: ChauffeurRecord[];
+    error: string;
+  }>({ siteId: "", chauffeurs: [], error: "" });
+  const [vehicleSuggestionsOpen, setVehicleSuggestionsOpen] = useState(false);
+  const [activeVehicleSuggestion, setActiveVehicleSuggestion] = useState(0);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const selectedSiteType = site?.type || siteType;
   const selectedSiteId = site?.id || "";
   const isLegacyDesignation = designation && !designationOptions.includes(designation);
+  const registeredChauffeurs = chauffeurRegistry.siteId === selectedSiteId
+    ? chauffeurRegistry.chauffeurs
+    : [];
+  const availableVehicles = Array.from(
+    new Map(
+      registeredChauffeurs
+        .filter((driver) => driver.vehicule?.trim())
+        .map((driver) => [driver.vehicule!.trim(), driver]),
+    ).values(),
+  );
+  const chauffeurVehiclesLoading = Boolean(selectedSiteId) && chauffeurRegistry.siteId !== selectedSiteId;
+  const chauffeursError = chauffeurRegistry.siteId === selectedSiteId ? chauffeurRegistry.error : "";
+  const selectedVehicleIsRegistered = availableVehicles.some(
+    (driver) => driver.vehicule?.trim().toLocaleLowerCase("fr") === vehicule.trim().toLocaleLowerCase("fr"),
+  );
+  const normalizedVehicleSearch = vehicule.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+  const matchingVehicles = availableVehicles.filter((driver) =>
+    !normalizedVehicleSearch ||
+    `${driver.vehicule || ""} ${driver.matricule || ""}`
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("fr")
+      .includes(normalizedVehicleSearch),
+  ).slice(0, 8);
 
   useEffect(() => {
     let active = true;
@@ -126,6 +158,23 @@ export default function DechargementMatierePremiere() {
     return () => { active = false; };
   }, [selectedSiteId]);
 
+  useEffect(() => {
+    let active = true;
+    if (!selectedSiteId) return () => { active = false; };
+    serviceApi.listChauffeurs(selectedSiteId)
+      .then((chauffeurs) => {
+        if (active) setChauffeurRegistry({ siteId: selectedSiteId, chauffeurs, error: "" });
+      })
+      .catch((error) => {
+        if (active) setChauffeurRegistry({
+          siteId: selectedSiteId,
+          chauffeurs: [],
+          error: error instanceof Error ? error.message : "Chargement des véhicules des chauffeurs impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [selectedSiteId]);
+
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
@@ -144,6 +193,8 @@ export default function DechargementMatierePremiere() {
     setQuantite("");
     setDocument("");
     setProvenance("");
+    setVehicleSuggestionsOpen(false);
+    setActiveVehicleSuggestion(0);
     setEditingId(null);
   };
 
@@ -161,6 +212,18 @@ export default function DechargementMatierePremiere() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (chauffeurVehiclesLoading) {
+      toast.error("Veuillez attendre le chargement des véhicules des chauffeurs.");
+      return;
+    }
+    if (chauffeursError) {
+      toast.error("Impossible de vérifier les véhicules enregistrés. Réessayez après le chargement du module Chauffeurs.");
+      return;
+    }
+    if (!selectedVehicleIsRegistered) {
+      toast.error("Ce véhicule n’est pas enregistré dans le module Chauffeurs pour ce site.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -256,6 +319,8 @@ export default function DechargementMatierePremiere() {
               onChange={(name, type) => {
                 setSiteName(name);
                 setSiteType(type);
+                setVehicule("");
+                setVehicleSuggestionsOpen(false);
               }}
             />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -269,7 +334,81 @@ export default function DechargementMatierePremiere() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiere-vehicule">Véhicule</Label>
-                <Input id="matiere-vehicule" required maxLength={160} value={vehicule} onChange={(event) => setVehicule(event.target.value)} />
+                <Popover open={vehicleSuggestionsOpen && matchingVehicles.length > 0} onOpenChange={setVehicleSuggestionsOpen}>
+                  <PopoverAnchor asChild>
+                    <Input
+                      id="matiere-vehicule"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={vehicleSuggestionsOpen && matchingVehicles.length > 0}
+                      aria-controls="matiere-vehicle-suggestions"
+                      aria-activedescendant={matchingVehicles[activeVehicleSuggestion] ? `matiere-vehicle-option-${activeVehicleSuggestion}` : undefined}
+                      required
+                      maxLength={160}
+                      autoComplete="off"
+                      placeholder={chauffeurVehiclesLoading ? "Chargement des véhicules…" : "Rechercher un véhicule enregistré"}
+                      value={vehicule}
+                      onFocus={() => setVehicleSuggestionsOpen(true)}
+                      onChange={(event) => {
+                        setVehicule(event.target.value);
+                        setActiveVehicleSuggestion(0);
+                        setVehicleSuggestionsOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!matchingVehicles.length) return;
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveVehicleSuggestion((current) => (current + 1) % matchingVehicles.length);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveVehicleSuggestion((current) => (current - 1 + matchingVehicles.length) % matchingVehicles.length);
+                        } else if (event.key === "Enter" && vehicleSuggestionsOpen) {
+                          event.preventDefault();
+                          setVehicule(matchingVehicles[activeVehicleSuggestion]?.vehicule?.trim() || "");
+                          setVehicleSuggestionsOpen(false);
+                        } else if (event.key === "Escape") {
+                          setVehicleSuggestionsOpen(false);
+                        }
+                      }}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    id="matiere-vehicle-suggestions"
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] p-1"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <ul role="listbox" aria-label="Véhicules enregistrés" className="max-h-52 overflow-y-auto">
+                      {matchingVehicles.map((driver, index) => (
+                        <li key={`${driver.id}-${driver.vehicule}`} role="presentation">
+                          <button
+                            id={`matiere-vehicle-option-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={index === activeVehicleSuggestion}
+                            className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeVehicleSuggestion ? "bg-accent" : ""}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setVehicule(driver.vehicule?.trim() || "");
+                              setVehicleSuggestionsOpen(false);
+                            }}
+                          >
+                            {driver.vehicule?.trim()}
+                            {driver.matricule && <span className="ml-2 text-muted-foreground">— {driver.matricule}</span>}
+                            <span className="ml-2 text-muted-foreground">({driver.nomPrenom})</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                {chauffeursError
+                  ? <p role="alert" className="text-xs text-destructive">{chauffeursError}</p>
+                  : !chauffeurVehiclesLoading && vehicule.trim() && !selectedVehicleIsRegistered
+                    ? <p role="alert" className="text-xs text-destructive">Ce véhicule n’est pas enregistré dans le module Chauffeurs pour ce site.</p>
+                    : !chauffeurVehiclesLoading && availableVehicles.length === 0
+                      ? <p className="text-xs text-muted-foreground">Aucun véhicule n’est enregistré. Ajoutez d’abord un véhicule dans le module Chauffeurs.</p>
+                      : <p className="text-xs text-muted-foreground">Sélectionnez un véhicule enregistré dans le module Chauffeurs.</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiere-designation">Désignation</Label>

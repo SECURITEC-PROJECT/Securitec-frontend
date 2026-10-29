@@ -3,8 +3,9 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type ChauffeurRecord } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
 import { Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -30,6 +31,9 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 const nowTime = () => new Date().toTimeString().slice(0, 5);
+const normalizeName = (value: string) =>
+  value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toLocaleLowerCase("fr");
+
 export default function DepotageFuelGasoil() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
@@ -53,11 +57,27 @@ export default function DepotageFuelGasoil() {
   }>({ siteId: "", entries: [], error: "" });
   const [search, setSearch] = useState("");
   const [searchDate, setSearchDate] = useState("");
+  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
+    siteId: string;
+    chauffeurs: ChauffeurRecord[];
+    error: string;
+  }>({ siteId: "", chauffeurs: [], error: "" });
+  const [chauffeurSuggestionsOpen, setChauffeurSuggestionsOpen] = useState(false);
+  const [activeChauffeurSuggestion, setActiveChauffeurSuggestion] = useState(0);
+  const [selectedChauffeurId, setSelectedChauffeurId] = useState("");
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const selectedSiteType = site?.type || siteType;
   const selectedSiteId = site?.id || "";
+  const registeredChauffeurs = chauffeurRegistry.siteId === selectedSiteId
+    ? chauffeurRegistry.chauffeurs
+    : [];
+  const chauffeurLoading = Boolean(selectedSiteId) && chauffeurRegistry.siteId !== selectedSiteId;
+  const chauffeursError = chauffeurRegistry.siteId === selectedSiteId ? chauffeurRegistry.error : "";
+  const matchingChauffeurs = registeredChauffeurs.filter((driver) =>
+    !normalizeName(chauffeur) || normalizeName(driver.nomPrenom).includes(normalizeName(chauffeur)),
+  ).slice(0, 8);
 
   useEffect(() => {
     let active = true;
@@ -82,6 +102,40 @@ export default function DepotageFuelGasoil() {
     return () => { active = false; };
   }, [selectedSiteId]);
 
+  useEffect(() => {
+    let active = true;
+    if (!selectedSiteId) return () => { active = false; };
+    serviceApi.listChauffeurs(selectedSiteId)
+      .then((chauffeurs) => {
+        if (active) setChauffeurRegistry({ siteId: selectedSiteId, chauffeurs, error: "" });
+      })
+      .catch((error) => {
+        if (active) setChauffeurRegistry({
+          siteId: selectedSiteId,
+          chauffeurs: [],
+          error: error instanceof Error ? error.message : "Chargement des chauffeurs impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [selectedSiteId]);
+
+  const selectChauffeur = (driver: ChauffeurRecord) => {
+    setSelectedChauffeurId(driver.id);
+    setChauffeur(driver.nomPrenom);
+    setChauffeurSuggestionsOpen(false);
+  };
+
+  const changeChauffeurName = (value: string) => {
+    setSelectedChauffeurId("");
+    setChauffeur(value);
+    setActiveChauffeurSuggestion(0);
+    setChauffeurSuggestionsOpen(true);
+    const exactMatches = registeredChauffeurs.filter(
+      (driver) => normalizeName(driver.nomPrenom) === normalizeName(value),
+    );
+    if (exactMatches.length === 1) selectChauffeur(exactMatches[0]);
+  };
+
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
@@ -104,6 +158,8 @@ export default function DepotageFuelGasoil() {
     setCree("");
     setChauffeur("");
     setMagasinier("");
+    setChauffeurSuggestionsOpen(false);
+    setSelectedChauffeurId("");
     setEditingId(null);
   };
 
@@ -117,12 +173,30 @@ export default function DepotageFuelGasoil() {
     setQuantite(entry.quantite == null ? "" : String(entry.quantite));
     setCree(entry.cree || "");
     setChauffeur(entry.chauffeur || "");
+    setSelectedChauffeurId("");
+    setChauffeurSuggestionsOpen(false);
     setMagasinier(entry.magasinier || "");
+    const exactMatches = registeredChauffeurs.filter(
+      (driver) => normalizeName(driver.nomPrenom) === normalizeName(entry.chauffeur || ""),
+    );
+    if (exactMatches.length === 1) setSelectedChauffeurId(exactMatches[0].id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (chauffeurLoading) {
+      toast.error("Veuillez attendre le chargement des fiches chauffeurs.");
+      return;
+    }
+    if (chauffeursError) {
+      toast.error("Impossible de vérifier les chauffeurs enregistrés. Réessayez après le chargement.");
+      return;
+    }
+    if (!registeredChauffeurs.some((driver) => driver.id === selectedChauffeurId)) {
+      toast.error("Sélectionnez un chauffeur enregistré pour ce site.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -219,6 +293,9 @@ export default function DepotageFuelGasoil() {
               onChange={(name, type) => {
                 setSiteName(name);
                 setSiteType(type);
+                setChauffeur("");
+                setSelectedChauffeurId("");
+                setChauffeurSuggestionsOpen(false);
               }}
             />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -270,7 +347,75 @@ export default function DepotageFuelGasoil() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fuel-chauffeur">Chauffeur</Label>
-                <Input id="fuel-chauffeur" required maxLength={160} value={chauffeur} onChange={(event) => setChauffeur(event.target.value)} />
+                <Popover open={chauffeurSuggestionsOpen && matchingChauffeurs.length > 0} onOpenChange={setChauffeurSuggestionsOpen}>
+                  <PopoverAnchor asChild>
+                    <Input
+                      id="fuel-chauffeur"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={chauffeurSuggestionsOpen && matchingChauffeurs.length > 0}
+                      aria-controls="fuel-driver-suggestions"
+                      aria-activedescendant={matchingChauffeurs[activeChauffeurSuggestion] ? `fuel-driver-option-${activeChauffeurSuggestion}` : undefined}
+                      required
+                      maxLength={160}
+                      autoComplete="off"
+                      placeholder={chauffeurLoading ? "Chargement des chauffeurs…" : "Rechercher un chauffeur enregistré"}
+                      value={chauffeur}
+                      onFocus={() => setChauffeurSuggestionsOpen(true)}
+                      onChange={(event) => changeChauffeurName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (!matchingChauffeurs.length) return;
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveChauffeurSuggestion((current) => (current + 1) % matchingChauffeurs.length);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveChauffeurSuggestion((current) => (current - 1 + matchingChauffeurs.length) % matchingChauffeurs.length);
+                        } else if (event.key === "Enter" && chauffeurSuggestionsOpen) {
+                          event.preventDefault();
+                          const driver = matchingChauffeurs[activeChauffeurSuggestion];
+                          if (driver) selectChauffeur(driver);
+                        } else if (event.key === "Escape") {
+                          setChauffeurSuggestionsOpen(false);
+                        }
+                      }}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    id="fuel-driver-suggestions"
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] p-1"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <ul role="listbox" aria-label="Chauffeurs enregistrés" className="max-h-52 overflow-y-auto">
+                      {matchingChauffeurs.map((driver, index) => (
+                        <li key={driver.id} role="presentation">
+                          <button
+                            id={`fuel-driver-option-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={index === activeChauffeurSuggestion}
+                            className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeChauffeurSuggestion ? "bg-accent" : ""}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => selectChauffeur(driver)}
+                          >
+                            {driver.nomPrenom}
+                            {driver.vehicule && <span className="ml-2 text-muted-foreground">— {driver.vehicule}</span>}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                {chauffeursError
+                  ? <p role="alert" className="text-xs text-destructive">{chauffeursError}</p>
+                  : chauffeurLoading
+                    ? <p className="text-xs text-muted-foreground">Chargement des fiches chauffeurs du site…</p>
+                    : !registeredChauffeurs.length
+                      ? <p className="text-xs text-muted-foreground">Aucun chauffeur enregistré pour ce site.</p>
+                      : chauffeur.trim() && !selectedChauffeurId
+                        ? <p role="alert" className="text-xs text-destructive">Choisissez un chauffeur enregistré pour ce site.</p>
+                        : <p className="text-xs text-muted-foreground">Sélectionnez un chauffeur enregistré dans le module Chauffeurs.</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fuel-magasinier">Magasinier</Label>
