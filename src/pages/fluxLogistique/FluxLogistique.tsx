@@ -7,9 +7,23 @@ import { printRecord } from "@/lib/printRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarDays, Clock3, Pencil, Printer, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+
+const designationGroups = [
+  { label: "Palette", options: ["1055 x 1310", "1000 x 1200", "800 x 1200"] },
+  { label: "THB", options: ["en fut 30CL", "en fut 20CL", "65CL Pils C-20", "50CL Pils canette PA-24"] },
+  { label: "Queen's", options: ["65CL C20", "33CL C24"] },
+  { label: "Beaufort", options: ["50CL canette PA-24", "33CL C-24"] },
+  { label: "Gold Blanc", options: ["Fut 20L", "Fut 30L", "50CL C-20", "50CL canette PA-24", "33CL C-24"] },
+  { label: "Gold 8", options: ["50CL C-20", "50CL canette PA-24"] },
+  { label: "Gold", options: ["50CL C-20", "50CL canette PA-24"] },
+] as const;
+const designationValues = designationGroups.flatMap(({ label, options }) =>
+  options.map((option) => `${label} : ${option}`),
+);
 
 type TruckForm = {
   date: string;
@@ -63,6 +77,7 @@ export default function FluxLogistique() {
   const [search, setSearch] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = sites.find((item) => item.name === selectedSiteName);
+  const isLegacyDesignation = truckForm.designation && !designationValues.includes(truckForm.designation);
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return entries;
@@ -298,15 +313,32 @@ export default function FluxLogistique() {
             </div>
             <div className="space-y-2 sm:col-span-2 lg:col-span-4">
               <Label htmlFor="flux-designation" className="text-base font-semibold">Désignation</Label>
-              <textarea
-                id="flux-designation"
+              <Select
+                value={truckForm.designation || undefined}
+                onValueChange={(designation) => setTruckForm({ ...truckForm, designation })}
                 required
-                maxLength={20000}
-                rows={5}
-                value={truckForm.designation}
-                onChange={(event) => setTruckForm({ ...truckForm, designation: event.target.value })}
-                className="min-h-36 w-full resize-y rounded-md border border-input bg-background px-3 py-3 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
+              >
+                <SelectTrigger id="flux-designation" className="h-12 text-base">
+                  <SelectValue placeholder="Choisir une désignation" />
+                </SelectTrigger>
+                <SelectContent>
+                  {designationGroups.map(({ label, options }) => (
+                    <SelectGroup key={label}>
+                      <SelectLabel>{label}</SelectLabel>
+                      {options.map((option) => {
+                        const designation = `${label} : ${option}`;
+                        return <SelectItem key={designation} value={designation}>{option}</SelectItem>;
+                      })}
+                    </SelectGroup>
+                  ))}
+                  {isLegacyDesignation && (
+                    <SelectGroup>
+                      <SelectLabel>Ancienne désignation</SelectLabel>
+                      <SelectItem value={truckForm.designation}>{truckForm.designation}</SelectItem>
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="flux-nbr" className="text-base font-semibold">Nombre</Label>

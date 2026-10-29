@@ -3,6 +3,7 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
@@ -11,6 +12,19 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
+
+const designationGroups = [
+  { label: "Palette", options: ["1055 x 1310", "1000 x 1200", "800 x 1200"] },
+  { label: "THB", options: ["en fut 30CL", "en fut 20CL", "65CL Pils C-20", "50CL Pils canette PA-24"] },
+  { label: "Queen's", options: ["65CL C20", "33CL C24"] },
+  { label: "Beaufort", options: ["50CL canette PA-24", "33CL C-24"] },
+  { label: "Gold Blanc", options: ["Fut 20L", "Fut 30L", "50CL C-20", "50CL canette PA-24", "33CL C-24"] },
+  { label: "Gold 8", options: ["50CL C-20", "50CL canette PA-24"] },
+  { label: "Gold", options: ["50CL C-20", "50CL canette PA-24"] },
+] as const;
+const designationValues = designationGroups.flatMap(({ label, options }) =>
+  options.map((option) => `${label} : ${option}`),
+);
 
 type LoadingType = StarParticulierLoading["typeChargement"];
 type LoadingForm = Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId">;
@@ -55,6 +69,7 @@ export default function ChargementsStarParticuliers() {
   const site = useMemo(() => sites.find((item) => item.name === siteNameSelected), [sites, siteNameSelected]);
   const siteId = site?.id || "";
   const loading = Boolean(siteId) && entriesSiteId !== siteId;
+  const isLegacyDesignation = form.designation && !designationValues.includes(form.designation);
   const visibleEntries = entriesSiteId === siteId
     ? entries.filter((entry) => entry.typeChargement === form.typeChargement)
     : [];
@@ -271,11 +286,36 @@ export default function ChargementsStarParticuliers() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="loading-designation">Désignation</Label>
-              <Input id="loading-designation" required maxLength={20000} value={form.designation} onChange={(event) => setForm({ ...form, designation: event.target.value })} />
+              <Select
+                value={form.designation || undefined}
+                onValueChange={(designation) => setForm({ ...form, designation })}
+                required
+              >
+                <SelectTrigger id="loading-designation" className="h-10">
+                  <SelectValue placeholder="Choisir une désignation" />
+                </SelectTrigger>
+                <SelectContent>
+                  {designationGroups.map(({ label, options }) => (
+                    <SelectGroup key={label}>
+                      <SelectLabel>{label}</SelectLabel>
+                      {options.map((option) => {
+                        const designation = `${label} : ${option}`;
+                        return <SelectItem key={designation} value={designation}>{option}</SelectItem>;
+                      })}
+                    </SelectGroup>
+                  ))}
+                  {isLegacyDesignation && (
+                    <SelectGroup>
+                      <SelectLabel>Ancienne désignation</SelectLabel>
+                      <SelectItem value={form.designation}>{form.designation}</SelectItem>
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="loading-quantity">Quantité (texte)</Label>
-              <Input id="loading-quantity" required maxLength={5000} value={form.quantiteTexte} onChange={(event) => setForm({ ...form, quantiteTexte: event.target.value })} />
+              <Label htmlFor="loading-quantity">Quantité</Label>
+              <Input id="loading-quantity" type="number" min="0" step="1" required value={form.quantiteTexte} onChange={(event) => setForm({ ...form, quantiteTexte: event.target.value })} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-weight">Poids</Label>

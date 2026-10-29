@@ -13,16 +13,13 @@ import { printRecord } from "@/lib/printRecord";
 
 const DESIGNATION_GROUPS = [
   { label: "Bouteilles vides", options: ["Bouteilles vides - 65 Cl", "Bouteilles vides - 50 Cl", "Bouteilles vides - 33 Cl"] },
-  { label: "Fût", options: ["Fût - 30 L", "Fût - 20 L"] },
+  { label: "Fût", options: ["Fût - 30 L", "Fût - 20 L", "Fût - 20L export", "Fût - 30L export"] },
   { label: "Cageau jaune", options: ["Cageau jaune - C20", "Cageau jaune - C24"] },
   { label: "Bouteilles neuves", options: ["Bouteilles neuves - 65 Cl", "Bouteilles neuves - 50 Cl", "Bouteilles neuves - 33 Cl"] },
-  { label: "Palettes neuves", options: ["Palette neuve - 1310 x 1055", "Palette neuve - 1000 x 1200", "Palette neuve - 800 x 1200"] },
-  { label: "Palettes réparées", options: ["Palette réparée - 1310 x 1055", "Palette réparée - 1000 x 1200", "Palette réparée - 800 x 1200"] },
+  { label: "Palettes", options: ["Palette neuve - 1310 x 1055", "Palette neuve - 1000 x 1200", "Palette neuve - 800 x 1200"] },
 ] as const;
 const DESIGNATIONS = DESIGNATION_GROUPS.flatMap((group) => group.options);
-const LEGACY_DESIGNATIONS = ["65 Cl", "50 Cl", "33 Cl", "30 Cl", "1 L"] as const;
-type Designation = typeof DESIGNATIONS[number] | typeof LEGACY_DESIGNATIONS[number];
-type BottleLine = { designation: Designation | ""; quantite: string };
+type BottleLine = { designation: string; quantite: string };
 type DeliveryForm = {
   date: string;
   heureFin: string;
@@ -191,7 +188,7 @@ export default function DechargementBouteillesVides() {
       provenance: String(entry.provenance),
       poids: String(entry.poids),
       detailsBouteilles: details.map((line) => ({
-        designation: line.designation as Designation,
+        designation: line.designation,
         quantite: String(line.quantite),
       })),
     });
@@ -322,7 +319,7 @@ export default function DechargementBouteillesVides() {
                   <div key={index} className="grid grid-cols-1 items-end gap-3 rounded-lg border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.65fr)_auto]">
                     <div className="space-y-1.5">
                       <Label htmlFor={`empty-bottles-designation-${index}`}>Désignation</Label>
-                      <select id={`empty-bottles-designation-${index}`} required value={line.designation} onChange={(event) => updateLine(index, { designation: event.target.value as Designation | "" })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                      <select id={`empty-bottles-designation-${index}`} required value={line.designation} onChange={(event) => updateLine(index, { designation: event.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                         <option value="">Choisir un format</option>
                         {DESIGNATION_GROUPS.map((group) => (
                           <optgroup key={group.label} label={group.label}>
@@ -333,8 +330,8 @@ export default function DechargementBouteillesVides() {
                             ))}
                           </optgroup>
                         ))}
-                        {LEGACY_DESIGNATIONS.includes(line.designation as typeof LEGACY_DESIGNATIONS[number]) && (
-                          <option value={line.designation}>{line.designation} (ancien format)</option>
+                        {line.designation && !DESIGNATIONS.includes(line.designation as typeof DESIGNATIONS[number]) && (
+                          <option value={line.designation}>{line.designation} (ancienne désignation)</option>
                         )}
                       </select>
                     </div>
