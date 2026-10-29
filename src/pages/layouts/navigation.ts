@@ -35,7 +35,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
   { title: "CAHIERS", items: [
       { to: "/dashboard/mouvements-cles", label: "Mouvements clés", icon: KeyRound },
       { to: "/dashboard/carte-grise-permis", label: "Carte grise / Permis", icon: FileSignature },
-      { to: "/dashboard/dechets-levee", label: "Déchêt et Levure", icon: Trash2 },
+      { to: "/dashboard/dechets-levee", label: "Drèche et levure", icon: Trash2 },
       { to: "/dashboard/mouvements-aps", label: "Mouvements APS", icon: Repeat },
       { to: "/dashboard/dechargements-bennes-vides", label: "Déchargement bouteilles vides", icon: Truck },
       { to: "/dashboard/dechargements-matiere-premiere", label: "Déchargements matière première", icon: Boxes },
