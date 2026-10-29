@@ -293,7 +293,8 @@ export interface WasteScrapRegisterEntry {
   prenom: string;
   matricule: string;
   section: string;
-  designation: string;
+  designation?: string;
+  observation?: string;
   nombre?: number;
   motif?: string;
   siteId: string;
@@ -496,10 +497,10 @@ export const serviceApi = {
   async createLogistics(data: unknown) {
     return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
   },
-  async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT", data: unknown) {
+  async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", data: unknown) {
     return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=${type}`, { method: "PUT", body: body(data) });
   },
-  async deleteTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT", siteId: string) {
+  async deleteTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", siteId: string) {
     const params = new URLSearchParams({ type, siteId });
     return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
@@ -555,13 +556,13 @@ export const serviceApi = {
     return (await request<{ entries: WasteScrapRegisterEntry[] }>(`${path}?siteId=${encodeURIComponent(siteId)}`)).entries;
   },
   async createWasteScrapEntry(kind: "ordures" | "ferrailles", data: {
-    date: string; heure: string; matricule: string; designation: string; siteId: string; nombre?: number; motif?: string;
+    date: string; heure: string; matricule: string; siteId: string; designation?: string; observation?: string; nombre?: number; motif?: string;
   }) {
     const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
     return (await request<{ entry: WasteScrapRegisterEntry }>(path, { method: "POST", body: body(data) })).entry;
   },
   async updateWasteScrapEntry(kind: "ordures" | "ferrailles", id: string, data: {
-    date: string; heure: string; matricule: string; designation: string; siteId: string; nombre?: number; motif?: string;
+    date: string; heure: string; matricule: string; siteId: string; designation?: string; observation?: string; nombre?: number; motif?: string;
   }) {
     const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
     return (await request<{ entry: WasteScrapRegisterEntry }>(`${path}/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;

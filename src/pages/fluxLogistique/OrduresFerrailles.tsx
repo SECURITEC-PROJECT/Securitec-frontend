@@ -20,6 +20,7 @@ type RegisterForm = {
   date: string;
   heure: string;
   designation: string;
+  observation: string;
   nombre: string;
   motif: string;
 };
@@ -38,6 +39,7 @@ const blankForm = (): RegisterForm => ({
   date: today(),
   heure: currentTime(),
   designation: "",
+  observation: "",
   nombre: "1",
   motif: "",
 });
@@ -131,12 +133,12 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         entry.prenom,
         entry.matricule,
         entry.section,
-        entry.designation,
+        isScrap ? entry.designation : entry.observation,
         String(entry.nombre ?? ""),
         entry.motif ?? "",
       ].join(" ")).includes(query),
     );
-  }, [entries, search]);
+  }, [entries, search, isScrap]);
 
   const resetForm = () => {
     setForm(blankForm());
@@ -181,9 +183,10 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         date: form.date,
         heure: form.heure,
         matricule: employee.matricule,
-        designation: form.designation.trim(),
         siteId: site.id,
-        ...(isScrap ? { nombre, motif: form.motif.trim() } : {}),
+        ...(isScrap
+          ? { designation: form.designation.trim(), nombre, motif: form.motif.trim() }
+          : { observation: form.observation.trim() }),
       };
       const entry = editingId
         ? await serviceApi.updateWasteScrapEntry(kind, editingId, payload)
@@ -205,7 +208,8 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     setForm({
       date: entry.date.slice(0, 10),
       heure: entry.heure,
-      designation: entry.designation,
+      designation: entry.designation ?? "",
+      observation: entry.observation ?? "",
       nombre: String(entry.nombre ?? 1),
       motif: entry.motif ?? "",
     });
@@ -242,10 +246,15 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       ["Prénom", entry.prenom || "—"],
       ["Matricule", entry.matricule || "—"],
       ["Section", entry.section || "—"],
-      ["Désignation", entry.designation || "—"],
     ];
     if (isScrap) {
-      rows.push(["Nombre", String(entry.nombre ?? "—")], ["Motif", entry.motif || "—"]);
+      rows.push(
+        ["Désignation", entry.designation || "—"],
+        ["Nombre", String(entry.nombre ?? "—")],
+        ["Motif", entry.motif || "—"],
+      );
+    } else {
+      rows.push(["Observation", entry.observation || "—"]);
     }
     printRecord(isScrap ? "Enregistrement de ferraille" : "Enregistrement d’ordure", siteName, rows);
   };
@@ -257,7 +266,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       return;
     }
 
-    const headings = ["Date", "Heure", "Prénom", "Matricule", "Section", "Désignation", ...(isScrap ? ["Nombre", "Motif"] : [])];
+    const headings = ["Date", "Heure", "Prénom", "Matricule", "Section", isScrap ? "Désignation" : "Observation", ...(isScrap ? ["Nombre", "Motif"] : [])];
     const tableRows = entries.map((entry) => {
       const values = [
         formatDate(entry.date),
@@ -265,7 +274,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         entry.prenom || "—",
         entry.matricule || "—",
         entry.section || "—",
-        entry.designation || "—",
+        (isScrap ? entry.designation : entry.observation) || "—",
         ...(isScrap ? [String(entry.nombre ?? "—"), entry.motif || "—"] : []),
       ];
       return `<tr>${values.map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`;
@@ -368,8 +377,16 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
             <Input id={`${kind}-section`} readOnly required value={employee?.section || ""} placeholder="Remplie depuis la fonction de l’employé" />
           </div>
           <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-            <Label htmlFor={`${kind}-designation`}>Désignation</Label>
-            <Input id={`${kind}-designation`} required maxLength={5000} value={form.designation} onChange={(event) => setForm({ ...form, designation: event.target.value })} />
+            <Label htmlFor={`${kind}-${isScrap ? "designation" : "observation"}`}>{isScrap ? "Désignation" : "Observation"}</Label>
+            <Input
+              id={`${kind}-${isScrap ? "designation" : "observation"}`}
+              required
+              maxLength={5000}
+              value={isScrap ? form.designation : form.observation}
+              onChange={(event) => setForm(isScrap
+                ? { ...form, designation: event.target.value }
+                : { ...form, observation: event.target.value })}
+            />
           </div>
           {isScrap && <>
             <div className="space-y-1.5">
@@ -396,7 +413,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-[260px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input aria-label={`Rechercher dans le registre ${kind}`} placeholder="Rechercher date, matricule, nom, section ou désignation…" className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <Input aria-label={`Rechercher dans le registre ${kind}`} placeholder={`Rechercher date, matricule, nom, section ou ${isScrap ? "désignation" : "observation"}…`} className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
         <Button type="button" variant="outline" disabled={loading || !entries.length} onClick={printHistory}>
           <Printer className="mr-2 size-4" />
@@ -410,7 +427,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
           : <div className="overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
-                <tr>{["Date", "Heure", "Prénom", "Matricule", "Section", "Désignation", ...(isScrap ? ["Nombre", "Motif"] : []), "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
+                <tr>{["Date", "Heure", "Prénom", "Matricule", "Section", isScrap ? "Désignation" : "Observation", ...(isScrap ? ["Nombre", "Motif"] : []), "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
               </thead>
               <tbody className="divide-y">
                 {filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
@@ -419,7 +436,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
                   <td className="px-3 py-3">{entry.prenom}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.matricule}</td>
                   <td className="px-3 py-3">{entry.section}</td>
-                  <td className="whitespace-pre-wrap px-3 py-3">{entry.designation}</td>
+                  <td className="whitespace-pre-wrap px-3 py-3">{isScrap ? entry.designation : entry.observation}</td>
                   {isScrap && <><td className="px-3 py-3">{entry.nombre}</td><td className="whitespace-pre-wrap px-3 py-3">{entry.motif}</td></>}
                   <td className="whitespace-nowrap px-3 py-3">
                     <div className="flex gap-1">
