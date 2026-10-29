@@ -231,7 +231,6 @@ export default function MouvementsAPS() {
           <TabsTrigger value="pointage-aps">Pointage APS (Jour et Nuit)</TabsTrigger>
           <TabsTrigger value="module-2">Mouvement</TabsTrigger>
           <TabsTrigger value="module-3">Passation de service</TabsTrigger>
-          <TabsTrigger value="module-4">Module 4</TabsTrigger>
         </TabsList>
         <TabsContent value="pointage-aps" className="mt-0 space-y-5">
       <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service des mouvements APS">
@@ -355,14 +354,6 @@ export default function MouvementsAPS() {
             activeSiteName={sites.find((site) => site.id === activeSiteId)?.name ?? ""}
           />
         </TabsContent>
-        {(["module-4"] as const).map((module) => (
-          <TabsContent key={module} value={module} className="mt-0">
-            <section className="rounded-xl border bg-card p-6 text-center shadow-sm">
-              <h2 className="text-lg font-semibold">Module 4</h2>
-              <p className="mt-2 text-sm text-muted-foreground">Ce module sera configuré prochainement.</p>
-            </section>
-          </TabsContent>
-        ))}
       </Tabs>
     </div>
   );

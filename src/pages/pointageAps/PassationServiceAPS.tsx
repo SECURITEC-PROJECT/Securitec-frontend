@@ -4,12 +4,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
-import { serviceApi, type ApsServiceHandover } from "@/lib/service-api";
-import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { serviceApi, type ApsServiceHandover, type RegisterEmployeeOption } from "@/lib/service-api";
+import { CheckCircle, Pencil, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-type HandoverForm = Omit<ApsServiceHandover, "id" | "siteId">;
+type HandoverForm = Omit<ApsServiceHandover, "id" | "siteId" | "controleur">;
 
 const today = () => {
   const date = new Date();
@@ -27,6 +27,8 @@ const blankForm = (): HandoverForm => ({
   consigne: "",
   evenement: "",
   remarque: "",
+  cpDescendantMatricule: "",
+  cpMontantMatricule: "",
 });
 
 const fields = [
@@ -47,13 +49,28 @@ export default function PassationServiceAPS({
   activeSiteName: string;
 }) {
   const [entriesByKey, setEntriesByKey] = useState<Record<string, ApsServiceHandover[]>>({});
+  const [employeesBySite, setEmployeesBySite] = useState<Record<string, RegisterEmployeeOption[]>>({});
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<ApsServiceHandover | null>(null);
   const [form, setForm] = useState<HandoverForm>(blankForm);
   const [search, setSearch] = useState("");
   const registryKey = `${activeSiteId}:${form.date}`;
   const entries = entriesByKey[registryKey] ?? [];
+  const employees = employeesBySite[activeSiteId] ?? [];
   const loading = Boolean(activeSiteId) && !Object.hasOwn(entriesByKey, registryKey);
+  const descendantMatches = employees.find((employee) =>
+    employee.matricule.trim().toLocaleUpperCase() === form.cpDescendantMatricule.trim().toLocaleUpperCase(),
+  );
+  const montantMatches = employees.find((employee) =>
+    employee.matricule.trim().toLocaleUpperCase() === form.cpMontantMatricule.trim().toLocaleUpperCase(),
+  );
+  const requiredTextFields = [
+    form.materiel, form.chaineEst, form.chaineOuest, form.clesRendus,
+    form.clesNonRendus, form.etatDesLieux, form.consigne, form.evenement, form.remarque,
+  ];
+  const canSign = Boolean(activeSiteId)
+    && requiredTextFields.every((value) => value.trim())
+    && Boolean(descendantMatches && montantMatches);
   const normalizedSearch = search.trim().toLocaleLowerCase("fr");
   const filteredEntries = entries.filter((entry) =>
     !normalizedSearch || [
@@ -67,8 +84,24 @@ export default function PassationServiceAPS({
       entry.consigne,
       entry.evenement,
       entry.remarque,
+      entry.cpDescendantMatricule,
+      entry.cpMontantMatricule,
+      entry.controleur,
     ].some((value) => value.toLocaleLowerCase("fr").includes(normalizedSearch)),
   );
+
+  useEffect(() => {
+    if (!activeSiteId || employeesBySite[activeSiteId]) return;
+    let active = true;
+    serviceApi.listRegisterEmployees(activeSiteId)
+      .then((employeeRows) => {
+        if (active) setEmployeesBySite((current) => ({ ...current, [activeSiteId]: employeeRows }));
+      })
+      .catch((error) => {
+        if (active) toast.error(error instanceof Error ? error.message : "Chargement des employés impossible.");
+      });
+    return () => { active = false; };
+  }, [activeSiteId, employeesBySite]);
 
   useEffect(() => {
     if (!activeSiteId || Object.hasOwn(entriesByKey, registryKey)) return;
@@ -137,6 +170,8 @@ export default function PassationServiceAPS({
       consigne: entry.consigne,
       evenement: entry.evenement,
       remarque: entry.remarque,
+      cpDescendantMatricule: entry.cpDescendantMatricule,
+      cpMontantMatricule: entry.cpMontantMatricule,
     });
   };
 
@@ -170,6 +205,9 @@ export default function PassationServiceAPS({
       ["Consigne", entry.consigne],
       ["Événement", entry.evenement],
       ["Remarque", entry.remarque],
+      ["CP Descendant · matricule", entry.cpDescendantMatricule],
+      ["CP Montant · matricule", entry.cpMontantMatricule],
+      ["Contrôleur", entry.controleur],
     ]);
   };
 
@@ -179,7 +217,7 @@ export default function PassationServiceAPS({
       toast.error("Autorisez les fenêtres contextuelles pour imprimer l’historique.");
       return;
     }
-    const headers = ["Date", "Matériel", "Chaîne Est", "Chaîne Ouest", "Clés rendus", "Clés non rendus", "État des lieux", "Consigne", "Événement", "Remarque"];
+    const headers = ["Date", "Matériel", "Chaîne Est", "Chaîne Ouest", "Clés rendus", "Clés non rendus", "État des lieux", "Consigne", "Événement", "Remarque", "CP Descendant", "CP Montant", "Contrôleur"];
     const rows = entries.map((entry) => [
       formatDate(entry.date),
       entry.materiel,
@@ -191,6 +229,9 @@ export default function PassationServiceAPS({
       entry.consigne,
       entry.evenement,
       entry.remarque,
+      entry.cpDescendantMatricule,
+      entry.cpMontantMatricule,
+      entry.controleur,
     ]);
     printWindow.document.open();
     printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Passations de service</title>
@@ -214,7 +255,7 @@ export default function PassationServiceAPS({
             {(["chaineEst", "chaineOuest"] as const).map((key) => (
               <div key={key} className="space-y-1.5">
                 <Label htmlFor={`aps-handover-${key}`}>{key === "chaineEst" ? "Chaîne Est" : "Chaîne Ouest"}</Label>
-                <Input id={`aps-handover-${key}`} maxLength={100} value={form[key]} onChange={(event) => updateForm(key, event.target.value)} />
+                <Input id={`aps-handover-${key}`} required maxLength={100} value={form[key]} onChange={(event) => updateForm(key, event.target.value)} />
               </div>
             ))}
           </div>
@@ -224,6 +265,7 @@ export default function PassationServiceAPS({
                 <Label htmlFor={`aps-handover-${key}`}>{label}</Label>
                 <Textarea
                   id={`aps-handover-${key}`}
+                  required
                   maxLength={key === "materiel" ? 3000 : 5000}
                   rows={key === "materiel" || key === "clesRendus" || key === "clesNonRendus" ? 4 : 3}
                   value={form[key]}
@@ -232,10 +274,39 @@ export default function PassationServiceAPS({
               </div>
             ))}
           </div>
+          <section className="space-y-3 rounded-lg border p-4">
+            <div>
+              <h3 className="font-semibold">Signatures et validation</h3>
+              <p className="text-sm text-muted-foreground">Les matricules des deux CP servent de signatures. Le contrôleur connecté valide et enregistre la passation.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MatriculeSignatureInput
+                id="aps-handover-cp-descendant"
+                label="CP Descendant"
+                value={form.cpDescendantMatricule}
+                employees={employees}
+                onChange={(value) => updateForm("cpDescendantMatricule", value)}
+                matchedEmployee={descendantMatches}
+              />
+              <MatriculeSignatureInput
+                id="aps-handover-cp-montant"
+                label="CP Montant"
+                value={form.cpMontantMatricule}
+                employees={employees}
+                onChange={(value) => updateForm("cpMontantMatricule", value)}
+                matchedEmployee={montantMatches}
+              />
+              <div className="space-y-1.5">
+                <Label htmlFor="aps-handover-controller">Contrôleur</Label>
+                <Input id="aps-handover-controller" value="Compte connecté" readOnly aria-readonly="true" />
+                <p className="text-xs text-muted-foreground">Votre identité sera enregistrée comme contrôleur à la validation.</p>
+              </div>
+            </div>
+          </section>
           <div className="flex justify-end gap-2">
-            <Button type="submit" disabled={saving || !activeSiteId}>
-              {editing ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
-              {saving ? "Enregistrement…" : editing ? "Enregistrer les modifications" : "Ajouter la passation"}
+            <Button type="submit" disabled={saving || !canSign}>
+              {editing ? <Save className="mr-2 size-4" /> : <CheckCircle className="mr-2 size-4" />}
+              {saving ? "Validation…" : editing ? "Signer et valider les modifications" : "Signer et valider la passation"}
             </Button>
             {editing && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 size-4" />Annuler</Button>}
           </div>
@@ -271,6 +342,9 @@ export default function PassationServiceAPS({
               <th className="border-b px-3 py-3">Consigne</th>
               <th className="border-b px-3 py-3">Événement</th>
               <th className="border-b px-3 py-3">Remarque</th>
+              <th className="border-b px-3 py-3">CP Descendant</th>
+              <th className="border-b px-3 py-3">CP Montant</th>
+              <th className="border-b px-3 py-3">Contrôleur</th>
               <th className="w-32 border-b px-3 py-3 print:hidden">Actions</th>
             </tr>
           </thead>
@@ -287,6 +361,9 @@ export default function PassationServiceAPS({
                 <td className="max-w-48 whitespace-pre-wrap border-b px-3 py-3">{entry.consigne || "—"}</td>
                 <td className="max-w-48 whitespace-pre-wrap border-b px-3 py-3">{entry.evenement || "—"}</td>
                 <td className="max-w-48 whitespace-pre-wrap border-b px-3 py-3">{entry.remarque || "—"}</td>
+                <td className="whitespace-nowrap border-b px-3 py-3 font-mono text-xs">{entry.cpDescendantMatricule || "—"}</td>
+                <td className="whitespace-nowrap border-b px-3 py-3 font-mono text-xs">{entry.cpMontantMatricule || "—"}</td>
+                <td className="whitespace-nowrap border-b px-3 py-3">{entry.controleur || "—"}</td>
                 <td className="border-b px-2 py-2 print:hidden">
                   <div className="flex items-center gap-1">
                     <Button type="button" size="icon" variant="ghost" aria-label="Modifier la passation" title="Modifier" onClick={() => startEditing(entry)}><Pencil className="size-4" /></Button>
@@ -296,7 +373,7 @@ export default function PassationServiceAPS({
                 </td>
               </tr>
             ))}
-            {!loading && !filteredEntries.length && <tr><td colSpan={11} className="px-4 py-10 text-center text-muted-foreground">
+            {!loading && !filteredEntries.length && <tr><td colSpan={14} className="px-4 py-10 text-center text-muted-foreground">
               {entries.length ? "Aucune passation ne correspond à la recherche." : "Aucune passation enregistrée pour cette date."}
             </td></tr>}
           </tbody>
@@ -320,4 +397,47 @@ function escapeHtml(value: string) {
     "\"": "&quot;",
     "'": "&#39;",
   })[character] || character);
+}
+
+function MatriculeSignatureInput({
+  id,
+  label,
+  value,
+  employees,
+  onChange,
+  matchedEmployee,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  employees: RegisterEmployeeOption[];
+  onChange: (value: string) => void;
+  matchedEmployee: RegisterEmployeeOption | undefined;
+}) {
+  const listId = useId();
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label} · Matricule (signature)</Label>
+      <Input
+        id={id}
+        required
+        list={listId}
+        autoComplete="off"
+        maxLength={50}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Saisir ou sélectionner un matricule"
+      />
+      <datalist id={listId}>
+        {employees.map((employee) => (
+          <option key={employee.id} value={employee.matricule}>
+            {employee.firstName} {employee.lastName}
+          </option>
+        ))}
+      </datalist>
+      {matchedEmployee
+        ? <p className="text-xs text-emerald-600">Signataire : {matchedEmployee.firstName} {matchedEmployee.lastName}</p>
+        : <p className="text-xs text-muted-foreground">Matricule actif du site obligatoire.</p>}
+    </div>
+  );
 }

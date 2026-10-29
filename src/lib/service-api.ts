@@ -307,8 +307,13 @@ export interface ApsServiceHandover {
   consigne: string;
   evenement: string;
   remarque: string;
+  cpDescendantMatricule: string;
+  cpMontantMatricule: string;
+  controleur: string;
   siteId: string;
 }
+
+export type ApsServiceHandoverInput = Omit<ApsServiceHandover, "id" | "controleur">;
 
 export interface ApsMovementAgent {
   nom: string;
@@ -716,13 +721,13 @@ export const serviceApi = {
       `/aps-movements/service-handovers?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
     )).entries;
   },
-  async createApsServiceHandover(data: Omit<ApsServiceHandover, "id">) {
+  async createApsServiceHandover(data: ApsServiceHandoverInput) {
     return (await request<{ entry: ApsServiceHandover }>("/aps-movements/service-handovers", {
       method: "POST",
       body: body(data),
     })).entry;
   },
-  async updateApsServiceHandover(id: string, data: Omit<ApsServiceHandover, "id">) {
+  async updateApsServiceHandover(id: string, data: ApsServiceHandoverInput) {
     return (await request<{ entry: ApsServiceHandover }>(`/aps-movements/service-handovers/${encodeURIComponent(id)}`, {
       method: "PUT",
       body: body(data),
