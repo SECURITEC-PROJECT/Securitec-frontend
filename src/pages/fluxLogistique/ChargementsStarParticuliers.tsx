@@ -3,10 +3,11 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
+import { serviceApi, type ChauffeurRecord, type StarParticulierLoading } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -52,6 +53,7 @@ const emptyForm = (): LoadingForm => ({
 });
 
 const numberField = (value: string, maxLength: number) => value === "" || new RegExp(`^\\d{1,${maxLength}}$`).test(value);
+const normalizeMatricule = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("fr");
 
 export default function ChargementsStarParticuliers() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
@@ -65,9 +67,27 @@ export default function ChargementsStarParticuliers() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
+    siteId: string;
+    chauffeurs: ChauffeurRecord[];
+    error: string;
+  }>({ siteId: "", chauffeurs: [], error: "" });
+  const [vehicleSuggestionsOpen, setVehicleSuggestionsOpen] = useState(false);
+  const [activeVehicleSuggestion, setActiveVehicleSuggestion] = useState(0);
+  const [selectedChauffeurId, setSelectedChauffeurId] = useState("");
   const siteNameSelected = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === siteNameSelected), [sites, siteNameSelected]);
   const siteId = site?.id || "";
+  const registeredChauffeurs = chauffeurRegistry.siteId === siteId
+    ? chauffeurRegistry.chauffeurs
+    : [];
+  const chauffeursLoading = Boolean(siteId) && chauffeurRegistry.siteId !== siteId;
+  const chauffeursError = chauffeurRegistry.siteId === siteId ? chauffeurRegistry.error : "";
+  const chauffeursWithMatricule = registeredChauffeurs.filter((driver) => driver.matricule?.trim());
+  const matchingChauffeurs = chauffeursWithMatricule.filter((driver) =>
+    !normalizeMatricule(form.camion) || normalizeMatricule(driver.matricule || "").includes(normalizeMatricule(form.camion)),
+  ).slice(0, 8);
+  const selectedChauffeur = registeredChauffeurs.find((driver) => driver.id === selectedChauffeurId);
   const loading = Boolean(siteId) && entriesSiteId !== siteId;
   const isLegacyDesignation = form.designation && !designationValues.includes(form.designation);
   const visibleEntries = entriesSiteId === siteId
@@ -114,15 +134,67 @@ export default function ChargementsStarParticuliers() {
     return () => { active = false; };
   }, [siteId]);
 
+  useEffect(() => {
+    let active = true;
+    if (!siteId) return () => { active = false; };
+    serviceApi.listChauffeurs(siteId)
+      .then((chauffeurs) => {
+        if (active) setChauffeurRegistry({ siteId, chauffeurs, error: "" });
+      })
+      .catch((reason) => {
+        if (active) setChauffeurRegistry({
+          siteId,
+          chauffeurs: [],
+          error: reason instanceof Error ? reason.message : "Chargement des chauffeurs impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [siteId]);
+
+  const selectChauffeur = (driver: ChauffeurRecord) => {
+    setSelectedChauffeurId(driver.id);
+    setForm((current) => ({
+      ...current,
+      camion: driver.matricule?.trim() || "",
+      nomChauffeur: driver.nomPrenom,
+    }));
+    setVehicleSuggestionsOpen(false);
+  };
+
+  const changeMatricule = (camion: string) => {
+    setSelectedChauffeurId("");
+    setForm((current) => ({ ...current, camion, nomChauffeur: "" }));
+    setActiveVehicleSuggestion(0);
+    setVehicleSuggestionsOpen(true);
+    const exactMatches = chauffeursWithMatricule.filter(
+      (driver) => normalizeMatricule(driver.matricule || "") === normalizeMatricule(camion),
+    );
+    if (exactMatches.length === 1) selectChauffeur(exactMatches[0]);
+  };
+
   const resetForm = () => {
     setForm(emptyForm());
     setEditing(null);
+    setSelectedChauffeurId("");
+    setVehicleSuggestionsOpen(false);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!siteId) {
       toast.error("Sélectionnez un site de travail.");
+      return;
+    }
+    if (chauffeursLoading) {
+      toast.error("Veuillez attendre le chargement des fiches chauffeurs.");
+      return;
+    }
+    if (chauffeursError) {
+      toast.error("Impossible de vérifier les chauffeurs enregistrés. Réessayez après le chargement.");
+      return;
+    }
+    if (!selectedChauffeur || normalizeMatricule(selectedChauffeur.matricule || "") !== normalizeMatricule(form.camion)) {
+      toast.error("Sélectionnez un véhicule (matricule) enregistré pour associer son chauffeur.");
       return;
     }
     if (!numberField(form.lp, 6) || !numberField(form.titre, 8) || !numberField(form.plomb, 8)) {
@@ -168,6 +240,7 @@ export default function ChargementsStarParticuliers() {
   };
 
   const editEntry = (entry: StarParticulierLoading) => {
+    setSelectedChauffeurId("");
     setEditing(entry);
     setForm({
       typeChargement: entry.typeChargement,
@@ -185,6 +258,13 @@ export default function ChargementsStarParticuliers() {
       titre: entry.titre,
       plomb: entry.plomb,
     });
+    const exactMatches = chauffeursWithMatricule.filter(
+      (driver) =>
+        normalizeMatricule(driver.matricule || "") === normalizeMatricule(entry.camion)
+        && driver.nomPrenom.trim().toLocaleLowerCase("fr") === entry.nomChauffeur.trim().toLocaleLowerCase("fr"),
+    );
+    if (exactMatches.length === 1) setSelectedChauffeurId(exactMatches[0].id);
+    setVehicleSuggestionsOpen(false);
   };
 
   const deleteEntry = async (entry: StarParticulierLoading) => {
@@ -243,7 +323,11 @@ export default function ChargementsStarParticuliers() {
           sites={sites}
           canCreate={canCreateSite}
           onAdd={addSite}
-          onChange={(name, type) => { setSiteName(name); setSiteType(type); resetForm(); }}
+          onChange={(name, type) => {
+            setSiteName(name);
+            setSiteType(type);
+            resetForm();
+          }}
         />
       </div>
       {(siteError || loadError) && (
@@ -274,7 +358,76 @@ export default function ChargementsStarParticuliers() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-vehicle">Véhicule (matricule)</Label>
-              <Input id="loading-vehicle" required maxLength={160} value={form.camion} onChange={(event) => setForm({ ...form, camion: event.target.value })} />
+              <Popover open={vehicleSuggestionsOpen && matchingChauffeurs.length > 0} onOpenChange={setVehicleSuggestionsOpen}>
+                <PopoverAnchor asChild>
+                  <Input
+                    id="loading-vehicle"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={vehicleSuggestionsOpen && matchingChauffeurs.length > 0}
+                    aria-controls="loading-vehicle-suggestions"
+                    aria-activedescendant={matchingChauffeurs[activeVehicleSuggestion] ? `loading-vehicle-option-${activeVehicleSuggestion}` : undefined}
+                    required
+                    maxLength={160}
+                    autoComplete="off"
+                    placeholder={chauffeursLoading ? "Chargement des chauffeurs…" : "Rechercher un matricule enregistré"}
+                    value={form.camion}
+                    onFocus={() => setVehicleSuggestionsOpen(true)}
+                    onChange={(event) => changeMatricule(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (!matchingChauffeurs.length) return;
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setActiveVehicleSuggestion((current) => (current + 1) % matchingChauffeurs.length);
+                      } else if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setActiveVehicleSuggestion((current) => (current - 1 + matchingChauffeurs.length) % matchingChauffeurs.length);
+                      } else if (event.key === "Enter" && vehicleSuggestionsOpen) {
+                        event.preventDefault();
+                        const driver = matchingChauffeurs[activeVehicleSuggestion];
+                        if (driver) selectChauffeur(driver);
+                      } else if (event.key === "Escape") {
+                        setVehicleSuggestionsOpen(false);
+                      }
+                    }}
+                  />
+                </PopoverAnchor>
+                <PopoverContent
+                  id="loading-vehicle-suggestions"
+                  align="start"
+                  className="w-[var(--radix-popover-trigger-width)] p-1"
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                >
+                  <ul role="listbox" aria-label="Véhicules enregistrés avec leur chauffeur" className="max-h-52 overflow-y-auto">
+                    {matchingChauffeurs.map((driver, index) => (
+                      <li key={driver.id} role="presentation">
+                        <button
+                          id={`loading-vehicle-option-${index}`}
+                          type="button"
+                          role="option"
+                          aria-selected={index === activeVehicleSuggestion}
+                          className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeVehicleSuggestion ? "bg-accent" : ""}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectChauffeur(driver)}
+                        >
+                          <span>{driver.matricule}</span>
+                          <span className="ml-2 text-muted-foreground">— {driver.nomPrenom}</span>
+                          {driver.vehicule && <span className="ml-2 text-muted-foreground">({driver.vehicule})</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </PopoverContent>
+              </Popover>
+              {chauffeursError
+                ? <p role="alert" className="text-xs text-destructive">{chauffeursError}</p>
+                : chauffeursLoading
+                  ? <p className="text-xs text-muted-foreground">Chargement des fiches chauffeurs du site…</p>
+                  : !chauffeursWithMatricule.length
+                    ? <p className="text-xs text-muted-foreground">Aucun matricule enregistré. Ajoutez-en un dans le module Chauffeurs.</p>
+                    : form.camion.trim() && !selectedChauffeur
+                      ? <p role="alert" className="text-xs text-destructive">Choisissez un matricule dans les chauffeurs enregistrés.</p>
+                      : <p className="text-xs text-muted-foreground">Sélectionnez un matricule enregistré pour renseigner le chauffeur automatiquement.</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-owner">Propriétaire</Label>
@@ -282,7 +435,15 @@ export default function ChargementsStarParticuliers() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-driver">Nom chauffeur</Label>
-              <Input id="loading-driver" required maxLength={255} value={form.nomChauffeur} onChange={(event) => setForm({ ...form, nomChauffeur: event.target.value })} />
+              <Input
+                id="loading-driver"
+                required
+                maxLength={255}
+                value={form.nomChauffeur}
+                readOnly
+                className="bg-muted/50"
+                placeholder="Rempli depuis la fiche chauffeur"
+              />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="loading-designation">Désignation</Label>
