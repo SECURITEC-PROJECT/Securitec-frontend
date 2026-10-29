@@ -8,6 +8,7 @@ import Vehicule from '@/pages/agentAccueil/vehicule/Vehicule';
 import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
 import Alcootest from '@/pages/agentControle/controleAcces/Alcootest';
 import Rondes from '@/pages/agentControle/ronde/Rondes';
+import PointsVigilance from '@/pages/agentControle/ronde/PointsVigilance';
 import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
 import MainCourante from '@/pages/agentSupVideo/mainCourante/MainCourante';
 import Courrier from '@/pages/courrier/Courrier';
@@ -101,6 +102,7 @@ export default function App() {
           <Route path="controle-acces" element={<ControleAcces />} />
           <Route path="flux-logistiques" element={<FluxLogistique />} />
           <Route path="rondes" element={<Rondes />} />
+          <Route path="points-vigilance" element={<PointsVigilance />} />
           <Route path="cameras" element={<Cameras />} />
           <Route path="main-courante" element={<MainCourante />} />
           <Route path="comptes-rendus" element={<CompteRendu />} />

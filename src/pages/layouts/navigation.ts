@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   FileWarning,
   Package,
+  ShieldAlert,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -42,6 +43,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/courrier", label: "Courrier", icon: Mail },
       { to: "/dashboard/anomalie", label: "Anomalie", icon: AlertTriangle },
       { to: "/dashboard/rondes", label: "Patrouille ou ronde", icon: RouteIcon },
+      { to: "/dashboard/points-vigilance", label: "Points de vigilance", icon: ShieldAlert },
       { to: "/dashboard/consigne", label: "Consignes", icon: FileWarning },
       { to: "/dashboard/chargements-star-particuliers", label: "Chargements Star et particuliers", icon: Truck },
       { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitant", icon: Wrench },

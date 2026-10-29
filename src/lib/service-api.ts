@@ -115,6 +115,19 @@ export interface EmployeeRecord {
   siteName: string | null;
 }
 
+export interface VigilanceEntry {
+  id: string;
+  typePoint: string;
+  elementVerifie: string;
+  statut: string;
+  observations: string | null;
+  heure: string;
+  agentNom: string;
+  createdAt: string;
+  siteId: string;
+  siteName: string;
+}
+
 export type VisitorQuestionnaireAnswer = "ENY" | "TSIA" | "";
 
 export interface VisitorQuestionnaireData {
@@ -486,7 +499,7 @@ export const serviceApi = {
   async startPatrol(data: unknown) { return (await request<{ patrol: any }>("/patrols", { method: "POST", body: body(data) })).patrol; },
   async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[]) { return (await request<{ patrol: any }>(`/patrols/${id}`, { method: "PATCH", body: body({ checkpoints }) })).patrol; },
   async finishPatrol(id: string, observations: string) { return (await request<{ patrol: any }>(`/patrols/${id}/finish`, { method: "POST", body: body({ observations }) })).patrol; },
-  async listVigilance(siteId?: string) { return (await request<{ entries: any[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
+  async listVigilance(siteId?: string) { return (await request<{ entries: VigilanceEntry[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createVigilance(data: unknown) { return request<{ entries: any[] }>("/vigilance", { method: "POST", body: body(data) }); },
   async listMainCourante(siteId?: string) { return (await request<{ entries: any[] }>(`/main-courante${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createMainCourante(data: unknown) { return request<{ entry: any }>("/main-courante", { method: "POST", body: body(data) }); },

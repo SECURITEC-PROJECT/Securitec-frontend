@@ -120,3 +120,85 @@
   .auth-brand-copy, .auth-brand > div:last-child { display: none; }
   .auth-form-area { padding: 32px 24px; }
 }
+
+.crj-section-print-meta {
+  display: none;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
+@media print {
+  body.crj-printing-single {
+    background: white !important;
+  }
+
+  body.crj-printing-single #root {
+    display: block;
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  body.crj-printing-single #root > * {
+    visibility: hidden !important;
+  }
+
+  body.crj-printing-single .crj-print-root {
+    position: static;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  body.crj-printing-single .crj-print-root > :last-child {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  body.crj-printing-single .crj-print-root [data-print-section] {
+    display: none !important;
+  }
+
+  body.crj-printing-single .crj-print-root [data-print-section][data-print-selected="true"] {
+    position: fixed;
+    inset: 0 auto auto 0;
+    display: block !important;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+    visibility: visible !important;
+  }
+
+  body.crj-printing-single .crj-print-root [data-print-section][data-print-selected="true"] * {
+    visibility: visible !important;
+  }
+
+  body.crj-printing-single .crj-section-print-meta {
+    display: block !important;
+    margin-bottom: 8mm;
+    border-bottom: 1px solid black;
+    padding-bottom: 3mm;
+    text-align: center;
+  }
+
+  body.crj-printing-single .crj-section-print-meta h1 {
+    margin: 0 0 3mm;
+    font-size: 14pt;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  body.crj-printing-single .crj-section-print-meta p {
+    font-size: 9pt;
+  }
+}

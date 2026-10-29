@@ -4,55 +4,30 @@ import { Input } from "@/components/ui/input";
 import { CheckCircle2, ShieldAlert } from "lucide-react";
 import React, { useState } from "react";
 import { toast } from "sonner";
-
-const VIGILANCE_SCHEMA = [
-  { type: "GROUPE ELECTROGENE", elements: ["Fermeture du local"] },
-  { type: "ECLAIRAGE EXTERIEUR", elements: ["Fonctionnement"] },
-  { type: "CLOTURE PERIMETRIQUE", elements: ["Murs", "Barbelés"] },
-  {
-    type: "FERMETURE DES LOCAUX",
-    elements: [
-      "Portes & fenêtres bureaux",
-      "Portails magasins avec cadenas",
-      "Locaux techniques",
-    ],
-  },
-  {
-    type: "INTEGRITE DES VEHICULES STAR",
-    elements: [
-      "Fermeture des portières & vitres",
-      "Roue de secours & batterie",
-      "Feux & rétroviseurs",
-      "Fermeture réservoir",
-      "État général de la carrosserie",
-      "Fermeture top case pour moto",
-    ],
-  },
-];
-
 import { serviceApi } from "@/lib/service-api";
+import { VIGILANCE_SCHEMA } from "./vigilanceSchema";
 
 interface FormVigilanceProps {
   siteId?: string;
   onRefresh?: () => void;
 }
 
+type VigilanceFormItem = {
+  typePoint: string;
+  elementVerifie: string;
+  statut: string;
+  observations: string;
+};
+
 export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps) {
-  // Initialisation dynamique basée sur la grille exacte du modèle CRJ
-  const [items, setItems] = useState(() => {
-    const list: any[] = [];
-    VIGILANCE_SCHEMA.forEach((group) => {
-      group.elements.forEach((elem) => {
-        list.push({
-          typePoint: group.type,
-          elementVerifie: elem,
-          statut: "Conforme",
-          observations: "",
-        });
-      });
-    });
-    return list;
-  });
+  const [items, setItems] = useState<VigilanceFormItem[]>(() =>
+    VIGILANCE_SCHEMA.flatMap((group) => group.elements.map((elementVerifie) => ({
+      typePoint: group.type,
+      elementVerifie,
+      statut: "Conforme",
+      observations: "",
+    }))),
+  );
 
   const [agentNom, setAgentNom] = useState("");
   const [saving, setSaving] = useState(false);
@@ -96,7 +71,7 @@ export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps)
   };
 
   return (
-    <Panel title="7 - Points de Vigilance (Contrôle CRJ)">
+    <Panel title="Points de vigilance">
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">
         <div className="bg-muted/50 p-3 rounded-md flex items-center justify-between">
           <div className="flex items-center gap-2">

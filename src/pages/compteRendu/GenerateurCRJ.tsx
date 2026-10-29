@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { VIGILANCE_SCHEMA } from "@/pages/agentControle/ronde/vigilanceSchema";
 
 interface CleLigne {
   lieu: string;
@@ -41,17 +43,70 @@ export interface CRJData {
 
 const dash = (v?: string) => (v && v.trim() ? v : '-');
 
+type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "vigilance" | "rondes";
+
+function PrintSectionTitle({ id, title, onPrint }: { id: PrintSectionId; title: string; onPrint: (id: PrintSectionId) => void }) {
+  return (
+    <div className="mb-1 flex items-center justify-between gap-2 border-b border-black">
+      <h4 className="font-bold">{title}</h4>
+      <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs print:hidden" onClick={() => onPrint(id)}>
+        <Printer className="h-3 w-3" /> A4
+      </Button>
+    </div>
+  );
+}
+
+function PrintMeta({ data }: { data: Pick<CRJData, "siteType" | "prestataire" | "siteNom" | "date"> }) {
+  return (
+    <div className="crj-section-print-meta">
+      <h1>RAPPORT JOURNALIER {data.siteType}</h1>
+      <p className="flex flex-wrap justify-center gap-x-4">
+        <span><strong>PRESTATAIRE :</strong> {data.prestataire}</span>
+        <span><strong>SITE :</strong> {data.siteNom}</span>
+        <span><strong>DATE :</strong> {data.date}</span>
+      </p>
+    </div>
+  );
+}
+
 export default function GenerateurCRJ({ data }: { data: CRJData }) {
+  const [printSection, setPrintSection] = useState<PrintSectionId | null>(null);
+
   const handlePrint = () => {
     window.print();
   };
 
+  const handlePrintSection = (section: PrintSectionId) => setPrintSection(section);
+
+  useEffect(() => {
+    if (!printSection) return;
+
+    const resetPrintMode = () => setPrintSection(null);
+    document.body.classList.add("crj-printing-single");
+    window.addEventListener("afterprint", resetPrintMode, { once: true });
+    window.print();
+
+    return () => {
+      document.body.classList.remove("crj-printing-single");
+      window.removeEventListener("afterprint", resetPrintMode);
+    };
+  }, [printSection]);
+
   // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
   const decalage = data.siteType === 'Agence' ? 1 : 0;
   const agentsPostes = Array.isArray(data.agentsPostes) ? data.agentsPostes : [];
+  const vigilanceRows = VIGILANCE_SCHEMA.flatMap((group) => group.elements.map((element) => ({
+    typePoint: group.type,
+    element,
+    obs: data.pointsVigilance
+      .filter((point) => point.typePoint === group.type && point.element === element)
+      .map((point) => point.obs.trim())
+      .filter((observation) => observation && observation !== "-")
+      .join(" / "),
+  })));
 
   return (
-    <div className="space-y-4">
+    <div className="crj-print-root space-y-4" data-printing-section={printSection || undefined}>
       <div className="flex justify-between items-center bg-card p-4 rounded-lg border">
         <div>
           <h3 className="font-bold text-sm">Aperçu & Génération CRJ - {data.siteType.toUpperCase()}</h3>
@@ -75,8 +130,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         </div>
 
         {/* 1 - AGENTS DE SÉCURITÉ */}
-        <div>
-          <h4 className="font-bold border-b border-black mb-1">1 - AGENTS DE SECURITE</h4>
+        <div data-print-section="agents" data-print-selected={printSection === "agents" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="agents" title="1 - AGENTS DE SECURITE" onPrint={handlePrintSection} />
           {(!data.pointageApsJourEnregistre || !data.pointageApsNuitEnregistre || !agentsPostes.length) && (
             <p className="mb-1 text-[10px] text-amber-800 print:hidden">
               {!agentsPostes.length && data.agentsPostes === undefined
@@ -119,8 +175,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         </div>
 
         {/* 2 - MOUVEMENTS DES CLÉS */}
-        <div>
-          <h4 className="font-bold border-b border-black mb-1">2 - MOUVEMENTS DES CLES (PERCEPTION ET REINTEGRATION)</h4>
+        <div data-print-section="keys" data-print-selected={printSection === "keys" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="keys" title="2 - MOUVEMENTS DES CLES (PERCEPTION ET REINTEGRATION)" onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[9px]">
             <thead>
               <tr className="bg-gray-100">
@@ -157,8 +214,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
 
         {/* 3 & 4 - FLUX LOGISTIQUES */}
         <div className="space-y-2">
-          <div>
-            <h4 className="font-bold border-b border-black mb-1">3 - DECHARGEMENT CAMIONS {data.siteType === 'Agence' && '+ VL + VD'}</h4>
+          <div data-print-section="unloading" data-print-selected={printSection === "unloading" ? "true" : undefined}>
+            <PrintMeta data={data} />
+            <PrintSectionTitle id="unloading" title={`3 - DECHARGEMENT CAMIONS ${data.siteType === "Agence" ? "+ VL + VD" : ""}`} onPrint={handlePrintSection} />
             <table className="w-full border-collapse border border-black text-center text-[9px]">
               <thead>
                 <tr className="bg-gray-100">
@@ -193,8 +251,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
             </table>
           </div>
 
-          <div>
-            <h4 className="font-bold border-b border-black mb-1">4 - CHARGEMENT CAMIONS {data.siteType === 'Agence' && '+ VL + VD'}</h4>
+          <div data-print-section="loading" data-print-selected={printSection === "loading" ? "true" : undefined}>
+            <PrintMeta data={data} />
+            <PrintSectionTitle id="loading" title={`4 - CHARGEMENT CAMIONS ${data.siteType === "Agence" ? "+ VL + VD" : ""}`} onPrint={handlePrintSection} />
             <table className="w-full border-collapse border border-black text-center text-[9px]">
               <thead>
                 <tr className="bg-gray-100">
@@ -234,8 +293,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
 
         {/* SPECIFITE AGENCE : INVENTAIRE STOCK EXTERIEUR (RUBRIQUE 5) */}
         {data.siteType === 'Agence' && (
-          <div>
-            <h4 className="font-bold border-b border-black mb-1">5 - INVENTAIRE STOCK EXTERIEUR MAGASIN</h4>
+          <div data-print-section="stock" data-print-selected={printSection === "stock" ? "true" : undefined}>
+            <PrintMeta data={data} />
+            <PrintSectionTitle id="stock" title="5 - INVENTAIRE STOCK EXTERIEUR MAGASIN" onPrint={handlePrintSection} />
             <div className="grid grid-cols-2 gap-2 text-[10px]">
               <div className="border border-black p-2">
                 <p className="font-bold underline mb-1">VIDES (Palettes & Vrac) :</p>
@@ -252,10 +312,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         )}
 
         {/* ALCOOTEST */}
-        <div>
-          <h4 className="font-bold border-b border-black mb-1">
-            {5 + decalage} - ALCOOTEST
-          </h4>
+        <div data-print-section="alcootest" data-print-selected={printSection === "alcootest" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="alcootest" title={`${5 + decalage} - ALCOOTEST`} onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -292,30 +351,40 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           </table>
         </div>
 
-        {/* ANOMALIES & VIOLATIONS */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <h4 className="font-bold border-b border-black mb-1">{6 + decalage} - ANOMALIES</h4>
-            <div className="border border-black p-2 min-h-[50px] text-[10px]">
-              {data.anomalies.length > 0 ? data.anomalies.map((a, i) => (
-                <p key={i}>• {a.heure} - Camion {a.camion} ({a.titre}): {a.obs}</p>
-              )) : <p className="text-gray-500 italic">R.A.S</p>}
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-bold border-b border-black mb-1">{7 + decalage} - VIOLATION DE PROCEDURE</h4>
-            <div className="border border-black p-2 min-h-[50px] text-[10px]">
-              {data.violations.length > 0 ? data.violations.map((v, i) => (
-                <p key={i}>• {v.heure} - {v.nomPrenom}: {v.obs} (Mesure: {v.mesures})</p>
-              )) : <p className="text-gray-500 italic">R.A.S</p>}
-            </div>
-          </div>
+        {/* POINTS DE VIGILANCE */}
+        <div data-print-section="vigilance" data-print-selected={printSection === "vigilance" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <table className="w-full border-collapse border border-black text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="w-[25%] border border-black p-1 text-left">
+                  <span>{8 + decalage} - POINTS DE VIGILANCE</span>
+                  <Button type="button" size="sm" variant="outline" className="ml-2 h-7 gap-1 px-2 text-xs print:hidden" onClick={() => handlePrintSection("vigilance")}>
+                    <Printer className="h-3 w-3" /> A4
+                  </Button>
+                </th>
+                <th colSpan={2} className="border border-black p-1 text-center">OBSERVATIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {VIGILANCE_SCHEMA.flatMap((group) => group.elements.map((element, index) => {
+                const row = vigilanceRows.find((item) => item.typePoint === group.type && item.element === element);
+                return (
+                  <tr key={`${group.type}-${element}`}>
+                    {index === 0 && <td rowSpan={group.elements.length} className="w-[25%] border border-black p-1 align-middle font-medium">{group.type}</td>}
+                    <td className="w-[18%] border border-black p-1">{element}</td>
+                    <td className="w-[57%] border border-black p-1 text-left">{row?.obs}</td>
+                  </tr>
+                );
+              }))}
+            </tbody>
+          </table>
         </div>
 
         {/* RONDES */}
-        <div>
-          <h4 className="font-bold border-b border-black mb-1">{8 + decalage} - RONDES</h4>
+        <div data-print-section="rondes" data-print-selected={printSection === "rondes" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="rondes" title={`${9 + decalage} - RONDES`} onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -330,66 +399,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <td className="border border-black p-1 font-mono">{r.debut}</td>
                   <td className="border border-black p-1 font-mono">{r.fin}</td>
                   <td className="border border-black p-1 text-left">{r.obs}</td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={3} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* POINTS DE VIGILANCE */}
-        <div>
-          <h4 className="font-bold border-b border-black mb-1">{9 + decalage} - POINTS DE VIGILANCE</h4>
-          <table className="w-full border-collapse border border-black text-center text-[10px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-black p-1">HEURE</th>
-                <th className="border border-black p-1">TYPE DE POINT</th>
-                <th className="border border-black p-1">ELEMENT VERIFIE</th>
-                <th className="border border-black p-1">STATUT</th>
-                <th className="border border-black p-1">AGENT</th>
-                <th className="border border-black p-1">OBSERVATIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.pointsVigilance.length > 0 ? data.pointsVigilance.map((v, i) => (
-                <tr key={i}>
-                  <td className="border border-black p-1 font-mono">{v.heure}</td>
-                  <td className="border border-black p-1">{v.typePoint}</td>
-                  <td className="border border-black p-1">{v.element}</td>
-                  <td className="border border-black p-1">{v.statut}</td>
-                  <td className="border border-black p-1">{v.agent}</td>
-                  <td className="border border-black p-1 text-left">{v.obs}</td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={6} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* DIVERS */}
-        <div>
-          <h4 className="font-bold border-b border-black mb-1">{10 + decalage} - DIVERS</h4>
-          <table className="w-full border-collapse border border-black text-center text-[10px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-black p-1">HEURE</th>
-                <th className="border border-black p-1">FAITS</th>
-                <th className="border border-black p-1">MESURES PRISES</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.divers.length > 0 ? data.divers.map((d, i) => (
-                <tr key={i}>
-                  <td className="border border-black p-1 font-mono">{d.dateHeure}</td>
-                  <td className="border border-black p-1 text-left">{d.faits}</td>
-                  <td className="border border-black p-1 text-left">{d.mesures}</td>
                 </tr>
               )) : (
                 <tr>
