@@ -3,8 +3,13 @@ import { Printer } from "lucide-react";
 
 interface CleLigne {
   lieu: string;
-  percMatin?: string; respPercMatin?: string; reintMatin?: string; respReintMatin?: string;
-  percApresMidi?: string; respPercApresMidi?: string; reintApresMidi?: string; respReintApresMidi?: string;
+  date: string;
+  personne: string;
+  matricule: string;
+  heureSortie: string;
+  typeCle: string;
+  nombreCles: number;
+  heureRetour: string;
 }
 
 export interface CRJData {
@@ -20,13 +25,13 @@ export interface CRJData {
   pointageApsJourEnregistre: boolean;
   pointageApsNuitEnregistre: boolean;
   cles: CleLigne[];
-  dechargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string; heureDebut: string; heureFin: string; comptage: string; destination: string }>;
-  chargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string; heureDebut: string; heureFin: string; comptage: string; destination: string }>;
+  dechargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string; heureDebut: string; heureFin: string; comptage: string; provenance: string }>;
+  chargements: Array<{ camion: string; transporteur: string; titre: string; plomb: string; heureDebut: string; heureFin: string; comptage: string; provenance: string; destination: string }>;
   stockExterieur?: {
     cv12: number; cv24: number; cv20: number; intercalaires: number;
     ev150: number; ev50: number; cr200: number; cr100: number;
   };
-  alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string; typeControle: string; taux?: string }>;
+  alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string }>;
   rondes: Array<{ debut: string; fin: string; obs: string }>;
   pointsVigilance: Array<{ heure: string; typePoint: string; element: string; statut: string; agent: string; obs: string }>;
   anomalies: Array<{ heure: string; camion: string; transporteur: string; titre: string; obs: string }>;
@@ -113,45 +118,37 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           </table>
         </div>
 
-        {/* 2 - CLES (MATIN / APRES-MIDI) */}
+        {/* 2 - MOUVEMENTS DES CLÉS */}
         <div>
-          <h4 className="font-bold border-b border-black mb-1">2 - HORAIRES DE PERCEPTION ET REINTEGRATION CLES</h4>
-          <table className="w-full border-collapse border border-black text-center text-[10px]">
+          <h4 className="font-bold border-b border-black mb-1">2 - MOUVEMENTS DES CLES (PERCEPTION ET REINTEGRATION)</h4>
+          <table className="w-full border-collapse border border-black text-center text-[9px]">
             <thead>
               <tr className="bg-gray-100">
-                <th rowSpan={2} className="border border-black p-1">LIEU / TROUSSEAU</th>
-                <th colSpan={2} className="border border-black p-1">PERCEPTION MATIN</th>
-                <th colSpan={2} className="border border-black p-1">REINTEGRATION MATIN</th>
-                <th colSpan={2} className="border border-black p-1">PERCEPTION APRES-MIDI</th>
-                <th colSpan={2} className="border border-black p-1">REINTEGRATION APRES-MIDI</th>
-              </tr>
-              <tr className="bg-gray-50">
-                <th className="border border-black p-1">Heure</th>
-                <th className="border border-black p-1">Responsable</th>
-                <th className="border border-black p-1">Heure</th>
-                <th className="border border-black p-1">Responsable</th>
-                <th className="border border-black p-1">Heure</th>
-                <th className="border border-black p-1">Responsable</th>
-                <th className="border border-black p-1">Heure</th>
-                <th className="border border-black p-1">Responsable</th>
+                <th className="border border-black p-1">DATE</th>
+                <th className="border border-black p-1">NOM ET PRÉNOM</th>
+                <th className="border border-black p-1">MATRICULE</th>
+                <th className="border border-black p-1">HEURE DE SORTIE</th>
+                <th className="border border-black p-1">TYPE DE CLÉ</th>
+                <th className="border border-black p-1">NOMBRE DE CLÉS</th>
+                <th className="border border-black p-1">HEURE DE RETOUR</th>
+                <th className="border border-black p-1">LIEU</th>
               </tr>
             </thead>
             <tbody>
               {data.cles.length > 0 ? data.cles.map((c, i) => (
                 <tr key={i}>
-                  <td className="border border-black p-1">{c.lieu}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.percMatin)}</td>
-                  <td className="border border-black p-1">{dash(c.respPercMatin)}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.reintMatin)}</td>
-                  <td className="border border-black p-1">{dash(c.respReintMatin)}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.percApresMidi)}</td>
-                  <td className="border border-black p-1">{dash(c.respPercApresMidi)}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.reintApresMidi)}</td>
-                  <td className="border border-black p-1">{dash(c.respReintApresMidi)}</td>
+                  <td className="border border-black p-1">{c.date ? new Date(c.date).toLocaleDateString("fr-FR", { timeZone: "UTC" }) : "—"}</td>
+                  <td className="border border-black p-1">{dash(c.personne)}</td>
+                  <td className="border border-black p-1 font-mono">{dash(c.matricule)}</td>
+                  <td className="border border-black p-1 font-mono">{dash(c.heureSortie)}</td>
+                  <td className="border border-black p-1">{dash(c.typeCle)}</td>
+                  <td className="border border-black p-1">{c.nombreCles}</td>
+                  <td className="border border-black p-1 font-mono">{dash(c.heureRetour)}</td>
+                  <td className="border border-black p-1">{dash(c.lieu)}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9} className="border border-black p-1 text-gray-500 italic">Aucun mouvement de clé enregistré ce jour.</td>
+                  <td colSpan={8} className="border border-black p-1 text-gray-500 italic">Aucun mouvement de clé enregistré ce jour.</td>
                 </tr>
               )}
             </tbody>
@@ -172,7 +169,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <th className="border border-black p-1">HD</th>
                   <th className="border border-black p-1">HF</th>
                   <th className="border border-black p-1">COMPTAGE</th>
-                  <th className="border border-black p-1">DESTINATION</th>
+                  <th className="border border-black p-1">PROVENANCE</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,7 +182,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1 font-mono">{d.heureDebut}</td>
                     <td className="border border-black p-1 font-mono">{d.heureFin}</td>
                     <td className="border border-black p-1">{d.comptage}</td>
-                    <td className="border border-black p-1">{d.destination}</td>
+                    <td className="border border-black p-1">{d.provenance}</td>
                   </tr>
                 )) : (
                   <tr>
@@ -208,6 +205,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <th className="border border-black p-1">HD</th>
                   <th className="border border-black p-1">HF</th>
                   <th className="border border-black p-1">COMPTAGE</th>
+                  <th className="border border-black p-1">PROVENANCE</th>
                   <th className="border border-black p-1">DESTINATION</th>
                 </tr>
               </thead>
@@ -221,11 +219,12 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1 font-mono">{c.heureDebut}</td>
                     <td className="border border-black p-1 font-mono">{c.heureFin}</td>
                     <td className="border border-black p-1">{c.comptage}</td>
+                    <td className="border border-black p-1">{c.provenance}</td>
                     <td className="border border-black p-1">{c.destination}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={8} className="border border-black p-1 text-gray-500 italic">Aucun chargement ce jour.</td>
+                    <td colSpan={9} className="border border-black p-1 text-gray-500 italic">Aucun chargement ce jour.</td>
                   </tr>
                 )}
               </tbody>
@@ -260,13 +259,17 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-black p-1">HEURE</th>
-                <th className="border border-black p-1">PERSONNE TESTEE</th>
+                <th rowSpan={2} className="border border-black p-1">HEURE</th>
+                <th colSpan={3} className="border border-black p-1">PERSONNE TESTÉE</th>
+                <th rowSpan={2} className="border border-black p-1">DEMANDEUR</th>
+                <th colSpan={2} className="border border-black p-1">RÉSULTAT</th>
+              </tr>
+              <tr className="bg-gray-100">
+                <th className="border border-black p-1">NOM &amp; PRÉNOM</th>
                 <th className="border border-black p-1">STAR</th>
                 <th className="border border-black p-1">NON STAR</th>
-                <th className="border border-black p-1">DEMANDEUR</th>
                 <th className="border border-black p-1">POSITIF</th>
-                <th className="border border-black p-1">NEGATIF</th>
+                <th className="border border-black p-1">NÉGATIF</th>
               </tr>
             </thead>
             <tbody>
@@ -276,8 +279,8 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <td className="border border-black p-1">{a.nomPrenom}</td>
                   <td className="border border-black p-1">{a.isStar ? 'X' : '-'}</td>
                   <td className="border border-black p-1">{a.isStar ? '-' : 'X'}</td>
-                  <td className="border border-black p-1">{a.demandeur || a.typeControle || '-'}</td>
-                  <td className="border border-black p-1">{a.resultat === 'Positif' ? `X${a.taux ? ` (${a.taux} g/L)` : ''}` : '-'}</td>
+                  <td className="border border-black p-1">{a.demandeur || '-'}</td>
+                  <td className="border border-black p-1">{a.resultat === 'Positif' ? 'X' : '-'}</td>
                   <td className="border border-black p-1">{a.resultat === 'Négatif' ? 'X' : '-'}</td>
                 </tr>
               )) : (
@@ -316,8 +319,8 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-black p-1">DEBUT</th>
-                <th className="border border-black p-1">FIN</th>
+                <th className="border border-black p-1">DÉBUT RONDE</th>
+                <th className="border border-black p-1">FIN RONDE</th>
                 <th className="border border-black p-1">OBSERVATIONS</th>
               </tr>
             </thead>

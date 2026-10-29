@@ -6,7 +6,7 @@ import QuestionnaireVisiteur from '@/pages/agentAccueil/QuestionnaireVisiteur';
 import DeclarationObjets from '@/pages/agentAccueil/DeclarationObjets';
 import Vehicule from '@/pages/agentAccueil/vehicule/Vehicule';
 import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
-import TestAlcool from '@/pages/agentControle/controleAcces/TestAlcool';
+import Alcootest from '@/pages/agentControle/controleAcces/Alcootest';
 import Rondes from '@/pages/agentControle/ronde/Rondes';
 import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
 import MainCourante from '@/pages/agentSupVideo/mainCourante/MainCourante';
@@ -124,9 +124,8 @@ export default function App() {
           <Route path="courrier" element={<Courrier />} />
           <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<Anomalie/>} />
-          <Route path="alcootest" element={<TestAlcool />} />
-          <Route path="test-alcool" element={<TestAlcool />} />
-          <Route path="test-alcool" element={<ControleAcces />} />
+          <Route path="alcootest" element={<Alcootest />} />
+          <Route path="test-alcool" element={<Navigate to="/dashboard/alcootest" replace />} />
           <Route path="consigne" element={<Consignes />} />
           <Route path="chargements-star-particuliers" element={<ChargementsStarParticuliers />} />
           <Route path="chargements-star-particuliers" element={<FluxLogistique />} />

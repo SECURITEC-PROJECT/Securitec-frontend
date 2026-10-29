@@ -21,9 +21,11 @@ export interface EmptyBottleDelivery {
   date: string;
   type: "BOUTEILLES_VIDES";
   heureArrivee: string;
+  heureFin: string | null;
   immatriculationVehicule: string;
   nomChauffeur: string | null;
   numeroTitre: string;
+  plomb: string | null;
   provenance: string;
   poids: string | number;
   detailsBouteilles: { designation: string; quantite: number }[];
@@ -174,6 +176,7 @@ export interface AlcoholCheck {
   heure: string;
   matricule: string;
   personne: string;
+  demandeur: string | null;
   fonction: string;
   resultat: "Positif" | "Négatif";
   tauxMesure: string | number | null;
@@ -197,6 +200,7 @@ export interface StarParticulierLoading {
   date: string;
   type: "CHARGEMENT";
   typeChargement: "STAR" | "PARTICULIER";
+  heureDebut: string | null;
   heureSortie: string;
   camion: string;
   proprietaire: string;
@@ -205,6 +209,7 @@ export interface StarParticulierLoading {
   quantiteTexte: string;
   poids: string | number;
   destinataire: string;
+  provenance: string;
   lp: string;
   titre: string;
   plomb: string;

@@ -20,7 +20,6 @@ import {
   FileSignature,
   Mail,
   AlertTriangle,
-  Beer,
   FileWarning,
   Package,
   Wrench,
@@ -42,7 +41,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/enregistrements-bon-facture-bon-sortie", label: "Enregistrements Bon / facture / Bon de sortie", icon: FileText },
       { to: "/dashboard/courrier", label: "Courrier", icon: Mail },
       { to: "/dashboard/anomalie", label: "Anomalie", icon: AlertTriangle },
-      { to: "/dashboard/test-alcool", label: "Test alcool", icon: Beer },
+      { to: "/dashboard/rondes", label: "Patrouille ou ronde", icon: RouteIcon },
       { to: "/dashboard/consigne", label: "Consignes", icon: FileWarning },
       { to: "/dashboard/chargements-star-particuliers", label: "Chargements Star et particuliers", icon: Truck },
       { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitant", icon: Wrench },
@@ -61,5 +60,5 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/comptes-rendus", label: "Rapport journalier", icon: FileText },
     ]
   },
-  { title: "ÉQUIPE & ADMINISTRATION", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }, { to: "/dashboard/documents", label: "Documents du site", icon: BookOpen }, { to: "/dashboard/cameras", label: "Caméras", icon: Video }, { to: "/dashboard/rondes", label: "Rondes & vigilance", icon: RouteIcon }] },
+  { title: "ÉQUIPE & ADMINISTRATION", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }, { to: "/dashboard/documents", label: "Documents du site", icon: BookOpen }, { to: "/dashboard/cameras", label: "Caméras", icon: Video }] },
 ];
