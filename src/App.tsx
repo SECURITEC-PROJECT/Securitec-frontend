@@ -136,8 +136,8 @@ export default function App() {
           <Route path="chargements-star-particuliers" element={<ChargementsStarParticuliers />} />
           <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
           <Route path="materiels-sous-traitant" element={<MaterielsSousTraitant />} />
-          <Route path="enregistrements-ordures" element={<FluxLogistique />} />
-          <Route path="ordures" element={<OrduresFerrailles kind="ordures" />} />
+          <Route path="enregistrements-ordures" element={<OrduresFerrailles kind="ordures" />} />
+          <Route path="ordures" element={<FluxLogistique kind="ordures" />} />
           <Route path="ferrailles" element={<OrduresFerrailles kind="ferrailles" />} />
           <Route path="mouvement-velos" element={<MouvementsDeuxRoues kind="velo" />} />
           <Route path="mouvement-moto" element={<MouvementsDeuxRoues kind="moto" />} />
