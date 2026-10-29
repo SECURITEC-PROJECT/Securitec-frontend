@@ -286,10 +286,69 @@ export interface WasteScrapRegisterEntry {
   siteId: string;
 }
 
+export interface BicycleMovement {
+  id: string;
+  date: string;
+  heureEntree: string;
+  heureSortie: string | null;
+  matricule: string;
+  prenom: string;
+  section: string;
+  marqueVelo: string;
+  siteId: string;
+}
+
+export interface MotorcycleMovement {
+  id: string;
+  date: string;
+  heureEntree: string;
+  moto: string;
+  observation: string;
+  heureSortie: string | null;
+  siteId: string;
+}
+
 export interface ApsPostConfiguration {
   name: string;
   count: number;
 }
+
+export interface ApsMovementEvent {
+  id: string;
+  date: string;
+  heureEntree: string;
+  mouvement: string;
+  observation: string;
+  heureSortie: string | null;
+  siteId: string;
+}
+
+export interface ApsServiceHandover {
+  id: string;
+  date: string;
+  materiel: string;
+  chaineEst: string;
+  chaineOuest: string;
+  clesRendus: string;
+  clesNonRendus: string;
+  etatDesLieux: string;
+  consigne: string;
+  evenement: string;
+  remarque: string;
+  cpDescendantMatricule: string;
+  cpMontantMatricule: string;
+  controleur: string;
+  siteId: string;
+}
+
+export type ApsServiceHandoverInput = Omit<ApsServiceHandover, "id" | "controleur">;
+
+export interface ApsMovementAgent {
+  nom: string;
+  matricule: string;
+}
+
+export type ApsMovementData = Record<string, ApsMovementAgent[]>;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
@@ -488,6 +547,36 @@ export const serviceApi = {
     const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
     return request<{ id: string; deleted: boolean }>(`${path}/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
+  async listBicycleMovements(siteId: string) {
+    return (await request<{ entries: BicycleMovement[] }>(`/bicycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createBicycleMovement(data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie">) {
+    return (await request<{ entry: BicycleMovement }>("/bicycle-movements", { method: "POST", body: body(data) })).entry;
+  },
+  async updateBicycleMovement(id: string, data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie">) {
+    return (await request<{ entry: BicycleMovement }>(`/bicycle-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteBicycleMovement(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/bicycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async recordBicycleExit(id: string, siteId: string) {
+    return (await request<{ entry: BicycleMovement }>(`/bicycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`, { method: "PATCH" })).entry;
+  },
+  async listMotorcycleMovements(siteId: string) {
+    return (await request<{ entries: MotorcycleMovement[] }>(`/motorcycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createMotorcycleMovement(data: Omit<MotorcycleMovement, "id" | "heureSortie">) {
+    return (await request<{ entry: MotorcycleMovement }>("/motorcycle-movements", { method: "POST", body: body(data) })).entry;
+  },
+  async updateMotorcycleMovement(id: string, data: Omit<MotorcycleMovement, "id" | "heureSortie">) {
+    return (await request<{ entry: MotorcycleMovement }>(`/motorcycle-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async recordMotorcycleExit(id: string, siteId: string) {
+    return (await request<{ entry: MotorcycleMovement }>(`/motorcycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`, { method: "PATCH" })).entry;
+  },
+  async deleteMotorcycleMovement(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/motorcycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();
     if (siteId) params.set("siteId", siteId);
@@ -609,6 +698,75 @@ export const serviceApi = {
   },
   async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]>; postes: ApsPostConfiguration[] }) {
     return request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(data) });
+  },
+  async getApsMovements(date: string, service: "jour" | "nuit", siteId: string) {
+    return request<{ data: ApsMovementData | null; postes: ApsPostConfiguration[] | null }>(
+      `/aps-movements?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`,
+    );
+  },
+  async saveApsMovementPostConfiguration(data: { siteId: string; postes: ApsPostConfiguration[] }) {
+    return request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-movements/posts", {
+      method: "PUT",
+      body: body(data),
+    });
+  },
+  async saveApsMovements(data: {
+    date: string;
+    service: "jour" | "nuit";
+    siteId: string;
+    data: ApsMovementData;
+    postes: ApsPostConfiguration[];
+  }) {
+    return request<{ saved: boolean; updatedAt: string }>("/aps-movements", {
+      method: "PUT",
+      body: body(data),
+    });
+  },
+  async listApsMovementEvents(siteId: string, date: string) {
+    return (await request<{ entries: ApsMovementEvent[] }>(
+      `/aps-movements/events?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
+    )).entries;
+  },
+  async createApsMovementEvent(data: Omit<ApsMovementEvent, "id">) {
+    return (await request<{ entry: ApsMovementEvent }>("/aps-movements/events", {
+      method: "POST",
+      body: body(data),
+    })).entry;
+  },
+  async updateApsMovementEvent(id: string, data: Omit<ApsMovementEvent, "id">) {
+    return (await request<{ entry: ApsMovementEvent }>(`/aps-movements/events/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: body(data),
+    })).entry;
+  },
+  async deleteApsMovementEvent(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(
+      `/aps-movements/events/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
+      { method: "DELETE" },
+    );
+  },
+  async listApsServiceHandovers(siteId: string, date: string) {
+    return (await request<{ entries: ApsServiceHandover[] }>(
+      `/aps-movements/service-handovers?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
+    )).entries;
+  },
+  async createApsServiceHandover(data: ApsServiceHandoverInput) {
+    return (await request<{ entry: ApsServiceHandover }>("/aps-movements/service-handovers", {
+      method: "POST",
+      body: body(data),
+    })).entry;
+  },
+  async updateApsServiceHandover(id: string, data: ApsServiceHandoverInput) {
+    return (await request<{ entry: ApsServiceHandover }>(`/aps-movements/service-handovers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: body(data),
+    })).entry;
+  },
+  async deleteApsServiceHandover(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(
+      `/aps-movements/service-handovers/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
+      { method: "DELETE" },
+    );
   },
   async listCameras(siteId?: string) { return (await request<{ cameras: any[] }>(`/cameras${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).cameras; },
   async listCameraZones(siteId?: string) { return (await request<{ zones: any[] }>(`/camera-zones${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).zones; },

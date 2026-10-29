@@ -14,6 +14,7 @@ const sidebarRoutesByRole: Record<number, string[]> = {
     "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie", 
     "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
     "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
+    "/dashboard/mouvement-velos", "/dashboard/mouvement-moto",
     "/dashboard/visiteurs", "/dashboard/materiels-star",
     "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
     "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
@@ -26,6 +27,7 @@ const sidebarRoutesByRole: Record<number, string[]> = {
     "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
     "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
     "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
+    "/dashboard/mouvement-velos", "/dashboard/mouvement-moto",
     "/dashboard/materiels-star",
     "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets"
   ],

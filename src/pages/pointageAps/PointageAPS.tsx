@@ -1,10 +1,10 @@
 import { PageHeader } from "@/components/PageHeader";
 import { CalendarDays, Plus, Printer, RotateCcw, Save, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi, type ApsPostConfiguration } from "@/lib/service-api";
+import { serviceApi, type ApsPostConfiguration, type RegisterEmployeeOption } from "@/lib/service-api";
 
 type Agent = { nom: string; prenom: string; matricule: string; heureEntree: string; heureSortie: string; observation: string };
 
@@ -45,8 +45,9 @@ const normalizeAgents = (
   return normalized;
 };
 
-export default function PointageAPS() {
+export default function PointageAPS({ showHeader = true }: { showHeader?: boolean }) {
   const { sites, siteError } = useSites();
+  const [employeesBySite, setEmployeesBySite] = useState<Record<string, RegisterEmployeeOption[]>>({});
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [siteId, setSiteId] = useState("");
   const [service, setService] = useState<"jour" | "nuit">("jour");
@@ -56,10 +57,28 @@ export default function PointageAPS() {
   const [newPostName, setNewPostName] = useState("");
   const [newPostCount, setNewPostCount] = useState(1);
   const activeSiteId = siteId || sites[0]?.id || "";
+  const employees = employeesBySite[activeSiteId] ?? [];
   const contextKey = `${activeSiteId}:${service}:${date}`;
   const agents = agentsByKey[contextKey] ?? {};
   const loading = Boolean(activeSiteId) && !Object.hasOwn(agentsByKey, contextKey);
   const displayedPostes = Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length }));
+
+  useEffect(() => {
+    if (!activeSiteId || employeesBySite[activeSiteId]) return;
+    let active = true;
+    serviceApi.listRegisterEmployees(activeSiteId)
+      .then((employeeRows) => {
+        if (active) {
+          setEmployeesBySite((current) => ({ ...current, [activeSiteId]: employeeRows }));
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "Chargement des employés impossible.");
+        }
+      });
+    return () => { active = false; };
+  }, [activeSiteId, employeesBySite]);
 
   useEffect(() => {
     if (!activeSiteId) return;
@@ -185,7 +204,7 @@ export default function PointageAPS() {
   };
 
   return <div className="space-y-5">
-    <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />
+    {showHeader && <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />}
     <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service de pointage">
       {(["jour", "nuit"] as const).map((item) => <button key={item} role="tab" aria-selected={service === item} onClick={() => setService(item)} className={`rounded-md px-5 py-2 text-sm font-medium capitalize transition-colors ${service === item ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-background"}`}>{item}</button>)}
     </div>
@@ -252,11 +271,15 @@ export default function PointageAPS() {
             poste={poste.name}
             index={index}
             value={agent.matricule ?? ""}
+            employees={employees}
             onChange={(value) => {
               update(poste.name, index, "matricule", value);
               setAgentIdentity(poste.name, index, { nom: "", prenom: "" });
             }}
-            onEmployeeFound={(identity) => setAgentIdentity(poste.name, index, identity)}
+            onEmployeeSelected={(employee) => setAgentIdentity(poste.name, index, {
+              nom: employee.lastName,
+              prenom: employee.firstName,
+            })}
           /></td>
           <td className="border-b px-3 py-2"><input aria-label={`Heure entree ${poste.name} ${index + 1}`} type="time" value={agent.heureEntree ?? ""} onChange={(e) => update(poste.name, index, "heureEntree", e.target.value)} className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
           <td className="border-b px-3 py-2"><input aria-label={`Heure sortie ${poste.name} ${index + 1}`} type="time" value={agent.heureSortie ?? ""} onChange={(e) => update(poste.name, index, "heureSortie", e.target.value)} className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background" /></td>
@@ -272,68 +295,51 @@ function MatriculeAgentInput({
   poste,
   index,
   value,
+  employees,
   onChange,
-  onEmployeeFound,
+  onEmployeeSelected,
 }: {
   poste: string;
   index: number;
   value: string;
+  employees: RegisterEmployeeOption[];
   onChange: (value: string) => void;
-  onEmployeeFound: (identity: Pick<Agent, "nom" | "prenom">) => void;
+  onEmployeeSelected: (employee: RegisterEmployeeOption) => void;
 }) {
-  const [status, setStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
-  const onEmployeeFoundRef = useRef(onEmployeeFound);
-  const matricule = value.trim();
+  const listId = useId();
+  const onEmployeeSelectedRef = useRef(onEmployeeSelected);
+  const normalizedMatricule = value.trim().toLocaleUpperCase();
+  const exactMatch = normalizedMatricule
+    ? employees.find((employee) => employee.matricule.trim().toLocaleUpperCase() === normalizedMatricule)
+    : undefined;
 
   useEffect(() => {
-    onEmployeeFoundRef.current = onEmployeeFound;
-  }, [onEmployeeFound]);
+    onEmployeeSelectedRef.current = onEmployeeSelected;
+  }, [onEmployeeSelected]);
 
   useEffect(() => {
-    if (!matricule) return;
-
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setStatus("loading");
-      serviceApi.lookupEmployeeByMatricule(matricule, controller.signal)
-        .then((employee) => {
-          if (controller.signal.aborted) return;
-          if (!employee) {
-            onEmployeeFoundRef.current({ nom: "", prenom: "" });
-            setStatus("missing");
-            return;
-          }
-          onEmployeeFoundRef.current({ nom: employee.nom, prenom: employee.prenom });
-          setStatus("found");
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) setStatus("error");
-        });
-    }, 350);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [matricule]);
+    if (exactMatch) onEmployeeSelectedRef.current(exactMatch);
+  }, [exactMatch]);
 
   return (
     <div>
       <input
         aria-label={`Matricule ${poste} ${index + 1}`}
         value={value}
+        list={listId}
+        autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
         placeholder="Saisir un matricule"
         className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 outline-none focus:border-input focus:bg-background"
       />
-      {matricule && status !== "idle" && (
-        <span className={`block text-[10px] ${status === "found" ? "text-emerald-600" : status === "missing" || status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
-          {status === "loading" && "Recherche…"}
-          {status === "found" && "Employé trouvé"}
-          {status === "missing" && "Matricule introuvable"}
-          {status === "error" && "Recherche impossible"}
-        </span>
-      )}
+      <datalist id={listId}>
+        {employees.map((employee) => (
+          <option key={employee.id} value={employee.matricule}>
+            {employee.firstName} {employee.lastName} · Section : {employee.section || "—"}
+          </option>
+        ))}
+      </datalist>
+      {exactMatch && <span className="block text-[10px] text-emerald-600">Employé trouvé</span>}
     </div>
   );
 }

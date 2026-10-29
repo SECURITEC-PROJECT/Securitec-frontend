@@ -102,7 +102,7 @@ export default function FluxLogistique() {
       if (editingTruck) {
         const { entry } = await serviceApi.updateTruckLogistics(editingTruck.id, "DECHARGEMENT", payload);
         setEntries((current) => current.map((row) => row.id === editingTruck.id
-          ? { ...row, ...entry, siteName: row.siteName }
+          ? { ...row, ...entry, siteName: selectedSiteName }
           : row));
       } else {
         const result = await serviceApi.createLogistics(payload);
@@ -224,7 +224,15 @@ export default function FluxLogistique() {
           sites={sites}
           canCreate={canCreateSite}
           onAdd={addSite}
-          onChange={(name, type) => { setSiteName(name); setSiteType(type); }}
+          onChange={(name, type) => {
+            if (name !== selectedSiteName) {
+              setEntries([]);
+              setEditingTruck(null);
+              setTruckForm(emptyTruck());
+            }
+            setSiteName(name);
+            setSiteType(type);
+          }}
         />
       </div>
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}

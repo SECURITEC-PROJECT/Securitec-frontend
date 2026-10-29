@@ -27,6 +27,7 @@ import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import ChargementsStarParticuliers from '@/pages/fluxLogistique/ChargementsStarParticuliers';
 import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
 import OrduresFerrailles from '@/pages/fluxLogistique/OrduresFerrailles';
+import MouvementsDeuxRoues from '@/pages/fluxLogistique/MouvementsDeuxRoues';
 import DechargementBouteillesVides from '@/pages/fluxLogistique/DechargementBouteillesVides';
 import DechargementMatierePremiere from '@/pages/fluxLogistique/DechargementMatierePremiere';
 import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
@@ -35,6 +36,7 @@ import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
 import Statistiques from '@/pages/statistique/Statistique';
 import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
 import PointageAPS from '@/pages/pointageAps/PointageAPS';
+import MouvementsAPS from '@/pages/pointageAps/MouvementsAPS';
 import Anomalie from '@/pages/anomalie/Anomalie';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
@@ -115,7 +117,7 @@ export default function App() {
           <Route path="mouvements-cles" element={<ControleAcces />} />
           <Route path="carte-grise-permis" element={<CarteGrisePermis />} />
           <Route path="dechets-levee" element={<DechetsLevee />} />
-          <Route path="mouvements-aps" element={<MainCourante />} />
+          <Route path="mouvements-aps" element={<MouvementsAPS />} />
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
@@ -135,6 +137,8 @@ export default function App() {
           <Route path="enregistrements-ordures" element={<FluxLogistique />} />
           <Route path="ordures" element={<OrduresFerrailles kind="ordures" />} />
           <Route path="ferrailles" element={<OrduresFerrailles kind="ferrailles" />} />
+          <Route path="mouvement-velos" element={<MouvementsDeuxRoues kind="velo" />} />
+          <Route path="mouvement-moto" element={<MouvementsDeuxRoues kind="moto" />} />
           <Route path="materiels-star" element={<MaterielsStar />} />
           
           {/* Fiches */}
