@@ -3,8 +3,9 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type ChauffeurRecord } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
 import { ClipboardList, Pencil, Printer, Scale, Search, Trash2, Truck } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -52,6 +53,8 @@ export default function DechetsLevee() {
   const [poids, setPoids] = useState("");
   const [destinataire, setDestinataire] = useState("");
   const [vehicule, setVehicule] = useState("");
+  const [vehicleSuggestionsOpen, setVehicleSuggestionsOpen] = useState(false);
+  const [activeVehicleSuggestion, setActiveVehicleSuggestion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -60,10 +63,16 @@ export default function DechetsLevee() {
     entries: [],
     error: "",
   });
+  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
+    siteId: string;
+    chauffeurs: ChauffeurRecord[];
+    error: string;
+  }>({ siteId: "", chauffeurs: [], error: "" });
   const [search, setSearch] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const selectedSiteType = site?.type || siteType;
+  const selectedSiteId = site?.id || "";
 
   useEffect(() => {
     let active = true;
@@ -87,7 +96,47 @@ export default function DechetsLevee() {
     return () => { active = false; };
   }, [site?.id]);
 
-  const selectedSiteId = site?.id || "";
+  useEffect(() => {
+    let active = true;
+    if (!selectedSiteId) return () => { active = false; };
+    serviceApi.listChauffeurs(selectedSiteId)
+      .then((chauffeurs) => {
+        if (active) setChauffeurRegistry({ siteId: selectedSiteId, chauffeurs, error: "" });
+      })
+      .catch((error) => {
+        if (active) setChauffeurRegistry({
+          siteId: selectedSiteId,
+          chauffeurs: [],
+          error: error instanceof Error ? error.message : "Chargement des véhicules des chauffeurs impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [selectedSiteId]);
+
+  const registeredChauffeurs = chauffeurRegistry.siteId === selectedSiteId
+    ? chauffeurRegistry.chauffeurs
+    : [];
+  const availableVehicles = Array.from(
+    new Map(
+      registeredChauffeurs
+        .filter((driver) => driver.vehicule?.trim())
+        .map((driver) => [driver.vehicule!.trim(), driver]),
+    ).values(),
+  );
+  const selectedVehicleIsRegistered = availableVehicles.some(
+    (driver) => driver.vehicule?.trim().toLocaleLowerCase("fr") === vehicule.trim().toLocaleLowerCase("fr"),
+  );
+  const normalizedVehicleSearch = vehicule.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+  const matchingVehicles = availableVehicles.filter((driver) =>
+    !normalizedVehicleSearch ||
+    `${driver.vehicule || ""} ${driver.matricule || ""}`
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("fr")
+      .includes(normalizedVehicleSearch),
+  ).slice(0, 8);
+  const chauffeurVehiclesLoading = Boolean(selectedSiteId) && chauffeurRegistry.siteId !== selectedSiteId;
+  const chauffeursError = chauffeurRegistry.siteId === selectedSiteId ? chauffeurRegistry.error : "";
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
@@ -105,6 +154,7 @@ export default function DechetsLevee() {
     setPoids("");
     setDestinataire("");
     setVehicule("");
+    setVehicleSuggestionsOpen(false);
     setEditingId(null);
   };
 
@@ -118,11 +168,24 @@ export default function DechetsLevee() {
     setPoids(entry.poids == null ? "" : String(entry.poids));
     setDestinataire(entry.destinataire || "");
     setVehicule(entry.vehicule || "");
+    setVehicleSuggestionsOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (chauffeurVehiclesLoading) {
+      toast.error("Veuillez attendre le chargement des véhicules des chauffeurs.");
+      return;
+    }
+    if (chauffeursError) {
+      toast.error("Impossible de vérifier les véhicules enregistrés. Réessayez après le chargement du module Chauffeurs.");
+      return;
+    }
+    if (!selectedVehicleIsRegistered) {
+      toast.error("Ce véhicule n’est pas enregistré dans le module Chauffeurs pour ce site.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -144,14 +207,14 @@ export default function DechetsLevee() {
           ...current,
           entries: current.entries.map((item) => item.id === editingId ? { ...item, ...entry } : item),
         }));
-        toast.success("Sortie de déchets modifiée.");
+        toast.success("Sortie de drèche modifiée.");
       } else {
         const result = await serviceApi.createLogistics({ ...payload, type: "DECHETS" });
         if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
         setRegistry((current) => current.siteId === selectedSiteId
           ? { ...current, entries: [result.entry, ...current.entries] }
           : { siteId: selectedSiteId, entries: [result.entry], error: "" });
-        toast.success("Sortie de déchets enregistrée.");
+        toast.success("Sortie de drèche enregistrée.");
       }
       clearForm();
     } catch (error) {
@@ -163,7 +226,7 @@ export default function DechetsLevee() {
 
   const deleteEntry = async (entry: DechetsEntry) => {
     if (!selectedSiteId) return;
-    if (!(await confirmDeletion(`Supprimer la sortie de déchets « ${entry.numeroPesage || entry.id} » ? Cette action est définitive.`))) return;
+    if (!(await confirmDeletion(`Supprimer la sortie de drèche « ${entry.numeroPesage || entry.id} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteWasteLogistics(entry.id, selectedSiteId);
@@ -179,7 +242,7 @@ export default function DechetsLevee() {
 
   const handlePrintRegistry = () => {
     const originalTitle = document.title;
-    document.title = "Registre des sorties de déchets";
+    document.title = "Registre des sorties de drèche";
     window.addEventListener("afterprint", () => {
       document.title = originalTitle;
     }, { once: true });
@@ -197,14 +260,14 @@ export default function DechetsLevee() {
       ["Poids", entry.poids == null ? "—" : `${Number(entry.poids).toLocaleString("fr-FR")} kg`],
       ["Destinataire / client", entry.destinataire || "—"],
     ] as const;
-    printRecord("Sortie de déchets", entry.siteName || selectedSiteName, rows);
+    printRecord("Sortie de drèche", entry.siteName || selectedSiteName, rows);
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Déchêt et Levure"
-        subtitle="Enregistrement des sorties de déchets et des informations de pesage"
+        subtitle="Enregistrement des sorties de drèche et de levure avec les informations de pesage"
       />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
       <section className="w-full overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -213,7 +276,7 @@ export default function DechetsLevee() {
             <ClipboardList className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground">{editingId ? "Modifier une sortie" : "Nouvelle sortie de déchets"}</h2>
+            <h2 className="font-semibold text-foreground">{editingId ? "Modifier une sortie" : "Nouvelle sortie de drèche ou de levure"}</h2>
             <p className="mt-1 text-sm text-muted-foreground">Complétez les informations du transport et du pesage.</p>
           </div>
         </div>
@@ -229,6 +292,7 @@ export default function DechetsLevee() {
               onChange={(name, type) => {
                 setSiteName(name);
                 setSiteType(type);
+                setVehicule("");
               }}
             />
           </div>
@@ -268,7 +332,80 @@ export default function DechetsLevee() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dechets-vehicule">Véhicule</Label>
-                <Input id="dechets-vehicule" required maxLength={160} placeholder="Immatriculation ou numéro" value={vehicule} onChange={(event) => setVehicule(event.target.value)} />
+                <Popover open={vehicleSuggestionsOpen && matchingVehicles.length > 0} onOpenChange={setVehicleSuggestionsOpen}>
+                  <PopoverAnchor asChild>
+                    <Input
+                      id="dechets-vehicule"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={vehicleSuggestionsOpen && matchingVehicles.length > 0}
+                      aria-controls="dechets-vehicle-suggestions"
+                      aria-activedescendant={matchingVehicles[activeVehicleSuggestion] ? `dechets-vehicle-option-${activeVehicleSuggestion}` : undefined}
+                      required
+                      maxLength={160}
+                      autoComplete="off"
+                      placeholder={chauffeurVehiclesLoading ? "Chargement des véhicules…" : "Saisir ou rechercher un véhicule"}
+                      value={vehicule}
+                      onFocus={() => setVehicleSuggestionsOpen(true)}
+                      onChange={(event) => {
+                        setVehicule(event.target.value);
+                        setActiveVehicleSuggestion(0);
+                        setVehicleSuggestionsOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!matchingVehicles.length) return;
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveVehicleSuggestion((current) => (current + 1) % matchingVehicles.length);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveVehicleSuggestion((current) => (current - 1 + matchingVehicles.length) % matchingVehicles.length);
+                        } else if (event.key === "Enter" && vehicleSuggestionsOpen) {
+                          event.preventDefault();
+                          setVehicule(matchingVehicles[activeVehicleSuggestion]?.vehicule?.trim() || "");
+                          setVehicleSuggestionsOpen(false);
+                        } else if (event.key === "Escape") {
+                          setVehicleSuggestionsOpen(false);
+                        }
+                      }}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    id="dechets-vehicle-suggestions"
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] p-1"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <ul role="listbox" aria-label="Véhicules enregistrés" className="max-h-52 overflow-y-auto">
+                      {matchingVehicles.map((driver, index) => (
+                        <li key={`${driver.id}-${driver.vehicule}`} role="presentation">
+                          <button
+                            id={`dechets-vehicle-option-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={index === activeVehicleSuggestion}
+                            className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeVehicleSuggestion ? "bg-accent" : ""}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setVehicule(driver.vehicule?.trim() || "");
+                              setVehicleSuggestionsOpen(false);
+                            }}
+                          >
+                            {driver.vehicule?.trim()}
+                            {driver.matricule ? <span className="ml-2 text-muted-foreground">— {driver.matricule}</span> : null}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                {chauffeursError
+                  ? <p role="alert" className="text-xs text-destructive">{chauffeursError}</p>
+                  : !chauffeurVehiclesLoading && vehicule.trim() && !selectedVehicleIsRegistered
+                    ? <p role="alert" className="text-xs text-destructive">Ce véhicule n’est pas enregistré dans le module Chauffeurs pour ce site.</p>
+                    : !chauffeurVehiclesLoading && availableVehicles.length === 0
+                      ? <p className="text-xs text-muted-foreground">Aucun véhicule n’est enregistré. Ajoutez d’abord un véhicule dans le module Chauffeurs.</p>
+                      : <p className="text-xs text-muted-foreground">Sélectionnez un véhicule enregistré dans le module Chauffeurs.</p>}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dechets-destinataire">Destinataire / client</Label>
@@ -312,7 +449,7 @@ export default function DechetsLevee() {
         </form>
       </section>
       <section id="waste-registry-print-area">
-        <Panel title="Registre des sorties de déchets">
+        <Panel title="Registre des sorties de drèche et de levure">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 waste-registry-screen">
           <p className="text-sm text-muted-foreground">Historique des sorties pour le site sélectionné.</p>
           <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrintRegistry}>
@@ -323,7 +460,7 @@ export default function DechetsLevee() {
         <div className="relative mb-4 waste-registry-screen">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              aria-label="Rechercher dans le registre des déchets"
+              aria-label="Rechercher dans le registre des sorties de drèche et de levure"
               placeholder="Rechercher véhicule, pesage, facture, client…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -338,7 +475,7 @@ export default function DechetsLevee() {
           <p className="waste-registry-screen py-8 text-center text-sm text-muted-foreground">Chargement du registre…</p>
         ) : entries.length === 0 ? (
           <p className="waste-registry-screen rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-            Aucune sortie de déchets enregistrée pour ce site.
+            Aucune sortie de drèche ou de levure enregistrée pour ce site.
           </p>
         ) : (
           <div className="overflow-hidden rounded-lg border waste-registry-screen">
@@ -405,7 +542,7 @@ export default function DechetsLevee() {
         )}
         {!loadingEntries && (
           <div className="waste-registry-print hidden">
-            <h1 className="mb-1 text-xl font-bold">Registre des sorties de déchets</h1>
+            <h1 className="mb-1 text-xl font-bold">Registre des sorties de drèche et de levure</h1>
             <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
             <table>
               <thead>

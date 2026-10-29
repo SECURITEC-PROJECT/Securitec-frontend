@@ -3,8 +3,9 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi } from "@/lib/service-api";
+import { serviceApi, type ChauffeurRecord } from "@/lib/service-api";
 import { Printer, Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -14,6 +15,8 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 const nowTime = () => new Date().toTimeString().slice(0, 5);
+const normalizeName = (value: string) =>
+  value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toLocaleLowerCase("fr");
 const isCarteGriseRecord = (record: { document_type?: string; zone?: string }) =>
   record.document_type === "CIN/Permis" && record.zone === "Contrôle";
 
@@ -80,6 +83,72 @@ export default function CarteGrisePermis() {
   const [registryError, setRegistryError] = useState("");
   const [search, setSearch] = useState("");
   const [exitingId, setExitingId] = useState<string | null>(null);
+  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
+    siteId: string;
+    chauffeurs: ChauffeurRecord[];
+    error: string;
+  }>({ siteId: "", chauffeurs: [], error: "" });
+  const [chauffeurSuggestionsOpen, setChauffeurSuggestionsOpen] = useState(false);
+  const [activeChauffeurSuggestion, setActiveChauffeurSuggestion] = useState(0);
+  const [selectedChauffeurId, setSelectedChauffeurId] = useState("");
+  const selectedSite = sites.find((site) => site.name === form.siteName);
+  const registeredChauffeurs = chauffeurRegistry.siteId === selectedSite?.id
+    ? chauffeurRegistry.chauffeurs
+    : [];
+  const chauffeurLoading = Boolean(selectedSite?.id) && chauffeurRegistry.siteId !== selectedSite?.id;
+  const chauffeurError = chauffeurRegistry.siteId === selectedSite?.id ? chauffeurRegistry.error : "";
+  const matchingChauffeurs = registeredChauffeurs.filter((driver) =>
+    !normalizeName(form.nomPrenom) || normalizeName(driver.nomPrenom).includes(normalizeName(form.nomPrenom)),
+  ).slice(0, 8);
+
+  useEffect(() => {
+    let active = true;
+    const siteId = selectedSite?.id;
+    if (!siteId) return () => { active = false; };
+    serviceApi.listChauffeurs(siteId)
+      .then((chauffeurs) => {
+        if (active) setChauffeurRegistry({ siteId, chauffeurs, error: "" });
+      })
+      .catch((error) => {
+        if (active) setChauffeurRegistry({
+          siteId,
+          chauffeurs: [],
+          error: error instanceof Error ? error.message : "Chargement des chauffeurs impossible.",
+        });
+      });
+    return () => { active = false; };
+  }, [selectedSite?.id]);
+
+  const selectChauffeur = (driver: ChauffeurRecord) => {
+    setSelectedChauffeurId(driver.id);
+    setForm((current) => ({
+      ...current,
+      nomPrenom: driver.nomPrenom,
+      cin: driver.cin || "",
+      permisConduire: driver.numeroPermis || "",
+      vehicule: driver.vehicule || "",
+      immatriculation: driver.matricule || "",
+    }));
+    setChauffeurSuggestionsOpen(false);
+  };
+
+  const changeChauffeurName = (nomPrenom: string) => {
+    setSelectedChauffeurId("");
+    setForm((current) => ({
+      ...current,
+      nomPrenom,
+      cin: "",
+      permisConduire: "",
+      vehicule: "",
+      immatriculation: "",
+    }));
+    setActiveChauffeurSuggestion(0);
+    setChauffeurSuggestionsOpen(true);
+    const exactMatches = registeredChauffeurs.filter(
+      (driver) => normalizeName(driver.nomPrenom) === normalizeName(nomPrenom),
+    );
+    if (exactMatches.length === 1) selectChauffeur(exactMatches[0]);
+  };
 
   useEffect(() => {
     serviceApi.listVisitors()
@@ -127,6 +196,18 @@ export default function CarteGrisePermis() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (chauffeurLoading) {
+      toast.error("Veuillez attendre le chargement des fiches chauffeurs.");
+      return;
+    }
+    if (chauffeurError) {
+      toast.error("Impossible de vérifier les chauffeurs enregistrés. Réessayez après le chargement.");
+      return;
+    }
+    if (!registeredChauffeurs.some((driver) => driver.id === selectedChauffeurId)) {
+      toast.error("Sélectionnez un chauffeur enregistré pour remplir ses informations.");
+      return;
+    }
     if (!form.nomPrenom.trim()) {
       toast.error("Le nom et prénom sont obligatoires");
       return;
@@ -159,6 +240,8 @@ export default function CarteGrisePermis() {
       });
       setRecords((current) => [record, ...current]);
       toast.success("Enregistrement carte grise / permis effectué");
+      setSelectedChauffeurId("");
+      setChauffeurSuggestionsOpen(false);
       setForm({ ...emptyForm, date: today(), heure: nowTime(), siteName: form.siteName, siteType: form.siteType });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
@@ -207,19 +290,86 @@ export default function CarteGrisePermis() {
                 sites={sites}
                 canCreate={canCreateSite}
                 onAdd={addSite}
-                onChange={(siteName, siteType) => setForm({ ...form, siteName, siteType })}
+                onChange={(siteName, siteType) => {
+                  setSelectedChauffeurId("");
+                  setChauffeurSuggestionsOpen(false);
+                  setForm({ ...form, siteName, siteType, nomPrenom: "", cin: "", permisConduire: "", vehicule: "", immatriculation: "" });
+                }}
               />
             </div>
 
-            <div>
-              <Label htmlFor="nomPrenom">Nom et prénom *</Label>
-              <Input
-                id="nomPrenom"
-                value={form.nomPrenom}
-                onChange={(e) => setForm({ ...form, nomPrenom: e.target.value })}
-                required
-              />
-            </div>
+              <div>
+                <Label htmlFor="nomPrenom">Nom et prénom *</Label>
+                <Popover open={chauffeurSuggestionsOpen && matchingChauffeurs.length > 0} onOpenChange={setChauffeurSuggestionsOpen}>
+                  <PopoverAnchor asChild>
+                    <Input
+                      id="nomPrenom"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={chauffeurSuggestionsOpen && matchingChauffeurs.length > 0}
+                      aria-controls="carte-chauffeur-suggestions"
+                      aria-activedescendant={matchingChauffeurs[activeChauffeurSuggestion] ? `carte-chauffeur-option-${activeChauffeurSuggestion}` : undefined}
+                      value={form.nomPrenom}
+                      onChange={(event) => changeChauffeurName(event.target.value)}
+                      onFocus={() => setChauffeurSuggestionsOpen(true)}
+                      onKeyDown={(event) => {
+                        if (!matchingChauffeurs.length) return;
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveChauffeurSuggestion((current) => (current + 1) % matchingChauffeurs.length);
+                        } else if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveChauffeurSuggestion((current) => (current - 1 + matchingChauffeurs.length) % matchingChauffeurs.length);
+                        } else if (event.key === "Enter" && chauffeurSuggestionsOpen) {
+                          event.preventDefault();
+                          const driver = matchingChauffeurs[activeChauffeurSuggestion];
+                          if (driver) selectChauffeur(driver);
+                        } else if (event.key === "Escape") {
+                          setChauffeurSuggestionsOpen(false);
+                        }
+                      }}
+                      required
+                      autoComplete="off"
+                      placeholder={chauffeurLoading ? "Chargement des chauffeurs…" : "Rechercher un nom enregistré"}
+                    />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    id="carte-chauffeur-suggestions"
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] p-1"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                  >
+                    <ul role="listbox" aria-label="Chauffeurs enregistrés" className="max-h-52 overflow-y-auto">
+                      {matchingChauffeurs.map((driver, index) => (
+                        <li key={driver.id} role="presentation">
+                          <button
+                            id={`carte-chauffeur-option-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={index === activeChauffeurSuggestion}
+                            className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeChauffeurSuggestion ? "bg-accent" : ""}`}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => selectChauffeur(driver)}
+                          >
+                            <span>{driver.nomPrenom}</span>
+                            {driver.vehicule && <span className="ml-2 text-muted-foreground">— {driver.vehicule}</span>}
+                            {driver.matricule && <span className="ml-2 text-muted-foreground">({driver.matricule})</span>}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+                {chauffeurError
+                  ? <p role="alert" className="mt-1 text-xs text-destructive">{chauffeurError}</p>
+                  : chauffeurLoading
+                    ? <p className="mt-1 text-xs text-muted-foreground">Chargement des fiches chauffeurs du site…</p>
+                    : !registeredChauffeurs.length
+                      ? <p className="mt-1 text-xs text-muted-foreground">Aucun chauffeur enregistré pour ce site.</p>
+                      : form.nomPrenom.trim() && !selectedChauffeurId
+                        ? <p role="alert" className="mt-1 text-xs text-destructive">Choisissez un nom dans les chauffeurs enregistrés.</p>
+                        : <p className="mt-1 text-xs text-muted-foreground">Choisissez un chauffeur pour remplir automatiquement la CIN, le permis et les informations du véhicule.</p>}
+              </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
