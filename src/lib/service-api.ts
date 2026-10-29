@@ -285,6 +285,16 @@ export interface ApsPostConfiguration {
   count: number;
 }
 
+export interface ApsMovementEvent {
+  id: string;
+  date: string;
+  heureEntree: string;
+  mouvement: string;
+  observation: string;
+  heureSortie: string | null;
+  siteId: string;
+}
+
 export interface ApsMovementAgent {
   nom: string;
   matricule: string;
@@ -662,6 +672,29 @@ export const serviceApi = {
       method: "PUT",
       body: body(data),
     });
+  },
+  async listApsMovementEvents(siteId: string, date: string) {
+    return (await request<{ entries: ApsMovementEvent[] }>(
+      `/aps-movements/events?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
+    )).entries;
+  },
+  async createApsMovementEvent(data: Omit<ApsMovementEvent, "id">) {
+    return (await request<{ entry: ApsMovementEvent }>("/aps-movements/events", {
+      method: "POST",
+      body: body(data),
+    })).entry;
+  },
+  async updateApsMovementEvent(id: string, data: Omit<ApsMovementEvent, "id">) {
+    return (await request<{ entry: ApsMovementEvent }>(`/aps-movements/events/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: body(data),
+    })).entry;
+  },
+  async deleteApsMovementEvent(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(
+      `/aps-movements/events/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
+      { method: "DELETE" },
+    );
   },
   async listCameras(siteId?: string) { return (await request<{ cameras: any[] }>(`/cameras${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).cameras; },
   async listCameraZones(siteId?: string) { return (await request<{ zones: any[] }>(`/camera-zones${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).zones; },

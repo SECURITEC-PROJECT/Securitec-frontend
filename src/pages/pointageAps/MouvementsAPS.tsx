@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
+import MouvementApsEvenements from "@/pages/pointageAps/MouvementApsEvenements";
 import { useSites } from "@/hooks/useSites";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import {
@@ -8,6 +9,7 @@ import {
   type ApsPostConfiguration,
   type RegisterEmployeeOption,
 } from "@/lib/service-api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarDays, Plus, Printer, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -208,6 +210,29 @@ export default function MouvementsAPS() {
   return (
     <div className="space-y-5">
       <PageHeader title="Mouvements APS" subtitle="Module 1 — Pointage APS (Jour et Nuit) : nom et matricule par poste." />
+    <section className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-sm print:hidden">
+      <div className="w-full max-w-sm">
+        <label htmlFor="aps-movement-global-site" className="mb-1.5 block text-sm font-medium">Site des modules APS</label>
+        <select
+          id="aps-movement-global-site"
+          value={activeSiteId}
+          onChange={(event) => setSiteId(event.target.value)}
+          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+        >
+          {!sites.length && <option value="">Aucun site disponible</option>}
+          {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+        </select>
+        {siteError && <p className="mt-1 text-xs text-destructive">{siteError}</p>}
+      </div>
+    </section>
+    <Tabs defaultValue="pointage-aps" className="space-y-4">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 print:hidden" aria-label="Modules des mouvements APS">
+          <TabsTrigger value="pointage-aps">Pointage APS (Jour et Nuit)</TabsTrigger>
+          <TabsTrigger value="module-2">Mouvement</TabsTrigger>
+          <TabsTrigger value="module-3">Module 3</TabsTrigger>
+          <TabsTrigger value="module-4">Module 4</TabsTrigger>
+        </TabsList>
+        <TabsContent value="pointage-aps" className="mt-0 space-y-5">
       <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service des mouvements APS">
         {(["jour", "nuit"] as const).map((item) => (
           <button
@@ -231,14 +256,6 @@ export default function MouvementsAPS() {
               <CalendarDays className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
               <input id="aps-movement-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm" />
             </div>
-          </div>
-          <div className="w-full max-w-xs">
-            <label htmlFor="aps-movement-site" className="mb-1.5 block text-sm font-medium">Site</label>
-            <select id="aps-movement-site" value={activeSiteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-              {!sites.length && <option value="">Aucun site disponible</option>}
-              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-            </select>
-            {siteError && <p className="mt-1 text-xs text-destructive">{siteError}</p>}
           </div>
           <div className="flex flex-wrap gap-2 print:hidden">
             <button type="button" onClick={() => void save()} disabled={saving || savingConfiguration || loading || !activeSiteId} className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50">
@@ -324,6 +341,22 @@ export default function MouvementsAPS() {
         </table>
       </div>
       <style>{`@media print { @page { size: landscape; margin: 12mm; } body { background: white !important; } button, .print\\:hidden { display: none !important; } input { border: 0 !important; } }`}</style>
+        </TabsContent>
+        <TabsContent value="module-2" className="mt-0">
+          <MouvementApsEvenements
+            activeSiteId={activeSiteId}
+            activeSiteName={sites.find((site) => site.id === activeSiteId)?.name ?? ""}
+          />
+        </TabsContent>
+        {(["module-3", "module-4"] as const).map((module, index) => (
+          <TabsContent key={module} value={module} className="mt-0">
+            <section className="rounded-xl border bg-card p-6 text-center shadow-sm">
+              <h2 className="text-lg font-semibold">Module {index + 3}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">Ce module sera configuré prochainement.</p>
+            </section>
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 }
