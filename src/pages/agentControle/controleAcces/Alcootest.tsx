@@ -17,6 +17,7 @@ type CheckForm = {
   heure: string;
   matricule: string;
   personne: string;
+  demandeur: string;
   fonction: JobFunction;
   resultat: "Positif" | "Négatif";
   civilite: "Monsieur" | "Madame";
@@ -48,6 +49,7 @@ const emptyForm = (): CheckForm => ({
   heure: currentTime(),
   matricule: "",
   personne: "",
+  demandeur: "",
   fonction: "CR",
   resultat: "Négatif",
   civilite: "Monsieur",
@@ -75,6 +77,7 @@ const formFromEntry = (entry: AlcoholCheck): CheckForm => ({
   heure: entry.heure,
   matricule: entry.matricule || "",
   personne: entry.personne,
+  demandeur: entry.demandeur || "",
   fonction: FUNCTIONS.includes(entry.fonction as JobFunction) ? entry.fonction as JobFunction : "CR",
   resultat: entry.resultat,
   civilite: entry.civilite || "Monsieur",
@@ -140,7 +143,7 @@ function ProtocolSignature({
   );
 }
 
-export default function TestAlcool() {
+export default function Alcootest() {
   const { sites, siteError } = useSites();
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [entries, setEntries] = useState<AlcoholCheck[]>([]);
@@ -161,7 +164,7 @@ export default function TestAlcool() {
   const loading = Boolean(siteId) && entriesSiteId !== siteId;
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
   const filteredEntries = visibleEntries.filter((entry) =>
-    [entry.date, formatDate(entry.date.slice(0, 10)), entry.heure, entry.matricule, entry.personne, entry.fonction, entry.resultat, entry.tauxMesure, entry.testeurNom, entry.temoinNom, entry.temoin2Nom]
+    [entry.date, formatDate(entry.date.slice(0, 10)), entry.heure, entry.matricule, entry.personne, entry.demandeur, entry.fonction, entry.resultat, entry.tauxMesure, entry.testeurNom, entry.temoinNom, entry.temoin2Nom]
       .join(" ")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -184,7 +187,7 @@ export default function TestAlcool() {
         if (active) {
           setEntries([]);
           setEntriesSiteId(siteId);
-          setLoadError(reason instanceof Error ? reason.message : "Chargement des tests alcool impossible.");
+          setLoadError(reason instanceof Error ? reason.message : "Chargement des alcootests impossible.");
         }
       });
     return () => { active = false; };
@@ -207,6 +210,7 @@ export default function TestAlcool() {
         ...form,
         matricule: form.matricule.trim(),
         personne: form.personne.trim(),
+        demandeur: form.demandeur.trim(),
         testeurNom: form.testeurNom.trim(),
         testeurMatricule: form.testeurMatricule.trim(),
         testeurFonction: form.testeurFonction.trim(),
@@ -226,7 +230,7 @@ export default function TestAlcool() {
         : [entry, ...current]);
       setEntriesSiteId(siteId);
       resetForm();
-      toast.success(editing ? "Test alcool modifié." : "Test alcool enregistré.");
+      toast.success(editing ? "Alcootest modifié." : "Alcootest enregistré.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Enregistrement impossible.");
     } finally {
@@ -247,7 +251,7 @@ export default function TestAlcool() {
       await serviceApi.deleteAlcoholCheck(entry.id, siteId);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Test alcool supprimé.");
+      toast.success("Alcootest supprimé.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -257,7 +261,7 @@ export default function TestAlcool() {
 
   const handlePrint = (mode: "protocol" | "registry") => {
     const originalTitle = window.document.title;
-    window.document.title = mode === "protocol" ? "PROCES VERBAL D'ALCOOTEST" : "Registre des tests alcool";
+    window.document.title = mode === "protocol" ? "PROCES VERBAL D'ALCOOTEST" : "Registre des alcootests";
     window.addEventListener("afterprint", () => {
       window.document.title = originalTitle;
       setPrintMode(null);
@@ -273,7 +277,7 @@ export default function TestAlcool() {
 
   return (
     <div id="alcohol-check-page" data-print-mode={printMode || ""} className="space-y-6">
-      <PageHeader title="Test alcool" subtitle="Enregistrement et suivi des contrôles d’alcoolémie du personnel." />
+      <PageHeader title="Alcootest" subtitle="Enregistrement et suivi des contrôles d’alcoolémie du personnel." />
       <div className="max-w-xl space-y-1">
         <Label htmlFor="alcohol-check-site">Site concerné</Label>
         <select
@@ -319,6 +323,10 @@ export default function TestAlcool() {
               </select>{" "}
               <em>(Andriamatoa / Ramatoa)</em> :
               <br /><Input aria-label="Nom de la personne testée" required maxLength={255} value={form.personne} onChange={(event) => setForm({ ...form, personne: event.target.value })} className="protocol-field ml-4 w-3/4 text-left uppercase" placeholder="................................................................................................" />
+            </p>
+            <p>
+              Demandeur du contrôle <em>(personne ou service à l’origine de la demande)</em> :
+              <Input aria-label="Demandeur du contrôle" maxLength={255} value={form.demandeur} onChange={(event) => setForm({ ...form, demandeur: event.target.value })} className="protocol-field ml-2 w-3/4 text-left" placeholder="................................................................................................" />
             </p>
             <p>
               Le résultat du test est{" "}
@@ -381,13 +389,13 @@ export default function TestAlcool() {
       </form>
 
       <section id="alcohol-registry-print-area">
-      <Panel title="Registre des tests alcool">
+      <Panel title="Registre des alcootests">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 alcohol-registry-screen">
           <div className="relative min-w-[260px] flex-1">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              aria-label="Rechercher un test alcool"
-              placeholder="Rechercher par date, matricule, personne, fonction ou résultat…"
+              aria-label="Rechercher un alcootest"
+              placeholder="Rechercher par date, matricule, personne, demandeur, fonction ou résultat…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="min-h-11 pl-9"
@@ -410,6 +418,7 @@ export default function TestAlcool() {
                     <th className="w-[16%] border-b px-3 py-3 font-medium">Fonction</th>
                     <th className="w-[13%] border-b px-3 py-3 font-medium">Résultat</th>
                     <th className="w-[10%] border-b px-3 py-3 font-medium">Taux g/l</th>
+                    <th className="w-[13%] border-b px-3 py-3 font-medium">Demandeur</th>
                     <th className="w-[13%] border-b px-3 py-3 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -427,6 +436,7 @@ export default function TestAlcool() {
                         </span>
                       </td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.tauxMesure ?? "—"}</td>
+                      <td className="break-words px-3 py-3">{entry.demandeur || "—"}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le test" title="Modifier le test" onClick={() => editEntry(entry)}>
@@ -448,11 +458,11 @@ export default function TestAlcool() {
           </div>
         ) : <div className="alcohol-registry-screen"><Empty text={loading ? "Chargement des contrôles…" : visibleEntries.length ? "Aucun contrôle ne correspond à votre recherche." : "Aucun contrôle enregistré pour ce site."} /></div>}
         <div className="alcohol-registry-print hidden">
-          <h1 className="mb-1 text-xl font-bold">Registre des tests alcool</h1>
+          <h1 className="mb-1 text-xl font-bold">Registre des alcootests</h1>
           <p className="mb-4 text-sm">Site : {site?.name || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
           <table>
             <thead>
-              <tr>{["Date", "Heure", "Matricule", "Nom et prénom", "Fonction", "Résultat", "Taux (g/l)"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+              <tr>{["Date", "Heure", "Matricule", "Nom et prénom", "Fonction", "Résultat", "Taux (g/l)", "Demandeur"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
             </thead>
             <tbody>
               {visibleEntries.map((entry) => (
@@ -464,6 +474,7 @@ export default function TestAlcool() {
                   <td>{entry.fonction || "—"}</td>
                   <td>{entry.resultat || "—"}</td>
                   <td>{entry.tauxMesure ?? "—"}</td>
+                  <td>{entry.demandeur || "—"}</td>
                 </tr>
               ))}
             </tbody>

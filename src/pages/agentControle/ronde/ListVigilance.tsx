@@ -1,12 +1,13 @@
 import { Empty, Panel } from "@/components/PageHeader";
+import type { VigilanceEntry } from "@/lib/service-api";
 
 interface ListVigilanceProps {
-  data: any[];
+  data: VigilanceEntry[];
 }
 
 export default function ListVigilance({ data }: ListVigilanceProps) {
   return (
-    <Panel title="Historique des Points de Vigilance (CRJ)">
+    <Panel title="Historique des points de vigilance">
       {data.length ? (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">

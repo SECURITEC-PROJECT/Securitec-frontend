@@ -22,6 +22,7 @@ const nowTime = () => {
 
 const emptyForm = (): LoadingForm => ({
   typeChargement: "STAR",
+  heureDebut: nowTime(),
   heureSortie: nowTime(),
   camion: "",
   proprietaire: "",
@@ -30,6 +31,7 @@ const emptyForm = (): LoadingForm => ({
   quantiteTexte: "",
   poids: "",
   destinataire: "",
+  provenance: "",
   lp: "",
   titre: "",
   plomb: "",
@@ -60,6 +62,7 @@ export default function ChargementsStarParticuliers() {
   const filteredEntries = visibleEntries.filter((entry) =>
     [
       entry.heureSortie,
+      entry.heureDebut,
       entry.camion,
       entry.proprietaire,
       entry.nomChauffeur,
@@ -67,6 +70,7 @@ export default function ChargementsStarParticuliers() {
       entry.quantiteTexte,
       String(entry.poids),
       entry.destinataire,
+      entry.provenance,
       entry.lp,
       entry.titre,
       entry.plomb,
@@ -126,6 +130,7 @@ export default function ChargementsStarParticuliers() {
         quantiteTexte: form.quantiteTexte.trim(),
         poids,
         destinataire: form.destinataire.trim(),
+        provenance: form.provenance.trim(),
         lp: form.lp.trim(),
         titre: form.titre.trim(),
         plomb: form.plomb.trim(),
@@ -151,6 +156,7 @@ export default function ChargementsStarParticuliers() {
     setEditing(entry);
     setForm({
       typeChargement: entry.typeChargement,
+      heureDebut: entry.heureDebut || "",
       heureSortie: entry.heureSortie,
       camion: entry.camion,
       proprietaire: entry.proprietaire,
@@ -159,6 +165,7 @@ export default function ChargementsStarParticuliers() {
       quantiteTexte: entry.quantiteTexte,
       poids: String(entry.poids),
       destinataire: entry.destinataire,
+      provenance: entry.provenance || "",
       lp: entry.lp,
       titre: entry.titre,
       plomb: entry.plomb,
@@ -193,7 +200,8 @@ export default function ChargementsStarParticuliers() {
   const printEntry = (entry: StarParticulierLoading) => {
     printRecord(`Chargement ${entry.typeChargement === "STAR" ? "STAR" : "particulier"}`, siteNameSelected, [
       ["Date", entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"],
-      ["Heure de sortie", entry.heureSortie],
+      ["Heure de début (HD)", entry.heureDebut || "—"],
+      ["Heure de fin (HF)", entry.heureSortie || "—"],
       ["Véhicule", entry.camion],
       ["Propriétaire", entry.proprietaire],
       ["Nom chauffeur", entry.nomChauffeur],
@@ -201,6 +209,7 @@ export default function ChargementsStarParticuliers() {
       ["Quantité", entry.quantiteTexte],
       ["Poids", String(entry.poids)],
       ["Destination", entry.destinataire],
+      ["Provenance", entry.provenance || "—"],
       ["LP", entry.lp],
       ["Titre", entry.titre],
       ["Plomb", entry.plomb],
@@ -241,7 +250,11 @@ export default function ChargementsStarParticuliers() {
           </Tabs>
           <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="loading-exit-time">Heure de sortie</Label>
+              <Label htmlFor="loading-start-time">Heure de début (HD)</Label>
+              <Input id="loading-start-time" type="time" required value={form.heureDebut ?? ""} onChange={(event) => setForm({ ...form, heureDebut: event.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="loading-exit-time">Heure de fin (HF)</Label>
               <Input id="loading-exit-time" type="time" required value={form.heureSortie} onChange={(event) => setForm({ ...form, heureSortie: event.target.value })} />
             </div>
             <div className="space-y-1.5">
@@ -271,6 +284,10 @@ export default function ChargementsStarParticuliers() {
             <div className="space-y-1.5">
               <Label htmlFor="loading-destination">Destination</Label>
               <Input id="loading-destination" required maxLength={255} value={form.destinataire} onChange={(event) => setForm({ ...form, destinataire: event.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="loading-origin">Provenance</Label>
+              <Input id="loading-origin" required maxLength={255} value={form.provenance} onChange={(event) => setForm({ ...form, provenance: event.target.value })} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-lp">LP (6 chiffres max.)</Label>
@@ -303,7 +320,7 @@ export default function ChargementsStarParticuliers() {
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher un chargement"
-              placeholder="Rechercher véhicule, propriétaire, chauffeur, désignation, destination…"
+              placeholder="Rechercher véhicule, chauffeur, désignation, destination, provenance…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="min-h-11 pl-9"
@@ -318,12 +335,13 @@ export default function ChargementsStarParticuliers() {
             <div className="max-h-[560px] overflow-auto">
               <table className="w-full min-w-[1450px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
-                  <tr>{["Heure de sortie", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Quantité", "Poids", "Destination", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
+                  <tr>{["HD", "HF", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
                     <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureDebut || "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                       <td className="px-3 py-3 font-medium">{entry.camion}</td>
                       <td className="px-3 py-3">{entry.proprietaire}</td>
                       <td className="px-3 py-3">{entry.nomChauffeur}</td>
@@ -331,6 +349,7 @@ export default function ChargementsStarParticuliers() {
                       <td className="px-3 py-3">{entry.quantiteTexte}</td>
                       <td className="px-3 py-3">{entry.poids}</td>
                       <td className="px-3 py-3">{entry.destinataire}</td>
+                      <td className="px-3 py-3">{entry.provenance || "—"}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.lp}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.titre}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.plomb}</td>
@@ -354,11 +373,12 @@ export default function ChargementsStarParticuliers() {
           <p className="mb-4 text-sm">Site : {siteNameSelected || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
           <table>
             <thead>
-              <tr>{["Heure de sortie", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Quantité", "Poids", "Destination", "LP", "Titre", "Plomb", "Chargement"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+              <tr>{["HD", "HF", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
             </thead>
             <tbody>
               {visibleEntries.map((entry) => (
                 <tr key={entry.id}>
+                  <td>{entry.heureDebut || "—"}</td>
                   <td>{entry.heureSortie || "—"}</td>
                   <td>{entry.camion || "—"}</td>
                   <td>{entry.proprietaire || "—"}</td>
@@ -367,6 +387,7 @@ export default function ChargementsStarParticuliers() {
                   <td>{entry.quantiteTexte || "—"}</td>
                   <td>{entry.poids}</td>
                   <td>{entry.destinataire || "—"}</td>
+                  <td>{entry.provenance || "—"}</td>
                   <td>{entry.lp || "—"}</td>
                   <td>{entry.titre || "—"}</td>
                   <td>{entry.plomb || "—"}</td>

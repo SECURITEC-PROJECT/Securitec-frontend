@@ -1,11 +1,9 @@
 import { PageHeader } from "@/components/PageHeader";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import ActivePatrolPanel from "./ActivePatrolPanel";
-import FormVigilance from "./FormVigilance";
-import ListVigilance from "./ListVigilance";
 import PatrolHistoryPanel from "./PatrolHistoryPanel";
 import StartPatrolPanel from "./StartPatrolPanel";
 
@@ -22,50 +20,41 @@ type Patrol = {
 
 export default function Rondes() {
   const { sites, siteError } = useSites();
-  const [activeTab, setActiveTab] = useState<"rondes" | "vigilance">("rondes");
   const [siteId, setSiteId] = useState("");
   const [route, setRoute] = useState("Ronde complète");
   const [observations, setObservations] = useState("");
   const [patrols, setPatrols] = useState<Patrol[]>([]);
-  const [vigilanceData, setVigilanceData] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const site = sites.find((item) => item.id === siteId);
+  const selectedSiteId = siteId || sites[0]?.id || "";
+  const site = sites.find((item) => item.id === selectedSiteId);
 
   useEffect(() => {
-    if (!siteId && sites.length) setSiteId(sites[0].id);
-  }, [siteId, sites]);
+    let active = true;
+    serviceApi.listPatrols(selectedSiteId || undefined)
+      .then((entries) => { if (active) setPatrols(entries); })
+      .catch((error) => {
+        if (active) toast.error(error instanceof Error ? error.message : "Chargement des rondes impossible.");
+      });
+    return () => { active = false; };
+  }, [selectedSiteId]);
 
-  const fetchPatrols = useCallback(async () => {
-    try {
-      setPatrols(await serviceApi.listPatrols(siteId || undefined));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Chargement des rondes impossible.");
-    }
-  }, [siteId]);
-
-  const fetchVigilance = useCallback(async () => {
-    try {
-      setVigilanceData(await serviceApi.listVigilance(siteId || undefined));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Chargement des points de vigilance impossible.");
-    }
-  }, [siteId]);
-
-  useEffect(() => { void fetchPatrols(); void fetchVigilance(); }, [fetchPatrols, fetchVigilance]);
+  const refreshPatrols = async () => {
+    setPatrols(await serviceApi.listPatrols(selectedSiteId || undefined));
+  };
 
   const active = useMemo(() => patrols.find((patrol) => !patrol.ended_at), [patrols]);
 
   const start = async () => {
-    if (!siteId) return;
+    if (!selectedSiteId) return;
     setSaving(true);
     try {
       await serviceApi.startPatrol({
         routeName: route,
-        siteId,
+        siteId: selectedSiteId,
         checkpoints: POINTS.map((name) => ({ name, at: null })),
       });
       toast.success("Ronde démarrée.");
-      await fetchPatrols();
+      await refreshPatrols();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible de démarrer la ronde.");
     } finally { setSaving(false); }
@@ -79,7 +68,7 @@ export default function Rondes() {
     setSaving(true);
     try {
       await serviceApi.updatePatrol(active.id, checkpoints);
-      await fetchPatrols();
+      await refreshPatrols();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Mise à jour du point impossible.");
     } finally { setSaving(false); }
@@ -92,7 +81,7 @@ export default function Rondes() {
       await serviceApi.finishPatrol(active.id, observations);
       setObservations("");
       toast.success("Ronde clôturée.");
-      await fetchPatrols();
+      await refreshPatrols();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Clôture de la ronde impossible.");
     } finally { setSaving(false); }
@@ -105,27 +94,20 @@ export default function Rondes() {
   };
 
   return <div className="space-y-6">
-    <PageHeader title="Patrouilles, rondes et points de vigilance" subtitle="Suivi des rondes de sécurité et contrôles de vigilance du site" />
+    <PageHeader title="Patrouilles et rondes" subtitle="Suivi des rondes de sécurité du site" />
     <div className="max-w-xl">
       <label htmlFor="patrol-site" className="mb-1 block text-sm font-medium">Site de travail</label>
-      <select id="patrol-site" value={siteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+      <select id="patrol-site" value={selectedSiteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
         {!sites.length && <option value="">Aucun site disponible</option>}
         {sites.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.type === "AGENCE" ? "Agence" : "Usine"}</option>)}
       </select>
       {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
     </div>
-    <div className="flex gap-2 border-b pb-3">
-      <button onClick={() => setActiveTab("rondes")} className={`rounded px-3 py-1.5 text-xs font-medium ${activeTab === "rondes" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>Patrouille ou ronde</button>
-      <button onClick={() => setActiveTab("vigilance")} className={`rounded px-3 py-1.5 text-xs font-medium ${activeTab === "vigilance" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>Points de vigilance</button>
-    </div>
-    {activeTab === "rondes" ? <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-2">
       {active ? <ActivePatrolPanel active={active} checkpoints={active.checkpoints || []} observations={observations} setObservations={setObservations} onCheck={check} onFinish={finish} fmtTime={fmtTime} saving={saving} />
-        : <StartPatrolPanel route={route} setRoute={setRoute} sites={sites} siteId={siteId} setSiteId={setSiteId} onStart={start} saving={saving} />}
+        : <StartPatrolPanel route={route} setRoute={setRoute} sites={sites} siteId={selectedSiteId} setSiteId={setSiteId} onStart={start} saving={saving} />}
       <PatrolHistoryPanel data={patrols} fmt={fmtTime} />
-    </div> : <div className="space-y-6">
-      <FormVigilance siteId={siteId} onRefresh={fetchVigilance} />
-      <ListVigilance data={vigilanceData} />
-    </div>}
+    </div>
     {!site && sites.length > 0 && <p className="text-sm text-muted-foreground">Sélectionnez un site pour charger ou enregistrer les données.</p>}
   </div>;
 }

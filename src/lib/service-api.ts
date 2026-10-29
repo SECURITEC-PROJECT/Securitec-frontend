@@ -21,9 +21,11 @@ export interface EmptyBottleDelivery {
   date: string;
   type: "BOUTEILLES_VIDES";
   heureArrivee: string;
+  heureFin: string | null;
   immatriculationVehicule: string;
   nomChauffeur: string | null;
   numeroTitre: string;
+  plomb: string | null;
   provenance: string;
   poids: string | number;
   detailsBouteilles: { designation: string; quantite: number }[];
@@ -113,6 +115,29 @@ export interface EmployeeRecord {
   siteName: string | null;
 }
 
+export interface SiteDocument {
+  id: string;
+  name: string;
+  extension: string;
+  mimeType: string;
+  size: number;
+  category: string;
+  createdAt: string;
+}
+
+export interface VigilanceEntry {
+  id: string;
+  typePoint: string;
+  elementVerifie: string;
+  statut: string;
+  observations: string | null;
+  heure: string;
+  agentNom: string;
+  createdAt: string;
+  siteId: string;
+  siteName: string;
+}
+
 export type VisitorQuestionnaireAnswer = "ENY" | "TSIA" | "";
 
 export interface VisitorQuestionnaireData {
@@ -174,6 +199,7 @@ export interface AlcoholCheck {
   heure: string;
   matricule: string;
   personne: string;
+  demandeur: string | null;
   fonction: string;
   resultat: "Positif" | "Négatif";
   tauxMesure: string | number | null;
@@ -197,6 +223,7 @@ export interface StarParticulierLoading {
   date: string;
   type: "CHARGEMENT";
   typeChargement: "STAR" | "PARTICULIER";
+  heureDebut: string | null;
   heureSortie: string;
   camion: string;
   proprietaire: string;
@@ -205,6 +232,7 @@ export interface StarParticulierLoading {
   quantiteTexte: string;
   poids: string | number;
   destinataire: string;
+  provenance: string;
   lp: string;
   titre: string;
   plomb: string;
@@ -284,16 +312,17 @@ export const serviceApi = {
   async createUser(data: { name: string; identifier: string; role: number; pin: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>("/users", { method: "POST", body: body(data) })).user; },
   async updateUser(id: string, data: { name: string; identifier: string; role: number; pin?: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>(`/users/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).user; },
   async deleteUser(id: string) { return request<{ id: string; deleted: boolean }>(`/users/${encodeURIComponent(id)}`, { method: "DELETE" }); },
-  async listDocuments(siteId: string) { return (await request<{ documents: any[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
+  async listDocuments(siteId: string) { return (await request<{ documents: SiteDocument[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
   async uploadDocument(siteId: string, file: File, category: string) {
     const token = sessionStorage.getItem(tokenKey);
     const headers = new Headers({ "Content-Type": file.type || "application/octet-stream", "X-Site-Id": siteId,
       "X-File-Name": encodeURIComponent(file.name), "X-File-Category": category });
     if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(`${apiBaseUrl}/documents`, { method: "POST", headers, body: file });
-    const result = await response.json().catch(() => ({}));
+    const result = await response.json().catch(() => ({})) as { document?: SiteDocument; error?: string };
     if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
-    return result.document as any;
+    if (!result.document) throw new Error("La réponse du serveur ne contient pas le document importé.");
+    return result.document;
   },
   async downloadDocument(id: string) {
     const token = sessionStorage.getItem(tokenKey);
@@ -481,7 +510,7 @@ export const serviceApi = {
   async startPatrol(data: unknown) { return (await request<{ patrol: any }>("/patrols", { method: "POST", body: body(data) })).patrol; },
   async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[]) { return (await request<{ patrol: any }>(`/patrols/${id}`, { method: "PATCH", body: body({ checkpoints }) })).patrol; },
   async finishPatrol(id: string, observations: string) { return (await request<{ patrol: any }>(`/patrols/${id}/finish`, { method: "POST", body: body({ observations }) })).patrol; },
-  async listVigilance(siteId?: string) { return (await request<{ entries: any[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
+  async listVigilance(siteId?: string) { return (await request<{ entries: VigilanceEntry[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createVigilance(data: unknown) { return request<{ entries: any[] }>("/vigilance", { method: "POST", body: body(data) }); },
   async listMainCourante(siteId?: string) { return (await request<{ entries: any[] }>(`/main-courante${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createMainCourante(data: unknown) { return request<{ entry: any }>("/main-courante", { method: "POST", body: body(data) }); },

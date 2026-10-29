@@ -16,9 +16,11 @@ type Designation = typeof DESIGNATIONS[number];
 type BottleLine = { designation: Designation | ""; quantite: string };
 type DeliveryForm = {
   date: string;
+  heureFin: string;
   immatriculationVehicule: string;
   nomChauffeur: string;
   numeroTitre: string;
+  plomb: string;
   provenance: string;
   poids: string;
   detailsBouteilles: BottleLine[];
@@ -36,9 +38,11 @@ const currentTime = () => {
 
 const emptyForm = (): DeliveryForm => ({
   date: today(),
+  heureFin: "",
   immatriculationVehicule: "",
   nomChauffeur: "",
   numeroTitre: "",
+  plomb: "",
   provenance: "",
   poids: "",
   detailsBouteilles: [{ designation: "", quantite: "" }],
@@ -75,9 +79,11 @@ export default function DechargementBouteillesVides() {
       entry.date,
       displayDate(entry.date),
       entry.heureArrivee,
+      entry.heureFin ?? "",
       entry.immatriculationVehicule,
       entry.nomChauffeur ?? "",
       entry.numeroTitre,
+      entry.plomb ?? "",
       entry.provenance,
       String(entry.poids),
       ...entry.detailsBouteilles.flatMap((line) => [line.designation, String(line.quantite)]),
@@ -131,9 +137,11 @@ export default function DechargementBouteillesVides() {
         type: "BOUTEILLES_VIDES",
         date: form.date,
         heureArrivee: editingEntry?.heureArrivee || currentTime(),
+        heureFin: form.heureFin || null,
         immatriculationVehicule: form.immatriculationVehicule.trim(),
         nomChauffeur: form.nomChauffeur.trim(),
         numeroTitre: form.numeroTitre.trim(),
+        plomb: form.plomb.trim(),
         provenance: form.provenance.trim(),
         poids: Number(form.poids),
         detailsBouteilles: form.detailsBouteilles.map((line) => ({
@@ -166,9 +174,11 @@ export default function DechargementBouteillesVides() {
     setEditingEntry(entry);
     setForm({
       date: String(entry.date).slice(0, 10),
+      heureFin: entry.heureFin || "",
       immatriculationVehicule: entry.immatriculationVehicule,
       nomChauffeur: entry.nomChauffeur || "",
       numeroTitre: entry.numeroTitre,
+      plomb: entry.plomb || "",
       provenance: String(entry.provenance),
       poids: String(entry.poids),
       detailsBouteilles: details.map((line) => ({
@@ -206,11 +216,13 @@ export default function DechargementBouteillesVides() {
   const printEntry = (entry: EmptyBottleDelivery) => {
     printRecord("Réception de bouteilles vides", selectedSiteName, [
       ["Date", displayDate(entry.date)],
-      ["Heure d’arrivée", entry.heureArrivee || "—"],
+      ["Heure de début (HD)", entry.heureArrivee || "—"],
+      ["Heure de fin (HF)", entry.heureFin || "—"],
       ["Immatriculation", entry.immatriculationVehicule],
       ["Nom du chauffeur", entry.nomChauffeur || "—"],
       ["N° titre", entry.numeroTitre],
-      ["Désignation · quantité", entry.detailsBouteilles.map((line) => `${line.designation} : ${line.quantite}`).join("\n")],
+      ["N° plomb", entry.plomb || "—"],
+      ["Comptage", entry.detailsBouteilles.map((line) => `${line.designation} : ${line.quantite}`).join("\n")],
       ["Provenance", entry.provenance],
       ["Poids", `${entry.poids} kg`],
     ]);
@@ -248,8 +260,12 @@ export default function DechargementBouteillesVides() {
                 <Input id="empty-bottles-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="empty-bottles-arrival">Heure</Label>
+                <Label htmlFor="empty-bottles-arrival">Heure de début (HD)</Label>
                 <Input id="empty-bottles-arrival" type="time" readOnly value={editingEntry?.heureArrivee || time} className="bg-muted/50 text-muted-foreground" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="empty-bottles-end">Heure de fin (HF)</Label>
+                <Input id="empty-bottles-end" type="time" value={form.heureFin} onChange={(event) => setForm({ ...form, heureFin: event.target.value })} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-registration">Immatriculation du véhicule</Label>
@@ -262,6 +278,10 @@ export default function DechargementBouteillesVides() {
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-title">N° de titre</Label>
                 <Input id="empty-bottles-title" required inputMode="numeric" pattern="[0-9]+" maxLength={100} value={form.numeroTitre} onChange={(event) => setForm({ ...form, numeroTitre: event.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="empty-bottles-seal">N° de plomb</Label>
+                <Input id="empty-bottles-seal" maxLength={100} value={form.plomb} onChange={(event) => setForm({ ...form, plomb: event.target.value })} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-origin">Provenance (chiffre)</Label>
@@ -277,7 +297,7 @@ export default function DechargementBouteillesVides() {
           <section className="space-y-3 border-t pt-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-sm font-semibold">Désignations et quantités</h3>
+                <h3 className="text-sm font-semibold">Comptage des bouteilles</h3>
                 <p className="mt-1 text-xs text-muted-foreground">Ajoutez les formats présents dans cette réception.</p>
               </div>
               <Button type="button" variant="outline" size="sm" disabled={form.detailsBouteilles.length >= DESIGNATIONS.length} onClick={() => setForm((current) => ({ ...current, detailsBouteilles: [...current.detailsBouteilles, { designation: "", quantite: "" }] }))}>
@@ -337,17 +357,17 @@ export default function DechargementBouteillesVides() {
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label="Rechercher une réception de bouteilles vides"
-            placeholder="Rechercher par date, véhicule, chauffeur, titre, provenance, format…"
+            placeholder="Rechercher par date, véhicule, chauffeur, titre, plomb, provenance, format…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="min-h-11 pl-9"
           />
         </div>
         <div className="max-h-[520px] overflow-auto empty-bottles-screen">
-          <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1400px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-muted">
               <tr>
-                {["Date", "Heure d’arrivée", "Immatriculation", "Nom du chauffeur", "N° titre", "Désignation · quantité", "Provenance", "Poids", "Actions"].map((heading) => (
+                {["Date", "HD", "HF", "Immatriculation", "Nom du chauffeur", "N° titre", "N° plomb", "Comptage", "Provenance", "Poids", "Actions"].map((heading) => (
                   <th key={heading} className="border-b px-3 py-2 font-medium">{heading}</th>
                 ))}
               </tr>
@@ -356,10 +376,12 @@ export default function DechargementBouteillesVides() {
               {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="border-b last:border-0">
                   <td className="px-3 py-2">{displayDate(entry.date)}</td>
-                  <td className="px-3 py-2">{entry.heureArrivee}</td>
+                  <td className="px-3 py-2">{entry.heureArrivee || "—"}</td>
+                  <td className="px-3 py-2">{entry.heureFin || "—"}</td>
                   <td className="px-3 py-2 font-medium">{entry.immatriculationVehicule}</td>
                   <td className="px-3 py-2">{entry.nomChauffeur || "—"}</td>
                   <td className="px-3 py-2">{entry.numeroTitre}</td>
+                  <td className="px-3 py-2">{entry.plomb || "—"}</td>
                   <td className="px-3 py-2">
                     <div className="space-y-1">
                       {entry.detailsBouteilles.map((line) => (
@@ -385,12 +407,12 @@ export default function DechargementBouteillesVides() {
                 </tr>
               ))}
               {site?.id && !filteredEntries.length && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">
                   {entries.length ? "Aucune réception ne correspond à votre recherche." : "Aucune réception enregistrée pour ce site."}
                 </td></tr>
               )}
               {!site?.id && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les réceptions.</td></tr>
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les réceptions.</td></tr>
               )}
             </tbody>
           </table>
@@ -401,7 +423,7 @@ export default function DechargementBouteillesVides() {
           <table>
             <thead>
               <tr>
-                {["Date", "Heure d’arrivée", "Immatriculation", "Nom du chauffeur", "N° titre", "Désignation · quantité", "Provenance", "Poids"].map((heading) => (
+                {["Date", "HD", "HF", "Immatriculation", "Nom du chauffeur", "N° titre", "N° plomb", "Comptage", "Provenance", "Poids"].map((heading) => (
                   <th key={heading}>{heading}</th>
                 ))}
               </tr>
@@ -411,9 +433,11 @@ export default function DechargementBouteillesVides() {
                 <tr key={entry.id}>
                   <td>{displayDate(entry.date)}</td>
                   <td>{entry.heureArrivee || "—"}</td>
+                  <td>{entry.heureFin || "—"}</td>
                   <td>{entry.immatriculationVehicule || "—"}</td>
                   <td>{entry.nomChauffeur || "—"}</td>
                   <td>{entry.numeroTitre || "—"}</td>
+                  <td>{entry.plomb || "—"}</td>
                   <td>{entry.detailsBouteilles.map((line) => `${line.designation} : ${line.quantite}`).join(", ") || "—"}</td>
                   <td>{entry.provenance || "—"}</td>
                   <td>{entry.poids ?? "—"}</td>
