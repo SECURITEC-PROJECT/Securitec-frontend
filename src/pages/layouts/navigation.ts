@@ -24,6 +24,8 @@ import {
   FileWarning,
   Package,
   Wrench,
+  Bike,
+  CarFront,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +51,8 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/enregistrements-ordures", label: "Enregistrements Ordures", icon: Trash2 },
       { to: "/dashboard/ordures", label: "Ordures", icon: Trash2 },
       { to: "/dashboard/ferrailles", label: "Ferrailles", icon: Wrench },
+      { to: "/dashboard/mouvement-velos", label: "Mouvement Vélos", icon: Bike },
+      { to: "/dashboard/mouvement-moto", label: "Mouvement Moto", icon: CarFront },
       { to: "/dashboard/visiteurs", label: "Visiteurs", icon: Users },
       { to: "/dashboard/materiels-star", label: "Matériels Star", icon: Package },
     ]

@@ -258,6 +258,28 @@ export interface WasteScrapRegisterEntry {
   siteId: string;
 }
 
+export interface BicycleMovement {
+  id: string;
+  date: string;
+  heureEntree: string;
+  heureSortie: string | null;
+  matricule: string;
+  prenom: string;
+  section: string;
+  marqueVelo: string;
+  siteId: string;
+}
+
+export interface MotorcycleMovement {
+  id: string;
+  date: string;
+  heureEntree: string;
+  moto: string;
+  observation: string;
+  heureSortie: string | null;
+  siteId: string;
+}
+
 export interface ApsPostConfiguration {
   name: string;
   count: number;
@@ -458,6 +480,36 @@ export const serviceApi = {
   async deleteWasteScrapEntry(kind: "ordures" | "ferrailles", id: string, siteId: string) {
     const path = kind === "ordures" ? "/waste-register" : "/scrap-register";
     return request<{ id: string; deleted: boolean }>(`${path}/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async listBicycleMovements(siteId: string) {
+    return (await request<{ entries: BicycleMovement[] }>(`/bicycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createBicycleMovement(data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie">) {
+    return (await request<{ entry: BicycleMovement }>("/bicycle-movements", { method: "POST", body: body(data) })).entry;
+  },
+  async updateBicycleMovement(id: string, data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie">) {
+    return (await request<{ entry: BicycleMovement }>(`/bicycle-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async deleteBicycleMovement(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/bicycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async recordBicycleExit(id: string, siteId: string) {
+    return (await request<{ entry: BicycleMovement }>(`/bicycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`, { method: "PATCH" })).entry;
+  },
+  async listMotorcycleMovements(siteId: string) {
+    return (await request<{ entries: MotorcycleMovement[] }>(`/motorcycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries;
+  },
+  async createMotorcycleMovement(data: Omit<MotorcycleMovement, "id" | "heureSortie">) {
+    return (await request<{ entry: MotorcycleMovement }>("/motorcycle-movements", { method: "POST", body: body(data) })).entry;
+  },
+  async updateMotorcycleMovement(id: string, data: Omit<MotorcycleMovement, "id" | "heureSortie">) {
+    return (await request<{ entry: MotorcycleMovement }>(`/motorcycle-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async recordMotorcycleExit(id: string, siteId: string) {
+    return (await request<{ entry: MotorcycleMovement }>(`/motorcycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`, { method: "PATCH" })).entry;
+  },
+  async deleteMotorcycleMovement(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/motorcycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();

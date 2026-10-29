@@ -26,6 +26,7 @@ import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
 import ChargementsStarParticuliers from '@/pages/fluxLogistique/ChargementsStarParticuliers';
 import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
 import OrduresFerrailles from '@/pages/fluxLogistique/OrduresFerrailles';
+import MouvementsDeuxRoues from '@/pages/fluxLogistique/MouvementsDeuxRoues';
 import DechargementBouteillesVides from '@/pages/fluxLogistique/DechargementBouteillesVides';
 import DechargementMatierePremiere from '@/pages/fluxLogistique/DechargementMatierePremiere';
 import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
@@ -134,6 +135,8 @@ export default function App() {
           <Route path="enregistrements-ordures" element={<FluxLogistique />} />
           <Route path="ordures" element={<OrduresFerrailles kind="ordures" />} />
           <Route path="ferrailles" element={<OrduresFerrailles kind="ferrailles" />} />
+          <Route path="mouvement-velos" element={<MouvementsDeuxRoues kind="velo" />} />
+          <Route path="mouvement-moto" element={<MouvementsDeuxRoues kind="moto" />} />
           <Route path="materiels-star" element={<MaterielsStar />} />
           
           {/* Fiches */}
