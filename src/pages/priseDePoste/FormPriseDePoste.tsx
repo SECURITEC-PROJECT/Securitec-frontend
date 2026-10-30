@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { API_URL, authHeaders } from "@/lib/api";
 import { useEffect, useState } from "react";
 import SelecteursPoste from "./components/SelecteursPoste";
+import { serviceApi, type RegisterEmployeeOption } from "@/lib/service-api";
 
 export interface ShiftFormData {
   matricule: string;
@@ -13,11 +14,17 @@ export interface ShiftFormData {
   prenom: string;
   prestataire: string;
   site_de_travail: string;
+  siteId: string;
+  posteId: string;
+  posteNom: string;
+  shiftType: "JOUR" | "NUIT";
+  chefMatricule: string;
+  agentMatricules: string[];
   notes: string;
 }
 
 interface FormPriseDePosteProps {
-  onStart: (data: ShiftFormData) => void;
+  onStart: (data: ShiftFormData) => Promise<boolean>;
 }
 
 export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
@@ -32,6 +39,13 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
   const [prestataire, setPrestataire] = useState("");
   const [siteDeTravail, setSiteDeTravail] = useState("");
   const [notes, setNotes] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [posteId, setPosteId] = useState("");
+  const [postes, setPostes] = useState<{ id: string; nom: string }[]>([]);
+  const [shiftType, setShiftType] = useState<"JOUR" | "NUIT">("JOUR");
+  const [employees, setEmployees] = useState<RegisterEmployeeOption[]>([]);
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [loadingCrew, setLoadingCrew] = useState(false);
 
   // Charger les options depuis la base de données
   useEffect(() => {
@@ -50,11 +64,30 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
         if (data.sites?.length) {
           setSites(data.sites);
           setSiteDeTravail(data.sites[0].site);
+          setSiteId(data.sites[0].id);
         }
       })
       .catch((err) => { if (err.name !== "AbortError") console.error("Erreur chargement options:", err); });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!siteId) return;
+    let active = true;
+    setLoadingCrew(true);
+    Promise.all([serviceApi.listShiftPosts(siteId), serviceApi.listRegisterEmployees(siteId)])
+      .then(([availablePosts, availableEmployees]) => {
+        if (!active) return;
+        setPostes(availablePosts);
+        setPosteId((current) => availablePosts.some((post) => post.id === current) ? current : availablePosts[0]?.id || "");
+        setEmployees(availableEmployees);
+      })
+      .catch((error) => {
+        if (active) console.error("Chargement des postes et agents impossible:", error);
+      })
+      .finally(() => { if (active) setLoadingCrew(false); });
+    return () => { active = false; };
+  }, [siteId]);
 
   // Vérification automatique du matricule
   useEffect(() => {
@@ -94,24 +127,33 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
     return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [matricule]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (status !== "valid") return;
+    if (status !== "valid" || !siteId || !posteId) return;
 
-    onStart({
+    const saved = await onStart({
       matricule: matricule.trim(),
       nom: nom.trim(),
       prenom: prenom.trim(),
       prestataire,
       site_de_travail: siteDeTravail,
+      siteId,
+      posteId,
+      posteNom: postes.find((post) => post.id === posteId)?.nom || "",
+      shiftType,
+      chefMatricule: matricule.trim(),
+      agentMatricules: selectedAgents.filter((value) => value.toUpperCase() !== matricule.trim().toUpperCase()),
       notes: notes.trim(),
     });
+
+    if (!saved) return;
 
     setMatricule("");
     setNom("");
     setPrenom("");
     setStatus("idle");
     setNotes("");
+    setSelectedAgents([]);
   };
 
   const getInputStyles = () => {
@@ -169,7 +211,38 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
           setPrestataire={setPrestataire}
           siteDeTravail={siteDeTravail}
           setSiteDeTravail={setSiteDeTravail}
+          onSiteChange={(siteName, id) => { setSiteDeTravail(siteName); setSiteId(id); setSelectedAgents([]); }}
         />
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="poste-garde">Poste de garde *</Label>
+            <select id="poste-garde" required value={posteId} onChange={(event) => setPosteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" disabled={loadingCrew || !postes.length}>
+              {!postes.length && <option value="">Aucun poste configuré</option>}
+              {postes.map((post) => <option key={post.id} value={post.id}>{post.nom}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="shift-type">Service *</Label>
+            <select id="shift-type" value={shiftType} onChange={(event) => setShiftType(event.target.value as "JOUR" | "NUIT")} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+              <option value="JOUR">Jour</option><option value="NUIT">Nuit</option>
+            </select>
+          </div>
+        </div>
+
+        <fieldset className="space-y-2 rounded-md border p-3">
+          <legend className="px-1 text-sm font-medium">Autres agents présents</legend>
+          {loadingCrew ? <p className="text-sm text-muted-foreground">Chargement des agents…</p> : employees.filter((employee) => employee.matricule.toUpperCase() !== matricule.trim().toUpperCase()).length ? (
+            <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2">
+              {employees.filter((employee) => employee.matricule.toUpperCase() !== matricule.trim().toUpperCase()).map((employee) => (
+                <label key={employee.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
+                  <input type="checkbox" checked={selectedAgents.includes(employee.matricule)} onChange={(event) => setSelectedAgents((current) => event.target.checked ? [...current, employee.matricule] : current.filter((value) => value !== employee.matricule))} />
+                  <span>{employee.firstName} {employee.lastName} <span className="text-muted-foreground">· {employee.matricule}</span></span>
+                </label>
+              ))}
+            </div>
+          ) : <p className="text-sm text-muted-foreground">Aucun autre agent actif n’est affecté à ce site.</p>}
+        </fieldset>
 
         <div>
           <Label htmlFor="shift-notes">Observations</Label>
@@ -182,7 +255,7 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
           />
         </div>
 
-        <Button type="submit" className="w-full" disabled={status !== "valid"}>
+        <Button type="submit" className="w-full" disabled={status !== "valid" || !siteId || !posteId || loadingCrew}>
           Valider la prise de poste
         </Button>
       </form>

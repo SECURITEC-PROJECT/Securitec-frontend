@@ -397,7 +397,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return result as T;
 }
 
-const body = (data: unknown): string => JSON.stringify(data);
+const body = (data: unknown): string => {
+  if (data && typeof data === "object" && !Array.isArray(data) && typeof window !== "undefined") {
+    const payload = data as Record<string, unknown>;
+    const siteId = typeof payload.siteId === "string" ? payload.siteId : "";
+    if (siteId && !payload.priseDePosteId) {
+      const activeServiceId = localStorage.getItem(`securitec-active-shift:${siteId}`);
+      if (activeServiceId) return JSON.stringify({ ...payload, priseDePosteId: activeServiceId });
+    }
+  }
+  return JSON.stringify(data);
+};
 
 export const serviceApi = {
   async listUsers() { return (await request<{ users: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null }[] }>("/users")).users; },
@@ -456,9 +466,13 @@ export const serviceApi = {
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
   async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
-  async listShifts() {
-    const result = await request<{ shifts?: any[] } | any[]>("/shifts");
+  async listShifts(siteId?: string) {
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    const result = await request<{ shifts?: any[] } | any[]>(`/shifts${query}`);
     return Array.isArray(result) ? result : result.shifts || [];
+  },
+  async listShiftPosts(siteId: string) {
+    return (await request<{ posts: { id: string; nom: string }[] }>(`/shifts/posts?siteId=${encodeURIComponent(siteId)}`)).posts;
   },
   async startShift(data: unknown) { return (await request<{ shift: any }>("/shifts", { method: "POST", body: body(data) })).shift; },
   async endShift(id: string) { return (await request<{ shift: any }>(`/shifts/${id}/end`, { method: "POST", body: "{}" })).shift; },

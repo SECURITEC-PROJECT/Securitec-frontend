@@ -168,6 +168,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncing, setSyncing] = useState(false);
   const [openShiftId, setOpenShiftId] = useState<string | null>(null);
+  const [openShifts, setOpenShifts] = useState<any[]>([]);
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = sites.find((item) => item.name === selectedSiteName);
   const filteredEntries = useMemo(() => {
@@ -205,21 +206,40 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     if (!site?.id) return;
     const storageKey = `securitec-logistics-shift:${site.id}`;
     if (!navigator.onLine) {
-      setOpenShiftId(localStorage.getItem(storageKey));
+      setOpenShifts([]);
+      setOpenShiftId(localStorage.getItem(storageKey) || localStorage.getItem(`securitec-active-shift:${site.id}`));
       return;
     }
     let active = true;
-    serviceApi.listShifts().then((shifts) => {
-      const shift = shifts
-        .filter((item: any) => !item.ended_at && String(item.site_de_travail || "").trim().toLocaleLowerCase() === selectedSiteName.trim().toLocaleLowerCase())
-        .sort((left: any, right: any) => new Date(right.started_at).getTime() - new Date(left.started_at).getTime())[0];
+    serviceApi.listShifts(site.id).then((shifts) => {
+      const grouped = new Map<string, any[]>();
+      shifts.filter((item: any) => !item.ended_at && (item.siteId === site.id || String(item.site_de_travail || "").trim().toLocaleLowerCase() === selectedSiteName.trim().toLocaleLowerCase()))
+        .forEach((item: any) => {
+          const id = String(item.serviceId || item.id);
+          grouped.set(id, [...(grouped.get(id) || []), item]);
+        });
+      const candidates = Array.from(grouped.entries()).map(([serviceId, members]) => {
+        const leader = members.find((item) => item.fonctionService === "CHEF") || members[0];
+        return { ...leader, id: serviceId, serviceId };
+      }).sort((left, right) => new Date(right.started_at).getTime() - new Date(left.started_at).getTime());
       if (!active) return;
-      const id = shift?.id ? String(shift.id) : null;
+      setOpenShifts(candidates);
+      const cached = localStorage.getItem(storageKey) || localStorage.getItem(`securitec-active-shift:${site.id}`);
+      const id = candidates.some((shift) => shift.id === cached) ? cached : candidates.length === 1 ? candidates[0].id : null;
       setOpenShiftId(id);
-      if (id) localStorage.setItem(storageKey, id);
-      else localStorage.removeItem(storageKey);
+      if (id) {
+        localStorage.setItem(storageKey, id);
+        localStorage.setItem(`securitec-active-shift:${site.id}`, id);
+      }
+      else {
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(`securitec-active-shift:${site.id}`);
+      }
     }).catch(() => {
-      if (active) setOpenShiftId(localStorage.getItem(storageKey));
+      if (active) {
+        setOpenShifts([]);
+        setOpenShiftId(localStorage.getItem(storageKey) || localStorage.getItem(`securitec-active-shift:${site.id}`));
+      }
     });
     return () => { active = false; };
   }, [site?.id, selectedSiteName, isOnline]);
@@ -490,7 +510,20 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         />
       </div>
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      {site?.id && !openShiftId && <p className="text-sm text-amber-700">Aucune prise de poste ouverte sur ce site. Ouvrez le service avant d’enregistrer un flux.</p>}
+      {site?.id && openShifts.length > 0 && <div className="max-w-xl space-y-1.5">
+        <Label htmlFor="logistics-shift">Poste et service de saisie</Label>
+        <select id="logistics-shift" value={openShiftId || ""} onChange={(event) => {
+          const id = event.target.value || null;
+          setOpenShiftId(id);
+          const storageKey = `securitec-logistics-shift:${site.id}`;
+          if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey);
+          if (id) localStorage.setItem(`securitec-active-shift:${site.id}`, id); else localStorage.removeItem(`securitec-active-shift:${site.id}`);
+        }} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm">
+          <option value="">Sélectionner le poste actif…</option>
+          {openShifts.map((shift) => <option key={shift.id} value={shift.id}>{shift.posteNom || "Poste non renseigné"} · {shift.shiftType === "NUIT" ? "Nuit" : shift.shiftType === "JOUR" ? "Jour" : "Service"} · {shift.nom} {shift.prenom}</option>)}
+        </select>
+      </div>}
+      {site?.id && !openShiftId && <p className="text-sm text-amber-700">{openShifts.length ? "Sélectionnez le poste actif qui effectue cette saisie." : "Aucune prise de poste ouverte sur ce site. Ouvrez le service avant d’enregistrer un flux."}</p>}
 
           <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Enregistrer une sortie"}>
         <form className="space-y-6" onSubmit={(event) => void saveTruck(event)}>

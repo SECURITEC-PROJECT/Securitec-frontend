@@ -13,6 +13,7 @@ interface SelecteursPosteProps {
   setPrestataire: (val: string) => void;
   siteDeTravail: string;
   setSiteDeTravail: (val: string) => void;
+  onSiteChange?: (name: string, id: string) => void;
 }
 
 export default function SelecteursPoste({
@@ -22,6 +23,7 @@ export default function SelecteursPoste({
   setPrestataire,
   siteDeTravail,
   setSiteDeTravail,
+  onSiteChange,
 }: SelecteursPosteProps) {
   return (
     <div className="grid grid-cols-2 gap-4">
@@ -46,7 +48,11 @@ export default function SelecteursPoste({
         <select
           id="site_de_travail"
           value={siteDeTravail}
-          onChange={(e) => setSiteDeTravail(e.target.value)}
+          onChange={(e) => {
+            const selected = sites.find((site) => site.site === e.target.value);
+            setSiteDeTravail(e.target.value);
+            onSiteChange?.(e.target.value, selected?.id || "");
+          }}
           className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           {sites.map((s) => (
