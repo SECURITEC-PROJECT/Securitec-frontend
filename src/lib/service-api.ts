@@ -116,6 +116,7 @@ export interface SubcontractorMaterialMovement {
   provider: string;
   heureSortie: string | null;
   siteId: string;
+  siteName?: string;
   createdAt?: string;
   annuleLe?: string | null;
 }

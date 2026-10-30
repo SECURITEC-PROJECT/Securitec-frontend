@@ -44,7 +44,15 @@ import PosteOperationnel from '@/pages/postes/PosteOperationnel';
 import FichePrestataire from '@/pages/prestataires/FichePrestataire';
 import Prestataires from '@/pages/prestataires/Prestataires';
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { canAccessRoute } from '@/pages/layouts/navigation';
+
+function RoleAccessGuard({ role }: { role: number }) {
+  const location = useLocation();
+  return canAccessRoute(role, location.pathname)
+    ? <Outlet />
+    : <Navigate to={role === 2 || role === 5 ? "/dashboard/postes" : "/dashboard"} replace state={{ deniedPath: location.pathname }} />;
+}
 
 export default function App() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
@@ -97,6 +105,7 @@ export default function App() {
             )
           }
         >
+          <Route element={<RoleAccessGuard role={user?.role ?? 0} />}>
           {/* Vue d'ensemble (Page principale) */}
           <Route index element={<Dashboard />} />
           <Route path="postes" element={<PostesDeGarde />} />
@@ -108,7 +117,7 @@ export default function App() {
           <Route path="statistiques" element={<Statistiques />} />
           <Route path="prise-de-poste" element={<PriseDePoste />} />
           <Route path="passation" element={<Passation />} />
-          <Route path="visiteurs" element={<AgentAccueil canManageSiteBans={Boolean(user && user.role <= 2)} />} />
+          <Route path="visiteurs" element={<AgentAccueil canManageSiteBans={Boolean(user && [1, 3].includes(user.role))} />} />
           <Route path="logistique" element={<FluxLogistique />} />
           <Route path="controle-acces" element={<ControleAcces />} />
           <Route path="flux-logistiques" element={<FluxLogistique />} />
@@ -153,6 +162,7 @@ export default function App() {
           <Route path="questionnaires-visiteurs" element={<QuestionnaireVisiteur />} />
           <Route path="recoter" element={<FluxLogistique />} />
           <Route path="declaration-objets" element={<DeclarationObjets />} />
+          </Route>
         </Route>
 
         {/* Redirection par défaut */}

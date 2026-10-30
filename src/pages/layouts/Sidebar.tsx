@@ -5,35 +5,7 @@ import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
 import { useMemo, useState } from "react";
 import logoSecuritec from "@/assets/logo securitec.jpg";
-import { SIDEBAR_GROUPS } from "./navigation";
-
-const sidebarRoutesByRole: Record<number, string[]> = {
-  1: ["*"],
-  2: [
-    "/dashboard", "/dashboard/statistiques", "/dashboard/postes", "/dashboard/prestataires",
-    "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps", 
-    "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil", 
-    "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie", 
-    "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
-    "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
-    "/dashboard/mouvement-velos", "/dashboard/mouvement-moto",
-    "/dashboard/visiteurs", "/dashboard/materiels-star", "/dashboard/chauffeurs",
-    "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
-    "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
-    "/dashboard/employes", "/dashboard/administration", "/dashboard/documents"
-  ],
-  3: [
-    "/dashboard", "/dashboard/postes", "/dashboard/prestataires", "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
-    "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
-    "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
-    "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
-    "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
-    "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
-    "/dashboard/mouvement-velos", "/dashboard/mouvement-moto",
-    "/dashboard/materiels-star", "/dashboard/chauffeurs",
-    "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets"
-  ],
-};
+import { canAccessRoute, SIDEBAR_GROUPS } from "./navigation";
 
 interface SidebarProps {
   open: boolean;
@@ -46,20 +18,17 @@ interface SidebarProps {
 export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarProps) {
   const location = useLocation();
   const [search, setSearch] = useState("");
-  const visibleRoutes = (user && sidebarRoutesByRole[user.role]) || sidebarRoutesByRole[3];
   const filteredGroups = useMemo(() => {
     const query = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
-    return SIDEBAR_GROUPS.filter((group) => group.title !== "CAHIERS" && group.title !== "FICHES")
-      .map((group) => ({
+    return SIDEBAR_GROUPS.map((group) => ({
         ...group,
         items: group.items.filter((item) => {
-          const canAccess = visibleRoutes.includes("*") || visibleRoutes.includes(item.to);
+          const canAccess = Boolean(user && canAccessRoute(user.role, item.to));
           const searchableText = `${group.title} ${item.label}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
           return canAccess && (!query || searchableText.includes(query));
         }),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [search, visibleRoutes]);
+      })).filter((group) => group.items.length > 0);
+  }, [search, user]);
 
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>

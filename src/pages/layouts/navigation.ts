@@ -73,3 +73,51 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
   },
   { title: "ÉQUIPE & ADMINISTRATION", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }, { to: "/dashboard/documents", label: "Documents du site", icon: BookOpen }, { to: "/dashboard/cameras", label: "Caméras", icon: Video }] },
 ];
+
+const SECURITY_ROUTES = new Set([
+  "/dashboard", "/dashboard/statistiques", "/dashboard/postes", "/dashboard/prestataires",
+  "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
+  "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
+  "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
+  "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
+  "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
+  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/visiteurs", "/dashboard/materiels-star", "/dashboard/chauffeurs",
+  "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
+  "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
+  "/dashboard/documents",
+]);
+
+const POST_AGENT_ROUTES = new Set([
+  "/dashboard/postes", "/dashboard/prestataires", "/dashboard/prise-de-poste",
+  "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
+  "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
+  "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
+  "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
+  "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
+  "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
+  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/materiels-star", "/dashboard/chauffeurs",
+  "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets",
+]);
+
+const CHEF_ROUTES = new Set([...POST_AGENT_ROUTES, "/dashboard/passation"]);
+const DIRECTION_ROUTES = new Set([
+  "/dashboard", "/dashboard/statistiques", "/dashboard/postes", "/dashboard/prestataires",
+  "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/anomalie", "/dashboard/documents",
+]);
+
+export function canAccessRoute(role: number, path: string): boolean {
+  if (role === 1) return true;
+  let normalizedPath = path.replace(/\/$/, "") || "/dashboard";
+  if (/^\/dashboard\/postes\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/postes";
+  if (/^\/dashboard\/prestataires\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/prestataires";
+  if (normalizedPath === "/dashboard/test-alcool") normalizedPath = "/dashboard/alcootest";
+  if (role === 2) return CHEF_ROUTES.has(normalizedPath);
+  if (role === 3) return SECURITY_ROUTES.has(normalizedPath);
+  if (role === 4) return DIRECTION_ROUTES.has(normalizedPath);
+  if (role === 5) return POST_AGENT_ROUTES.has(normalizedPath);
+  return false;
+}
+
+export function roleLabel(role: number): string {
+  return ({ 1: "Administrateur", 2: "Chef de poste", 3: "Responsable sécurité", 4: "Direction / RAF / chefs de service", 5: "Agent APS" } as Record<number, string>)[role] || "Utilisateur";
+}

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { serviceApi, type EmergencyContact, type Provider } from "@/lib/service-api";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { roleLabel } from "@/pages/layouts/navigation";
 
 type Site = { id: string; name: string; type: "USINE" | "AGENCE" };
 type Employee = { id: string; firstName: string; lastName: string; matricule: string; providerId: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
@@ -37,7 +38,7 @@ export default function Administration() {
   const [savingUser, setSavingUser] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [newUserIdentifier, setNewUserIdentifier] = useState("");
-  const [newUserRole, setNewUserRole] = useState("3");
+  const [newUserRole, setNewUserRole] = useState("5");
   const [newUserSiteId, setNewUserSiteId] = useState("");
   const [newUserPin, setNewUserPin] = useState("");
   const [canManageSites, setCanManageSites] = useState(false);
@@ -107,7 +108,7 @@ export default function Administration() {
   const filteredUsers = useMemo(() => {
     const needle = userQuery.trim().toLocaleLowerCase();
     return users.filter((user) => {
-      const role = user.role === 1 ? "ADMIN" : user.role === 2 ? "SUPERVISEUR" : "AGENT";
+      const role = String(user.role);
       return (userRoleFilter === "ALL" || role === userRoleFilter) && (!needle || `${user.name} ${user.identifier} ${user.siteName || ""}`.toLocaleLowerCase().includes(needle));
     });
   }, [users, userQuery, userRoleFilter]);
@@ -118,12 +119,12 @@ export default function Administration() {
 
   const resetUserForm = () => {
     setShowUserForm(false); setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
-    setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin("");
+    setNewUserRole("5"); setNewUserSiteId(""); setNewUserPin("");
   };
 
   const startCreateUser = () => {
     setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
-    setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin(""); setShowUserForm(true);
+    setNewUserRole("5"); setNewUserSiteId(""); setNewUserPin(""); setShowUserForm(true);
   };
 
   const editUser = (user: UserAccount) => {
@@ -149,7 +150,7 @@ export default function Administration() {
     const role = Number(newUserRole);
     const siteId = newUserSiteId || null;
     if (role !== 1 && !siteId) {
-      toast.error("Un site est obligatoire pour un agent ou un superviseur.");
+      toast.error("Un site est obligatoire pour ce profil.");
       return;
     }
     setSavingUser(true);
@@ -380,7 +381,7 @@ export default function Administration() {
         {showUserForm && <form className="mb-6 grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2" onSubmit={(event) => void saveUser(event)}>
           <div><Label htmlFor="new-user-name">Nom complet</Label><Input id="new-user-name" required maxLength={255} value={newUserName} onChange={(event) => setNewUserName(event.target.value)} /></div>
           <div><Label htmlFor="new-user-identifier">Identifiant de connexion</Label><Input id="new-user-identifier" required maxLength={100} autoComplete="username" value={newUserIdentifier} onChange={(event) => setNewUserIdentifier(event.target.value)} /></div>
-          <div><Label htmlFor="new-user-role">Rôle</Label><select id="new-user-role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="1">Administrateur</option><option value="2">Superviseur</option><option value="3">Agent</option></select></div>
+            <div><Label htmlFor="new-user-role">Rôle</Label><select id="new-user-role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="5">Agent APS</option><option value="2">Chef de poste</option><option value="3">Responsable sécurité</option><option value="4">Direction / RAF / chefs de service</option><option value="1">Administrateur</option></select></div>
           <div><Label htmlFor="new-user-site">Site {newUserRole === "1" ? "(facultatif)" : ""}</Label><select id="new-user-site" required={newUserRole !== "1"} value={newUserSiteId} onChange={(event) => setNewUserSiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">{newUserRole === "1" ? "Aucun site" : "Choisir un site"}</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>
           <div><Label htmlFor="new-user-pin">PIN {editingUserId ? "(laisser vide pour conserver l’actuel)" : "temporaire"} · 6 chiffres</Label><Input id="new-user-pin" required={!editingUserId} type="password" inputMode="numeric" pattern={newUserPin ? "[0-9]{6}" : editingUserId ? undefined : "[0-9]{6}"} minLength={newUserPin ? 6 : editingUserId ? undefined : 6} maxLength={6} autoComplete="new-password" value={newUserPin} onChange={(event) => setNewUserPin(event.target.value.replace(/\D/g, "").slice(0, 6))} /></div>
           <div className="flex items-end"><Button type="submit" disabled={savingUser}>{savingUser ? "Enregistrement…" : editingUserId ? "Enregistrer les modifications" : "Créer le compte"}</Button></div>
@@ -388,10 +389,10 @@ export default function Administration() {
         <div className="mb-4 flex flex-wrap gap-3">
           <Input aria-label="Rechercher un utilisateur" placeholder="Nom, identifiant ou site…" className="max-w-md" value={userQuery} onChange={(event) => setUserQuery(event.target.value)} />
           <select aria-label="Filtrer par rôle" value={userRoleFilter} onChange={(event) => setUserRoleFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-            <option value="ALL">Tous les rôles</option><option value="ADMIN">Administrateur</option><option value="SUPERVISEUR">Superviseur</option><option value="AGENT">Agent</option>
+            <option value="ALL">Tous les rôles</option><option value="1">Administrateur</option><option value="2">Chef de poste</option><option value="3">Responsable sécurité</option><option value="4">Direction / RAF / chefs de service</option><option value="5">Agent APS</option>
           </select>
         </div>
-        {filteredUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Nom</th><th className="py-3 pr-4">Identifiant</th><th className="py-3 pr-4">Rôle</th><th className="py-3 pr-4">Site</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => <tr key={user.id}><td className="py-3 pr-4 font-medium">{user.name}</td><td className="py-3 pr-4 font-mono text-xs">{user.identifier}</td><td className="py-3 pr-4">{user.role === 1 ? "Administrateur" : user.role === 2 ? "Superviseur" : "Agent"}</td><td className="py-3 pr-4">{user.siteName || "—"}</td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${user.name}`} title="Modifier" onClick={() => editUser(user)}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${user.name}`} title="Supprimer" onClick={() => void deleteUser(user)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun utilisateur ne correspond aux filtres.</p>}
+        {filteredUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Nom</th><th className="py-3 pr-4">Identifiant</th><th className="py-3 pr-4">Rôle</th><th className="py-3 pr-4">Site</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => <tr key={user.id}><td className="py-3 pr-4 font-medium">{user.name}</td><td className="py-3 pr-4 font-mono text-xs">{user.identifier}</td><td className="py-3 pr-4">{roleLabel(user.role)}</td><td className="py-3 pr-4">{user.siteName || "—"}</td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${user.name}`} title="Modifier" onClick={() => editUser(user)}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${user.name}`} title="Supprimer" onClick={() => void deleteUser(user)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun utilisateur ne correspond aux filtres.</p>}
       </Panel>}
     </>}
   </div>;
