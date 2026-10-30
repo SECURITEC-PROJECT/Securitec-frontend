@@ -1,7 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { ChevronDown, LogOut, ShieldCheck } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ChevronDown, LogOut, Search, ShieldCheck } from "lucide-react";
 import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
+import { useMemo, useState } from "react";
 import logoSecuritec from "@/assets/logo securitec.jpg";
 import { SIDEBAR_GROUPS } from "./navigation";
 
@@ -43,7 +45,21 @@ interface SidebarProps {
 
 export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarProps) {
   const location = useLocation();
+  const [search, setSearch] = useState("");
   const visibleRoutes = (user && sidebarRoutesByRole[user.role]) || sidebarRoutesByRole[3];
+  const filteredGroups = useMemo(() => {
+    const query = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+    return SIDEBAR_GROUPS
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          const canAccess = visibleRoutes.includes("*") || visibleRoutes.includes(item.to);
+          const searchableText = `${group.title} ${item.label}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+          return canAccess && (!query || searchableText.includes(query));
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [search, visibleRoutes]);
 
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
@@ -66,8 +82,20 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
         <ChevronDown className="h-3 w-3 text-muted-foreground" />
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto">
-        {SIDEBAR_GROUPS.map((g) => ({ ...g, items: g.items.filter((item) => visibleRoutes.includes("*") || visibleRoutes.includes(item.to)) })).filter((g) => g.items.length > 0).map((g) => (
+      <div className="relative mb-4">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          aria-label="Rechercher une page dans le menu"
+          placeholder="Rechercher une page…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      <nav aria-label="Navigation principale" className="flex-1 space-y-5 overflow-y-auto">
+        {filteredGroups.map((g) => (
           <div key={g.title}>
             <p className="mb-2 px-3 text-[10px] font-semibold text-muted-foreground">{g.title}</p>
             <div className="space-y-0.5">
@@ -91,6 +119,9 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
             </div>
           </div>
         ))}
+        {filteredGroups.length === 0 && (
+          <p className="px-3 py-4 text-sm text-muted-foreground">Aucune page trouvée.</p>
+        )}
       </nav>
 
       <div className="mt-5 border-t pt-4">
