@@ -109,14 +109,15 @@ const DIRECTION_ROUTES = new Set([
   "/dashboard", "/dashboard/statistiques", "/dashboard/comptes-rendus",
 ]);
 
-export function homeRouteForRole(_role: number): string {
+export function homeRouteForRole(role: number): string {
+  if (role === 1) return "/dashboard/administration";
   return "/dashboard";
 }
 
 export function canAccessRoute(role: number, path: string): boolean {
   let normalizedPath = path.split("#")[0].replace(/\/$/, "") || "/dashboard";
-  if (["/dashboard/prise-de-poste", "/dashboard/passation"].includes(normalizedPath)) return role === 2;
   if (role === 1) return true;
+  if (["/dashboard/prise-de-poste", "/dashboard/passation"].includes(normalizedPath)) return role === 2;
   if (/^\/dashboard\/postes\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/postes";
   if (/^\/dashboard\/prestataires\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/prestataires";
   if (normalizedPath === "/dashboard/test-alcool") normalizedPath = "/dashboard/alcootest";

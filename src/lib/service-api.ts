@@ -56,6 +56,16 @@ export interface AdminPost {
   reportCount: number;
 }
 
+export interface SiteService {
+  id: string;
+  siteId: string;
+  siteName: string;
+  nom: string;
+  departement: string;
+  responsable: string;
+  actif: boolean;
+}
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -552,6 +562,10 @@ export const serviceApi = {
   async createAdminPost(data: { siteId: string; nom: string }) { return (await request<{ post: AdminPost }>("/admin/posts", { method: "POST", body: body(data) })).post; },
   async updateAdminPost(id: string, data: { nom: string; actif: boolean }) { return (await request<{ post: AdminPost }>(`/admin/posts/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).post; },
   async deleteAdminPost(id: string) { return request<{ id: string; deactivated: boolean }>(`/admin/posts/${encodeURIComponent(id)}`, { method: "DELETE" }); },
+  async listSiteServices() { return (await request<{ services: SiteService[] }>("/site-services")).services; },
+  async createSiteService(data: Omit<SiteService, "id" | "siteName" | "actif">) { return (await request<{ service: SiteService }>("/site-services", { method: "POST", body: body(data) })).service; },
+  async updateSiteService(id: string, data: Omit<SiteService, "id" | "siteName">) { return (await request<{ service: SiteService }>(`/site-services/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).service; },
+  async deleteSiteService(id: string) { return request<{ id: string; deactivated: boolean }>(`/site-services/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listEmergencyContacts(siteId: string) { return (await request<{ contacts: EmergencyContact[] }>(`/emergency-contacts?siteId=${encodeURIComponent(siteId)}`)).contacts; },
   async createEmergencyContact(data: Omit<EmergencyContact, "id" | "ordre">) { return (await request<{ contact: EmergencyContact }>("/emergency-contacts", { method: "POST", body: body(data) })).contact; },
   async updateEmergencyContact(id: string, data: Omit<EmergencyContact, "id" | "ordre">) { return (await request<{ contact: EmergencyContact }>(`/emergency-contacts/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).contact; },

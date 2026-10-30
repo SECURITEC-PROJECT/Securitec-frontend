@@ -26,7 +26,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
       return JSON.parse(localStorage.getItem(`securitec-active-post-context:${user?.id || ""}`) || "null") as { siteId?: string; posteId?: string; posteNom?: string } | null;
     } catch { return null; }
   })();
-  const isGeneralNavigation = ["/dashboard", "/dashboard/postes"].includes(location.pathname);
+  const isGeneralNavigation = ["/dashboard", "/dashboard/postes", "/dashboard/administration"].includes(location.pathname);
   const siteId = routeContext?.siteId || savedContext?.siteId || user?.siteId || "";
   const activePostId = postMatch?.[1] || routeContext?.posteId || (!isGeneralNavigation ? savedContext?.posteId : "") || "";
   const [activePostName, setActivePostName] = useState(routeContext?.posteNom || savedContext?.posteNom || "");
@@ -84,7 +84,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
       })).filter((section) => section.items.length > 0);
     }
     return SIDEBAR_GROUPS
-      .filter((group) => !["CAHIERS", "FICHES"].includes(group.title))
+      .filter((group) => user?.role === 1 || !["CAHIERS", "FICHES"].includes(group.title))
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => {
