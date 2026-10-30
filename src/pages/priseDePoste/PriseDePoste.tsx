@@ -49,10 +49,12 @@ export default function PriseDePoste() {
       const newShifts: Shift[] = Array.isArray(result.shifts) ? result.shifts : [result];
       setShifts((prev) => [...newShifts, ...prev]);
       if (result.serviceId) {
-        localStorage.setItem(`securitec-active-shift:${data.siteId}`, result.serviceId);
-        localStorage.setItem(`securitec-logistics-shift:${data.siteId}`, result.serviceId);
+        localStorage.setItem(`securitec-active-post:${data.siteId}`, data.posteId);
+        localStorage.setItem(`securitec-active-shift:${data.siteId}:${data.posteId}`, result.serviceId);
+        localStorage.setItem(`securitec-logistics-shift:${data.siteId}:${data.posteId}`, result.serviceId);
       }
       toast.success(`Service ${data.shiftType.toLowerCase()} ouvert au ${data.posteNom} avec ${newShifts.length} agent(s).`);
+      if (data.posteId) navigate(`/dashboard/postes/${data.posteId}`, { state: { siteId: data.siteId, posteNom: data.posteNom } });
       return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer la prise de poste.");
@@ -116,8 +118,8 @@ export default function PriseDePoste() {
       const updatedShift = await response.json();
       setShifts((prev) => prev.map((s) => (s.serviceId === shiftId || s.id === shiftId ? { ...s, ended_at: updatedShift.ended_at } : s)));
       const endedService = shifts.find((shift) => shift.serviceId === shiftId || shift.id === shiftId);
-      if (endedService?.siteId) {
-        for (const key of [`securitec-active-shift:${endedService.siteId}`, `securitec-logistics-shift:${endedService.siteId}`]) {
+      if (endedService?.siteId && endedService.posteId) {
+        for (const key of [`securitec-active-shift:${endedService.siteId}:${endedService.posteId}`, `securitec-logistics-shift:${endedService.siteId}:${endedService.posteId}`]) {
           if (localStorage.getItem(key) === shiftId) localStorage.removeItem(key);
         }
       }

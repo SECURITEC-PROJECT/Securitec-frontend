@@ -408,9 +408,14 @@ const body = (data: unknown): string => {
   if (data && typeof data === "object" && !Array.isArray(data) && typeof window !== "undefined") {
     const payload = data as Record<string, unknown>;
     const siteId = typeof payload.siteId === "string" ? payload.siteId : "";
-    if (siteId && !payload.priseDePosteId) {
-      const activeServiceId = localStorage.getItem(`securitec-active-shift:${siteId}`);
-      if (activeServiceId) return JSON.stringify({ ...payload, priseDePosteId: activeServiceId });
+    if (siteId) {
+      const posteId = typeof payload.posteId === "string" ? payload.posteId : localStorage.getItem(`securitec-active-post:${siteId}`);
+      const scopedPayload = posteId && !payload.posteId ? { ...payload, posteId } : payload;
+      if (posteId && !scopedPayload.priseDePosteId) {
+        const activeServiceId = localStorage.getItem(`securitec-active-shift:${siteId}:${posteId}`);
+        if (activeServiceId) return JSON.stringify({ ...scopedPayload, priseDePosteId: activeServiceId });
+      }
+      if (scopedPayload !== payload) return JSON.stringify(scopedPayload);
     }
   }
   return JSON.stringify(data);

@@ -204,10 +204,11 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
 
   useEffect(() => {
     if (!site?.id) return;
-    const storageKey = `securitec-logistics-shift:${site.id}`;
+    const selectedPostId = localStorage.getItem(`securitec-active-post:${site.id}`);
+    const storageKey = `securitec-logistics-shift:${site.id}:${selectedPostId || "site"}`;
     if (!navigator.onLine) {
       setOpenShifts([]);
-      setOpenShiftId(localStorage.getItem(storageKey) || localStorage.getItem(`securitec-active-shift:${site.id}`));
+      setOpenShiftId(localStorage.getItem(storageKey) || (!selectedPostId ? localStorage.getItem(`securitec-logistics-shift:${site.id}`) : null));
       return;
     }
     let active = true;
@@ -224,21 +225,25 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       }).sort((left, right) => new Date(right.started_at).getTime() - new Date(left.started_at).getTime());
       if (!active) return;
       setOpenShifts(candidates);
-      const cached = localStorage.getItem(storageKey) || localStorage.getItem(`securitec-active-shift:${site.id}`);
-      const id = candidates.some((shift) => shift.id === cached) ? cached : candidates.length === 1 ? candidates[0].id : null;
+      const relevantCandidates = selectedPostId ? candidates.filter((shift) => shift.posteId === selectedPostId) : candidates;
+      const cached = localStorage.getItem(storageKey) || (!selectedPostId ? localStorage.getItem(`securitec-logistics-shift:${site.id}`) || localStorage.getItem(`securitec-active-shift:${site.id}`) : null);
+      const id = relevantCandidates.some((shift) => shift.id === cached) ? cached : relevantCandidates.length === 1 ? relevantCandidates[0].id : null;
       setOpenShiftId(id);
       if (id) {
         localStorage.setItem(storageKey, id);
-        localStorage.setItem(`securitec-active-shift:${site.id}`, id);
+        const selected = relevantCandidates.find((shift) => shift.id === id);
+        if (selected?.posteId) {
+          localStorage.setItem(`securitec-active-post:${site.id}`, selected.posteId);
+          localStorage.setItem(`securitec-active-shift:${site.id}:${selected.posteId}`, id);
+        }
       }
       else {
         localStorage.removeItem(storageKey);
-        localStorage.removeItem(`securitec-active-shift:${site.id}`);
       }
     }).catch(() => {
       if (active) {
         setOpenShifts([]);
-        setOpenShiftId(localStorage.getItem(storageKey) || localStorage.getItem(`securitec-active-shift:${site.id}`));
+        setOpenShiftId(localStorage.getItem(storageKey) || (!selectedPostId ? localStorage.getItem(`securitec-logistics-shift:${site.id}`) || localStorage.getItem(`securitec-active-shift:${site.id}`) : null));
       }
     });
     return () => { active = false; };
@@ -515,9 +520,14 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         <select id="logistics-shift" value={openShiftId || ""} onChange={(event) => {
           const id = event.target.value || null;
           setOpenShiftId(id);
-          const storageKey = `securitec-logistics-shift:${site.id}`;
+          const selected = openShifts.find((shift) => shift.id === id);
+          const selectedPostId = selected?.posteId || localStorage.getItem(`securitec-active-post:${site.id}`);
+          const storageKey = `securitec-logistics-shift:${site.id}:${selectedPostId || "site"}`;
           if (id) localStorage.setItem(storageKey, id); else localStorage.removeItem(storageKey);
-          if (id) localStorage.setItem(`securitec-active-shift:${site.id}`, id); else localStorage.removeItem(`securitec-active-shift:${site.id}`);
+          if (id && selectedPostId) {
+            localStorage.setItem(`securitec-active-post:${site.id}`, selectedPostId);
+            localStorage.setItem(`securitec-active-shift:${site.id}:${selectedPostId}`, id);
+          }
         }} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm">
           <option value="">Sélectionner le poste actif…</option>
           {openShifts.map((shift) => <option key={shift.id} value={shift.id}>{shift.posteNom || "Poste non renseigné"} · {shift.shiftType === "NUIT" ? "Nuit" : shift.shiftType === "JOUR" ? "Jour" : "Service"} · {shift.nom} {shift.prenom}</option>)}

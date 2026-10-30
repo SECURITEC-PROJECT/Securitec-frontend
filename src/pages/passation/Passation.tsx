@@ -111,8 +111,12 @@ export default function Passation() {
       }
       const incomingShift = await responseShift.json();
       if (incomingShift.serviceId && routeState?.agentSortant?.siteId) {
-        localStorage.setItem(`securitec-active-shift:${routeState.agentSortant.siteId}`, incomingShift.serviceId);
-        localStorage.setItem(`securitec-logistics-shift:${routeState.agentSortant.siteId}`, incomingShift.serviceId);
+        const posteId = incomingShift.posteId || routeState.agentSortant.posteId;
+        if (posteId) {
+          localStorage.setItem(`securitec-active-post:${routeState.agentSortant.siteId}`, posteId);
+          localStorage.setItem(`securitec-active-shift:${routeState.agentSortant.siteId}:${posteId}`, incomingShift.serviceId);
+          localStorage.setItem(`securitec-logistics-shift:${routeState.agentSortant.siteId}:${posteId}`, incomingShift.serviceId);
+        }
       }
 
       // 3. CLÔTURER LE SERVICE DE L'AGENT SORTANT (si son ID a été transmis)

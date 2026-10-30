@@ -10,7 +10,7 @@ import { SIDEBAR_GROUPS } from "./navigation";
 const sidebarRoutesByRole: Record<number, string[]> = {
   1: ["*"],
   2: [
-    "/dashboard", "/dashboard/statistiques", 
+    "/dashboard", "/dashboard/statistiques", "/dashboard/postes",
     "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps", 
     "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil", 
     "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie", 
@@ -23,7 +23,7 @@ const sidebarRoutesByRole: Record<number, string[]> = {
     "/dashboard/employes", "/dashboard/administration", "/dashboard/documents"
   ],
   3: [
-    "/dashboard", "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
+    "/dashboard", "/dashboard/postes", "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
     "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
     "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
     "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
@@ -49,7 +49,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
   const visibleRoutes = (user && sidebarRoutesByRole[user.role]) || sidebarRoutesByRole[3];
   const filteredGroups = useMemo(() => {
     const query = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
-    return SIDEBAR_GROUPS
+    return SIDEBAR_GROUPS.filter((group) => group.title !== "CAHIERS" && group.title !== "FICHES")
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => {

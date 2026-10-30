@@ -39,6 +39,8 @@ import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
 import PointageAPS from '@/pages/pointageAps/PointageAPS';
 import MouvementsAPS from '@/pages/pointageAps/MouvementsAPS';
 import Anomalie from '@/pages/anomalie/Anomalie';
+import PostesDeGarde from '@/pages/postes/PostesDeGarde';
+import PosteOperationnel from '@/pages/postes/PosteOperationnel';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -95,6 +97,8 @@ export default function App() {
         >
           {/* Vue d'ensemble (Page principale) */}
           <Route index element={<Dashboard />} />
+          <Route path="postes" element={<PostesDeGarde />} />
+          <Route path="postes/:posteId" element={<PosteOperationnel />} />
 
           {/* Les autres pages du menu */}
           <Route path="statistiques" element={<Statistiques />} />
@@ -124,17 +128,14 @@ export default function App() {
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<Vehicule />} />
-          <Route path="mouvements-vehicules" element={<AgentAccueil />} />
           <Route path="pointage-aps" element={<PointageAPS />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<Courrier />} />
-          <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<Anomalie/>} />
           <Route path="alcootest" element={<Alcootest />} />
           <Route path="test-alcool" element={<Navigate to="/dashboard/alcootest" replace />} />
           <Route path="consigne" element={<Consignes />} />
           <Route path="chargements-star-particuliers" element={<ChargementsStarParticuliers />} />
-          <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
           <Route path="materiels-sous-traitant" element={<MaterielsSousTraitant />} />
           <Route path="enregistrements-ordures" element={<OrduresFerrailles kind="ordures" />} />
           <Route path="ordures" element={<FluxLogistique kind="ordures" />} />

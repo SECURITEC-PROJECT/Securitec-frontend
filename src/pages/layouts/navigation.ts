@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FileText,
   LayoutDashboard,
+  ShieldCheck,
   Repeat,
   Route as RouteIcon,
   Settings2,
@@ -31,7 +32,8 @@ import {
 } from "lucide-react";
 
 export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
-  { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
+  { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
+  { title: "POSTES DE GARDE", items: [{ to: "/dashboard/postes", label: "Choisir un poste", icon: ShieldCheck }] },
   { title: "CAHIERS", items: [
       { to: "/dashboard/mouvements-cles", label: "Mouvements clés", icon: KeyRound },
       { to: "/dashboard/carte-grise-permis", label: "Carte grise / Permis", icon: FileSignature },
