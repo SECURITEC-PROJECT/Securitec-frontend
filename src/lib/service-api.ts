@@ -478,8 +478,10 @@ export const serviceApi = {
   async endShift(id: string) { return (await request<{ shift: any }>(`/shifts/${id}/end`, { method: "POST", body: "{}" })).shift; },
   async listPassations() { return (await request<{ passations: any[] }>("/passations")).passations; },
   async createPassation(data: unknown) { return (await request<{ passation: any }>("/passations", { method: "POST", body: body(data) })).passation; },
-  async listJournalConsignes(siteId: string) {
-    return (await request<{ entries: any[] }>(`/consignes-journal?siteId=${encodeURIComponent(siteId)}`)).entries;
+  async listJournalConsignes(siteId: string, activeOnly = false) {
+    const params = new URLSearchParams({ siteId });
+    if (activeOnly) params.set("activeOnly", "true");
+    return (await request<{ entries: any[] }>(`/consignes-journal?${params}`)).entries;
   },
   async createJournalConsigne(data: unknown) {
     return (await request<{ entry: any }>("/consignes-journal", { method: "POST", body: body(data) })).entry;
