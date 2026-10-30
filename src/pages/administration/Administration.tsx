@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { serviceApi, type Provider } from "@/lib/service-api";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
 
 type Site = { id: string; name: string; type: "USINE" | "AGENCE" };
 type Employee = { id: string; firstName: string; lastName: string; matricule: string; providerId: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
@@ -216,7 +217,7 @@ export default function Administration() {
   };
 
   const deleteProvider = async (provider: Provider) => {
-    if (!(await confirmDeletion(`Supprimer « ${provider.name} » ? S’il est utilisé, il sera désactivé afin de préserver les historiques.`))) return;
+    if (!(await confirmDeletion(`Désactiver « ${provider.name} » ? Le prestataire restera conservé pour préserver les historiques.`))) return;
     try {
       const result = await serviceApi.deleteProvider(provider.id);
       if (result.deactivated) {
@@ -224,10 +225,7 @@ export default function Administration() {
         if (editingProviderId === provider.id) { setEditingProviderId(null); setProviderName(""); }
         toast.success("Prestataire désactivé ; ses historiques sont conservés.");
       }
-      else {
-        setProviders((current) => current.filter((item) => item.id !== provider.id));
-        toast.success("Prestataire supprimé.");
-      }
+      else toast.success("Le prestataire était déjà supprimé.");
       if (editingProviderId === provider.id) { setEditingProviderId(null); setProviderName(""); }
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression du prestataire impossible.");
@@ -283,7 +281,13 @@ export default function Administration() {
       </div>}
       {tab === "Prestataires" && canManageSites && <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel title={`Prestataires (${displayedProviders.length})`}>
-          <div className="mb-3 flex justify-end">
+          <div className="mb-3 flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={!displayedProviders.length} onClick={() => {
+              const rows = [["Nom", "Statut", "Employés", "Mouvements matériel"], ...displayedProviders.map((item) => [item.name, item.active ? "Actif" : "Inactif", String(item.employeeCount), String(item.materialCount)])];
+              const csv = rows.map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(";")).join("\r\n");
+              const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+              const anchor = document.createElement("a"); anchor.href = url; anchor.download = "registre-prestataires.csv"; anchor.click(); URL.revokeObjectURL(url);
+            }}>Exporter CSV</Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setShowInactiveProviders((visible) => !visible)}>
               {showInactiveProviders ? "Masquer les prestataires inactifs" : `Afficher les prestataires inactifs (${providers.filter((provider) => !provider.active).length})`}
             </Button>
@@ -291,6 +295,7 @@ export default function Administration() {
           {displayedProviders.length ? <div className="divide-y">{displayedProviders.map((provider) => <div key={provider.id} className="flex flex-wrap items-center gap-3 py-4">
             <div className="min-w-0 flex-1"><p className="font-medium">{provider.name}</p><p className="text-xs text-muted-foreground">{provider.employeeCount} employé(s) · {provider.materialCount} mouvement(s) matériel</p></div>
             <Badge variant={provider.active ? "secondary" : "outline"}>{provider.active ? "Actif" : "Inactif"}</Badge>
+            <RegistryAuditHistory entity="prestataire" recordId={provider.id} />
             <Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${provider.name}`} title="Modifier" onClick={() => { setEditingProviderId(provider.id); setProviderName(provider.name); }}><Pencil className="h-4 w-4" /></Button>
             <Button type="button" variant="ghost" size="icon" aria-label={provider.active ? `Désactiver ${provider.name}` : `Réactiver ${provider.name}`} title={provider.active ? "Désactiver" : "Réactiver"} onClick={() => void toggleProvider(provider)}><RefreshCw className="h-4 w-4" /></Button>
             <Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${provider.name}`} title="Supprimer" onClick={() => void deleteProvider(provider)}><Trash2 className="h-4 w-4 text-destructive" /></Button>

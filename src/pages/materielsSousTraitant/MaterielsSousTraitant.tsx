@@ -10,6 +10,9 @@ import { serviceApi, type Provider, type SubcontractorMaterialMovement } from "@
 import { toast } from "sonner";
 import { printRecord } from "@/lib/printRecord";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 
 type FormData = { date: string; heureEntree: string; materiels: string; nombre: string; prestataireId: string };
 const today = () => {
@@ -39,12 +42,14 @@ export default function MaterielsSousTraitant() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const loading = Boolean(site?.id) && loadedSiteId !== site?.id;
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
-  const filteredEntries = entries.filter((entry) =>
-    [entry.date, displayDate(entry.date), entry.heureEntree, entry.materiels, String(entry.nombre), entry.provider, entry.entreprise, entry.heureSortie ?? ""]
+  const filteredEntries = entries.filter((entry) => isWithinRegistryPeriod(entry.date, periodStart, periodEnd)
+    && [entry.date, displayDate(entry.date), entry.heureEntree, entry.materiels, String(entry.nombre), entry.provider, entry.entreprise, entry.heureSortie ?? ""]
       .join(" ")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -114,13 +119,13 @@ export default function MaterielsSousTraitant() {
   };
 
   const deleteEntry = async (entry: SubcontractorMaterialMovement) => {
-    if (!site?.id || !(await confirmDeletion(`Supprimer le mouvement de ${entry.provider} ? Cette action est définitive.`))) return;
+    if (!site?.id || entry.annuleLe || !(await confirmDeletion(`Annuler le mouvement de ${entry.provider} ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteSubcontractorMaterial(entry.id, site.id);
-      setEntries((current) => current.filter((row) => row.id !== entry.id));
+      setEntries((current) => current.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row));
       if (editingId === entry.id) resetForm();
-      toast.success("Mouvement supprimé.");
+      toast.success("Mouvement annulé et conservé dans l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally { setDeletingId(null); }
@@ -195,6 +200,11 @@ export default function MaterielsSousTraitant() {
             className="min-h-11 pl-9"
           />
         </div>
+        <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} filename="materiels-sous-traitants" columns={[
+          { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
+          { label: "Matériel", value: (row) => row.materiels }, { label: "Nombre", value: (row) => row.nombre },
+          { label: "Prestataire", value: (row) => row.provider }, { label: "Heure sortie", value: (row) => row.heureSortie }, { label: "Annulé le", value: (row) => row.annuleLe },
+        ]} />
         <Button type="button" variant="outline" className="print:hidden" disabled={loading || !entries.length} onClick={handlePrint}>
           <Printer className="mr-2 size-4" /> Imprimer le registre
         </Button>
@@ -204,8 +214,8 @@ export default function MaterielsSousTraitant() {
           <thead className="bg-muted/70 text-xs uppercase text-muted-foreground"><tr>
             {["Date", "Heure d’entrée", "Matériels", "Nombre", "Prestataire", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}
           </tr></thead>
-          <tbody className="divide-y divide-border/70">{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
-            <td className="whitespace-nowrap px-3 py-3">{displayDate(entry.date)}</td>
+          <tbody className="divide-y divide-border/70">{filteredEntries.map((entry) => <tr key={entry.id} className={`align-top hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+            <td className="whitespace-nowrap px-3 py-3">{displayDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive">(annulé)</span>}</td>
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
             <td className="whitespace-pre-wrap break-words px-3 py-3">{entry.materiels}</td>
             <td className="px-3 py-3 text-center">{entry.nombre}</td>
@@ -213,9 +223,11 @@ export default function MaterielsSousTraitant() {
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
             <td className="px-3 py-3"><div className="flex items-center gap-1">
               <Button type="button" variant="ghost" size="icon" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
-              <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>
-              <Button type="button" variant="ghost" size="icon" aria-label="Supprimer le mouvement" title="Supprimer" className="text-destructive hover:text-destructive" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>
-              {!entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
+              {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>}
+              {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title="Annuler" className="text-destructive hover:text-destructive" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
+              <RegistryAuditHistory entity="materiel_sous_traitant" recordId={entry.id} />
+              <RegistryAttachments entity="materiel_sous_traitant" recordId={entry.id} siteId={site?.id} />
+              {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
               {entry.heureSortie && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Package className="size-3" />Sorti</span>}
             </div></td>
           </tr>)}
@@ -232,7 +244,7 @@ export default function MaterielsSousTraitant() {
               <tr>{["Date", "Heure d’entrée", "Matériels", "Nombre", "Entreprise", "Heure de sortie"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td>{displayDate(entry.date)}</td>
                   <td>{entry.heureEntree || "—"}</td>

@@ -25,6 +25,7 @@ type Handover = {
   confirmation_sortant_le?: string | null;
   confirmation_entrant_le?: string | null;
   poste_nom?: string;
+  site_id?: string | null;
   created_at: string;
 };
 

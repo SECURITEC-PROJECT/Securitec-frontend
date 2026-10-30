@@ -66,11 +66,11 @@ export default function Vehicule() {
   const deleteVehicle = async (id: string) => {
     if (!site?.id) return;
     const vehicle = vehicles.find((entry) => entry.id === id);
-    if (!vehicle || !(await confirmDeletion(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`))) return;
+    if (!vehicle || vehicle.annuleLe || !(await confirmDeletion(`Annuler le mouvement du véhicule « ${vehicle.plate} » ? Il restera dans l’historique.`))) return;
     await serviceApi.deleteVehicle(id, site.id);
-    setRegistry((current) => ({ ...current, vehicles: current.vehicles.filter((vehicle) => vehicle.id !== id) }));
+    setRegistry((current) => ({ ...current, vehicles: current.vehicles.map((vehicle) => vehicle.id === id ? { ...vehicle, annuleLe: new Date().toISOString() } : vehicle) }));
     if (editingVehicle?.id === id) setEditingVehicle(null);
-    toast.success("Mouvement véhicule supprimé.");
+      toast.success("Mouvement véhicule annulé et conservé dans l’historique.");
   };
 
   return (

@@ -1,5 +1,9 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import type { InventoryRow, RetainedDocument } from "./FormPassation";
+import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { useState } from "react";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 
 interface Handover {
   id: string;
@@ -17,12 +21,16 @@ interface Handover {
   confirmation_sortant_le?: string | null;
   confirmation_entrant_le?: string | null;
   poste_nom?: string;
+  site_id?: string | null;
   created_at: string;
 }
 
 interface ListPassationProps { handovers: Handover[] }
 
 export default function ListPassation({ handovers }: ListPassationProps) {
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const filteredHandovers = handovers.filter((item) => isWithinRegistryPeriod(item.created_at, periodStart, periodEnd));
   const fmtDate = (value: string | null | undefined) => {
     if (!value) return "—";
     const date = new Date(value);
@@ -31,8 +39,16 @@ export default function ListPassation({ handovers }: ListPassationProps) {
 
   return (
     <Panel title="Passations précédentes">
-      {handovers.length ? <ul className="space-y-3">
-        {handovers.map((handover) => {
+      <div className="mb-4"><RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredHandovers} filename="registre-passations" columns={[
+        { label: "Date", value: (row) => row.created_at }, { label: "Poste", value: (row) => row.poste_nom },
+        { label: "Chef sortant", value: (row) => `${row.agent_sortant_prenom} ${row.agent_sortant_nom}` },
+        { label: "Chef entrant", value: (row) => `${row.incoming_prenom} ${row.incoming_nom}` },
+        { label: "Inventaire", value: (row) => (row.inventaire || []).map((item) => `${item.designation}: ${item.quantiteSortie}/${item.etatSortie} → ${item.quantiteEntree}/${item.etatEntree}`).join(" | ") },
+        { label: "Consignes", value: (row) => row.instructions },
+        { label: "Pièces/courriers retenus", value: (row) => (row.documents_retenus || []).map((item) => `${item.type} ${item.reference} ×${item.quantite}`).join(" | ") },
+      ]} /></div>
+      {filteredHandovers.length ? <ul className="space-y-3">
+        {filteredHandovers.map((handover) => {
           const outgoing = [handover.agent_sortant_prenom, handover.agent_sortant_nom].filter(Boolean).join(" ");
           const incoming = [handover.incoming_prenom, handover.incoming_nom].filter(Boolean).join(" ");
           return <li key={handover.id} className="space-y-2 rounded-md border p-3 text-sm">
@@ -44,9 +60,11 @@ export default function ListPassation({ handovers }: ListPassationProps) {
             {handover.equipment && <p><span className="text-muted-foreground">Précisions matériel :</span> {handover.equipment}</p>}
             {handover.ongoing_events && <p><span className="text-muted-foreground">En cours :</span> {handover.ongoing_events}</p>}
             {handover.instructions && <p><span className="text-muted-foreground">Consignes transmises :</span> {handover.instructions}</p>}
+            <RegistryAuditHistory entity="passation" recordId={handover.id} />
+            <RegistryAttachments entity="passation" recordId={handover.id} siteId={handover.site_id} />
           </li>;
         })}
-      </ul> : <Empty text="Aucune passation" />}
+      </ul> : <Empty text={handovers.length ? "Aucune passation pour cette période" : "Aucune passation"} />}
     </Panel>
   );
 }

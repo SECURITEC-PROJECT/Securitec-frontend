@@ -8,6 +8,9 @@ import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 
 const FUNCTIONS = ["CR", "ADM", "Qualite", "Labo", "Maintenance", "Logistique", "Pile & Face", "Sécurité", "Pronete", "Néa"] as const;
 type JobFunction = typeof FUNCTIONS[number];
@@ -154,6 +157,8 @@ export default function Alcootest() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [printMode, setPrintMode] = useState<"protocol" | "registry" | null>(null);
   const site = useMemo(
     () => sites.find((item) => item.id === selectedSiteId) || sites[0],
@@ -163,8 +168,8 @@ export default function Alcootest() {
   const visibleEntries = entriesSiteId === siteId ? entries : [];
   const loading = Boolean(siteId) && entriesSiteId !== siteId;
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
-  const filteredEntries = visibleEntries.filter((entry) =>
-    [entry.date, formatDate(entry.date.slice(0, 10)), entry.heure, entry.matricule, entry.personne, entry.demandeur, entry.fonction, entry.resultat, entry.tauxMesure, entry.testeurNom, entry.temoinNom, entry.temoin2Nom]
+  const filteredEntries = visibleEntries.filter((entry) => isWithinRegistryPeriod(entry.date, periodStart, periodEnd)
+    && [entry.date, formatDate(entry.date.slice(0, 10)), entry.heure, entry.matricule, entry.personne, entry.demandeur, entry.fonction, entry.resultat, entry.tauxMesure, entry.testeurNom, entry.temoinNom, entry.temoin2Nom]
       .join(" ")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -245,13 +250,13 @@ export default function Alcootest() {
 
   const deleteEntry = async (entry: AlcoholCheck) => {
     if (!siteId) return;
-    if (!(await confirmDeletion(`Supprimer le contrôle de ${entry.personne} (${entry.matricule}) ? Cette action est définitive.`))) return;
+    if (entry.annuleLe || !(await confirmDeletion(`Annuler le contrôle de ${entry.personne} (${entry.matricule}) ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteAlcoholCheck(entry.id, siteId);
-      setEntries((current) => current.filter((row) => row.id !== entry.id));
+      setEntries((current) => current.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Alcootest supprimé.");
+      toast.success("Contrôle annulé et conservé dans l’historique.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -401,6 +406,13 @@ export default function Alcootest() {
               className="min-h-11 pl-9"
             />
           </div>
+          <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} filename="registre-alcootest" columns={[
+            { label: "Date", value: (row) => row.date }, { label: "Heure", value: (row) => row.heure },
+            { label: "Matricule", value: (row) => row.matricule }, { label: "Personne", value: (row) => row.personne },
+            { label: "Fonction", value: (row) => row.fonction }, { label: "Résultat", value: (row) => row.resultat },
+            { label: "Taux", value: (row) => row.tauxMesure }, { label: "Demandeur", value: (row) => row.demandeur },
+            { label: "Annulé le", value: (row) => row.annuleLe },
+          ]} />
           <Button type="button" variant="outline" className="print:hidden" disabled={loading || !visibleEntries.length} onClick={() => handlePrint("registry")}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
           </Button>
@@ -424,8 +436,8 @@ export default function Alcootest() {
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
-                    <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}</td>
+                    <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heure}</td>
                       <td className="break-words px-3 py-3 font-mono text-xs">{entry.matricule || "—"}</td>
                       <td className="break-words px-3 py-3 font-medium">{entry.personne}</td>
@@ -439,15 +451,17 @@ export default function Alcootest() {
                       <td className="break-words px-3 py-3">{entry.demandeur || "—"}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
-                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le test" title="Modifier le test" onClick={() => editEntry(entry)}>
+                          {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le test" title="Modifier le test" onClick={() => editEntry(entry)}>
                             <Pencil className="h-4 w-4" />
-                          </Button>
+                          </Button>}
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le procès-verbal" title="Imprimer le procès-verbal" onClick={() => printEntry(entry)}>
                             <Printer className="h-4 w-4" />
                           </Button>
-                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer le test" title="Supprimer le test" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
+                          {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler le test" title="Annuler le test" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
                             <Trash2 className="h-4 w-4" />
-                          </Button>
+                          </Button>}
+                          <RegistryAuditHistory entity="controle_alcoolemie" recordId={entry.id} />
+                          <RegistryAttachments entity="controle_alcoolemie" recordId={entry.id} siteId={entry.siteId} />
                         </div>
                       </td>
                     </tr>
@@ -465,7 +479,7 @@ export default function Alcootest() {
               <tr>{["Date", "Heure", "Matricule", "Nom et prénom", "Fonction", "Résultat", "Taux (g/l)", "Demandeur"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
             </thead>
             <tbody>
-              {visibleEntries.map((entry) => (
+                  {filteredEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td>{formatDate(entry.date.slice(0, 10))}</td>
                   <td>{entry.heure || "—"}</td>

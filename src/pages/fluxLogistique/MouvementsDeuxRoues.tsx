@@ -6,6 +6,9 @@ import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
+import { isWithinRegistryPeriod, RegistryPeriodExport, type RegistryColumn } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 import {
   serviceApi,
   type BicycleMovement,
@@ -84,6 +87,8 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
 
   const siteName = selectedSiteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === siteName), [sites, siteName]);
@@ -133,8 +138,8 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
 
   const filteredEntries = useMemo(() => {
     const query = normalize(search.trim());
-    if (!query) return entries;
     return entries.filter((entry) => {
+      if (!isWithinRegistryPeriod(entry.date, periodStart, periodEnd)) return false;
       const values = isBicycle
         ? [
           entry.date, formatDate(entry.date), entry.heureEntree, (entry as BicycleMovement).matricule,
@@ -145,9 +150,22 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           entry.date, formatDate(entry.date), entry.heureEntree, (entry as MotorcycleMovement).moto,
           (entry as MotorcycleMovement).observation, (entry as MotorcycleMovement).heureSortie || "",
         ];
-      return normalize(values.join(" ")).includes(query);
+      return !query || normalize(values.join(" ")).includes(query);
     });
-  }, [entries, search, isBicycle]);
+  }, [entries, search, isBicycle, periodStart, periodEnd]);
+
+  const exportColumns: RegistryColumn<MovementEntry>[] = isBicycle
+    ? [
+      { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
+      { label: "Matricule", value: (row) => (row as BicycleMovement).matricule }, { label: "Prénom", value: (row) => (row as BicycleMovement).prenom },
+      { label: "Section", value: (row) => (row as BicycleMovement).section }, { label: "Vélo", value: (row) => (row as BicycleMovement).marqueVelo },
+      { label: "Heure sortie", value: (row) => (row as BicycleMovement).heureSortie }, { label: "Annulé le", value: (row) => (row as BicycleMovement).annuleLe },
+    ]
+    : [
+      { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
+      { label: "Moto", value: (row) => (row as MotorcycleMovement).moto }, { label: "Observation", value: (row) => (row as MotorcycleMovement).observation },
+      { label: "Heure sortie", value: (row) => (row as MotorcycleMovement).heureSortie }, { label: "Annulé le", value: (row) => (row as MotorcycleMovement).annuleLe },
+    ];
 
   const resetForm = () => {
     setForm(blankForm());
@@ -254,17 +272,15 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   };
 
   const deleteEntry = async (entry: MovementEntry) => {
-    if (!siteId || !(await confirmDeletion("Supprimer définitivement ce mouvement ?"))) return;
+    if (!siteId || entry.annuleLe || !(await confirmDeletion("Annuler ce mouvement ? Il restera dans l’historique."))) return;
     setDeletingId(entry.id);
     try {
       if (isBicycle) await serviceApi.deleteBicycleMovement(entry.id, siteId);
       else await serviceApi.deleteMotorcycleMovement(entry.id, siteId);
-      setRegistry((current) => ({
-        ...current,
-        entries: current.entries.filter((item) => item.id !== entry.id),
-      }));
+      const cancelledAt = new Date().toISOString();
+      setRegistry((current) => ({ ...current, entries: current.entries.map((item) => item.id === entry.id ? { ...item, annuleLe: cancelledAt } : item) }));
       if (editingEntry?.id === entry.id) resetForm();
-      toast.success("Mouvement supprimé.");
+      toast.success("Mouvement annulé et conservé dans l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
@@ -500,11 +516,12 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
       </Panel>
 
       <Panel title={`Historique ${isBicycle ? "des vélos" : "des motos"} (${filteredEntries.length})`}>
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="relative min-w-[260px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input aria-label={`Rechercher dans ${title}`} placeholder="Rechercher dans le registre…" className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
+          <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} columns={exportColumns} filename={isBicycle ? "mouvements-velos" : "mouvements-motos"} />
           <Button type="button" variant="outline" disabled={loading || !entries.length} onClick={printHistory}>
             <Printer className="mr-2 size-4" />
             Imprimer tout l’historique
@@ -524,7 +541,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
                     </thead>
                     <tbody className="divide-y">
                       {filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
-                        <td className="whitespace-nowrap px-3 py-3">{formatDate(entry.date)}</td>
+                        <td className={`whitespace-nowrap px-3 py-3 ${entry.annuleLe ? "text-muted-foreground line-through" : ""}`}>{formatDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive no-underline">(annulé)</span>}</td>
                         <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                         {isBicycle ? <>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{(entry as BicycleMovement).matricule}</td>
@@ -542,14 +559,16 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
                             <Button type="button" size="icon" variant="ghost" aria-label="Imprimer le mouvement" title="Imprimer le mouvement" onClick={() => printEntry(entry)}>
                               <Printer className="size-4" />
                             </Button>
-                            {isBicycle && !(entry as BicycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordBicycleExit(entry as BicycleMovement)}>
+                            {!entry.annuleLe && isBicycle && !(entry as BicycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordBicycleExit(entry as BicycleMovement)}>
                               <LogOut className="mr-1 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortir"}
                             </Button>}
-                            {!isBicycle && !(entry as MotorcycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordExit(entry as MotorcycleMovement)}>
+                            {!entry.annuleLe && !isBicycle && !(entry as MotorcycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordExit(entry as MotorcycleMovement)}>
                               <LogOut className="mr-1 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortir"}
                             </Button>}
-                            <Button type="button" size="icon" variant="ghost" aria-label="Modifier le mouvement" title="Modifier" onClick={() => editEntry(entry)}><Pencil className="size-4" /></Button>
-                            <Button type="button" size="icon" variant="ghost" aria-label="Supprimer le mouvement" title="Supprimer" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4 text-destructive" /></Button>
+                            {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" aria-label="Modifier le mouvement" title="Modifier" onClick={() => editEntry(entry)}><Pencil className="size-4" /></Button>}
+                            {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" aria-label="Annuler le mouvement" title="Annuler" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4 text-destructive" /></Button>}
+                            <RegistryAuditHistory entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} />
+                            <RegistryAttachments entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} siteId={siteId} />
                           </div>
                         </td>
                       </tr>)}

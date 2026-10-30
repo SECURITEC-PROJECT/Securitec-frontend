@@ -67,6 +67,7 @@ export interface VehicleMovement {
   exited_at: string | null;
   siteId?: string | null;
   site_name?: string | null;
+  annuleLe?: string | null;
 }
 
 export interface CourrierMovement {
@@ -79,6 +80,7 @@ export interface CourrierMovement {
   heureSortie: string | null;
   siteId: string;
   siteName: string;
+  annuleLe?: string | null;
 }
 
 export interface SubcontractorMaterialMovement {
@@ -93,6 +95,7 @@ export interface SubcontractorMaterialMovement {
   heureSortie: string | null;
   siteId: string;
   createdAt?: string;
+  annuleLe?: string | null;
 }
 
 export interface StarMaterialItem {
@@ -112,6 +115,7 @@ export interface StarMaterialEntry {
   heureSortie: string | null;
   siteId: string;
   siteName: string;
+  annuleLe?: string | null;
 }
 
 export interface Provider {
@@ -248,6 +252,7 @@ export interface AlcoholCheck {
   temoin2Fonction: string | null;
   siteId: string;
   siteName: string;
+  annuleLe?: string | null;
 }
 
 export interface StarParticulierLoading {
@@ -329,6 +334,7 @@ export interface BicycleMovement {
   section: string;
   marqueVelo: string;
   siteId: string;
+  annuleLe?: string | null;
 }
 
 export interface MotorcycleMovement {
@@ -339,6 +345,7 @@ export interface MotorcycleMovement {
   observation: string;
   heureSortie: string | null;
   siteId: string;
+  annuleLe?: string | null;
 }
 
 export interface ApsPostConfiguration {
@@ -448,6 +455,15 @@ export const serviceApi = {
     const disposition = response.headers.get("Content-Disposition") || "";
     const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     return { blob: await response.blob(), name: encoded ? decodeURIComponent(encoded) : "document" };
+  },
+  async listRegistryAttachments(entity: string, recordId: string) {
+    return (await request<{ attachments: Array<{ id: string; documentId: string; name: string; extension: string; size: number; linkedAt: string }> }>(`/register-attachments?entity=${encodeURIComponent(entity)}&recordId=${encodeURIComponent(recordId)}`)).attachments;
+  },
+  async linkRegistryAttachment(entity: string, recordId: string, documentId: string) {
+    return request<{ linked: boolean; id: string | null }>("/register-attachments", { method: "POST", body: body({ entity, recordId, documentId }) });
+  },
+  async unlinkRegistryAttachment(id: string) {
+    return request<{ id: string; unlinked: boolean }>(`/register-attachments/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
   async listLogisticsAttachments(entryId: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
