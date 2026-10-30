@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
 import { useMemo, useState } from "react";
 import logoSecuritec from "@/assets/logo securitec.jpg";
-import { canAccessRoute, SIDEBAR_GROUPS } from "./navigation";
+import { canAccessRoute, homeRouteForRole, SIDEBAR_GROUPS } from "./navigation";
 
 interface SidebarProps {
   open: boolean;
@@ -32,7 +32,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
 
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
-      <Link to="/dashboard" className="mb-6 flex items-center gap-2.5 px-2 text-sidebar-primary">
+      <Link to={homeRouteForRole(user?.role ?? 0)} className="mb-6 flex items-center gap-2.5 px-2 text-sidebar-primary">
         <img src={logoSecuritec} alt="SECURITEC Surveillance" className="h-12 w-11 rounded-md object-contain" />
         <div>
           <span className="text-lg font-bold">SECURITEC<span className="text-primary">.</span></span>
@@ -45,8 +45,8 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
           <ShieldCheck className="h-4 w-4" />
         </span>
         <div className="flex-1">
-          <p className="text-xs font-semibold">Site pilote · Antsirabe</p>
-          <p className="text-[10px] text-muted-foreground">Poste principal</p>
+          <p className="text-xs font-semibold">{user?.siteNom || "Site non associé"}</p>
+          <p className="text-[10px] text-muted-foreground">{role}</p>
         </div>
         <ChevronDown className="h-3 w-3 text-muted-foreground" />
       </div>

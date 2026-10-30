@@ -101,9 +101,14 @@ const POST_AGENT_ROUTES = new Set([
 
 const CHEF_ROUTES = new Set([...POST_AGENT_ROUTES, "/dashboard/passation"]);
 const DIRECTION_ROUTES = new Set([
-  "/dashboard", "/dashboard/statistiques", "/dashboard/postes", "/dashboard/prestataires",
-  "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/anomalie", "/dashboard/documents",
+  "/dashboard", "/dashboard/statistiques", "/dashboard/comptes-rendus",
 ]);
+
+export function homeRouteForRole(role: number): string {
+  if (role === 2) return "/dashboard/prise-de-poste";
+  if (role === 5) return "/dashboard/postes";
+  return "/dashboard";
+}
 
 export function canAccessRoute(role: number, path: string): boolean {
   if (role === 1) return true;

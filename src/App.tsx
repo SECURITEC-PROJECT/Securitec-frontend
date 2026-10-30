@@ -45,13 +45,13 @@ import FichePrestataire from '@/pages/prestataires/FichePrestataire';
 import Prestataires from '@/pages/prestataires/Prestataires';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { canAccessRoute } from '@/pages/layouts/navigation';
+import { canAccessRoute, homeRouteForRole } from '@/pages/layouts/navigation';
 
 function RoleAccessGuard({ role }: { role: number }) {
   const location = useLocation();
   return canAccessRoute(role, location.pathname)
     ? <Outlet />
-    : <Navigate to={role === 2 || role === 5 ? "/dashboard/postes" : "/dashboard"} replace state={{ deniedPath: location.pathname }} />;
+    : <Navigate to={homeRouteForRole(role)} replace state={{ deniedPath: location.pathname }} />;
 }
 
 export default function App() {
@@ -88,11 +88,12 @@ export default function App() {
                 onLoginSuccess={(userData) => setUser(userData)}
               />
             ) : (
-              <Navigate to="/dashboard" replace />
+              <Navigate to={homeRouteForRole(user.role)} replace />
             )
           }
         />
         <Route path="/auth" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />} />
 
         {/* page protégée (LayoutPrincipal) */}
         <Route
@@ -168,7 +169,7 @@ export default function App() {
         {/* Redirection par défaut */}
         <Route
           path="*"
-          element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
+          element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />}
         />
       </Routes>}
     </BrowserRouter>
