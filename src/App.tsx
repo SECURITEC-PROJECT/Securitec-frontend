@@ -100,7 +100,7 @@ export default function App() {
           <Route path="statistiques" element={<Statistiques />} />
           <Route path="prise-de-poste" element={<PriseDePoste />} />
           <Route path="passation" element={<Passation />} />
-          <Route path="visiteurs" element={<AgentAccueil />} />
+          <Route path="visiteurs" element={<AgentAccueil canManageSiteBans={Boolean(user && user.role <= 2)} />} />
           <Route path="logistique" element={<FluxLogistique />} />
           <Route path="controle-acces" element={<ControleAcces />} />
           <Route path="flux-logistiques" element={<FluxLogistique />} />

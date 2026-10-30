@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ type AnomalieForm = {
   nature: string;
   anomalie: string;
   mesures: string;
+  posteIds: string[];
 };
 
 type AnomalieEntry = {
@@ -31,7 +32,7 @@ type AnomalieEntry = {
 
 const today = () => new Date().toLocaleDateString("en-CA");
 const currentTime = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const blankForm = (): AnomalieForm => ({ date: today(), heure: currentTime(), poste: "", nature: "", anomalie: "", mesures: "" });
+const blankForm = (): AnomalieForm => ({ date: today(), heure: currentTime(), poste: "", nature: "", anomalie: "", mesures: "", posteIds: [] });
 
 export default function Anomalie() {
   const { sites, siteError } = useSites();
@@ -43,6 +44,7 @@ export default function Anomalie() {
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [posts, setPosts] = useState<{ id: string; nom: string }[]>([]);
 
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
   const filteredEntries = entries.filter((entry) =>
@@ -70,6 +72,15 @@ export default function Anomalie() {
     return () => { active = false; };
   }, [siteId, reloadKey]);
 
+  useEffect(() => {
+    let active = true;
+    if (!siteId) { setPosts([]); return () => { active = false; }; }
+    serviceApi.listShiftPosts(siteId)
+      .then((rows) => { if (active) setPosts(rows); })
+      .catch(() => { if (active) setPosts([]); });
+    return () => { active = false; };
+  }, [siteId]);
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!siteId) { toast.error("Selectionnez un site."); return; }
@@ -84,6 +95,7 @@ export default function Anomalie() {
         facts: form.anomalie,
         measures: form.mesures,
         siteId,
+        posteIds: form.posteIds,
       };
       if (editingId) {
         const entry = await serviceApi.updateLogisticsIncident(editingId, siteId, payload);
@@ -110,6 +122,7 @@ export default function Anomalie() {
       nature: entry.observations || "",
       anomalie: entry.facts || "",
       mesures: entry.measures || "",
+      posteIds: [],
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -160,6 +173,12 @@ export default function Anomalie() {
         <div className="space-y-1.5"><label htmlFor="anomalie-date" className="text-sm font-medium">Date</label><input id="anomalie-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="anomalie-heure" className="text-sm font-medium">Heure</label><input id="anomalie-heure" type="time" required value={form.heure} onChange={(event) => setForm({ ...form, heure: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="anomalie-poste" className="text-sm font-medium">Poste</label><textarea id="anomalie-poste" required maxLength={255} rows={2} value={form.poste} onChange={(event) => setForm({ ...form, poste: event.target.value })} placeholder="Poste concerne" className="min-h-[72px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-sm font-medium">Diffuser la consigne générée aux postes</p>
+          <p className="text-xs text-muted-foreground">Sans sélection, elle sera visible à tous les postes du site.</p>
+          {posts.length ? <div className="grid gap-2 sm:grid-cols-2">{posts.map((post) => <label key={post.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.posteIds.includes(post.id)} onChange={(event) => setForm((current) => ({ ...current, posteIds: event.target.checked ? [...current.posteIds, post.id] : current.posteIds.filter((id) => id !== post.id) }))} />{post.nom}</label>)}</div> : <p className="text-xs text-muted-foreground">Aucun poste configuré; la diffusion se fera à l’échelle du site.</p>}
+        </div>
+        <div className="col-span-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning-foreground lg:col-span-4"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><p>À l’enregistrement, les responsables du site recevront une notification dans l’application et une consigne active sera créée automatiquement.</p></div>
         <div className="space-y-1.5"><label htmlFor="anomalie-nature" className="text-sm font-medium">Nature</label><textarea id="anomalie-nature" required maxLength={20000} rows={3} value={form.nature} onChange={(event) => setForm({ ...form, nature: event.target.value })} placeholder="Nature de l'anomalie" className="min-h-[96px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="anomalie-faits" className="text-sm font-medium">Anomalie</label><textarea id="anomalie-faits" required maxLength={20000} rows={4} value={form.anomalie} onChange={(event) => setForm({ ...form, anomalie: event.target.value })} placeholder="Description de l'anomalie" className="min-h-[120px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="anomalie-mesures" className="text-sm font-medium">Mesures prises</label><textarea id="anomalie-mesures" maxLength={20000} rows={3} value={form.mesures} onChange={(event) => setForm({ ...form, mesures: event.target.value })} placeholder="Mesures prises" className="min-h-[96px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>

@@ -145,7 +145,7 @@ export default function Dashboard() {
   const activeServices = useMemo(() => new Set(filteredShifts.map((shift) => shift.serviceId || shift.id)).size, [filteredShifts]);
 
   const activeConsignes = useMemo(() => data.consignes.filter((entry) => openInstruction(entry)
-    && (!postId || entry.posteId === postId)
+    && (!postId || !entry.posteId || entry.posteId === postId)
     && (!fromDate || dateOf(entry) >= fromDate)
     && (!toDate || dateOf(entry) <= toDate)), [data.consignes, postId, fromDate, toDate]);
 

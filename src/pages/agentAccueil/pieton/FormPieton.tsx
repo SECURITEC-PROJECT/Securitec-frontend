@@ -92,6 +92,7 @@ export default function FormPieton({
     });
     return matches.slice(0, 6);
   }, [f.full_name, knownVisitors]);
+  const siteBannedVisitor = !editingVisitor && knownVisitors.find((visitor) => visitor.site_banned && normalize(visitor.full_name) === normalize(f.full_name || ""));
 
   const selectSuggestion = (v: VisitorRecord) => {
     setF((prev) => ({
@@ -209,6 +210,7 @@ export default function FormPieton({
               ))}
             </ul>
           )}
+          {siteBannedVisitor && <p role="alert" className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">Accès interdit sur le site pour {siteBannedVisitor.full_name}. L’entrée ne peut pas être enregistrée.</p>}
         </div>
         {champ("company", "Établissement")}
         <div>
@@ -244,7 +246,7 @@ export default function FormPieton({
               Annuler
             </Button>
           )}
-          <Button type="submit" disabled={saving || !siteId} className="h-10 flex-1">
+          <Button type="submit" disabled={saving || !siteId || Boolean(siteBannedVisitor)} className="h-10 flex-1">
             {saving ? "Enregistrement…" : editingVisitor ? "Enregistrer les modifications" : "Valider l'entrée"}
           </Button>
         </div>

@@ -483,6 +483,12 @@ export const serviceApi = {
     if (activeOnly) params.set("activeOnly", "true");
     return (await request<{ entries: any[] }>(`/consignes-journal?${params}`)).entries;
   },
+  async listNotifications() {
+    return (await request<{ notifications: any[] }>("/notifications")).notifications;
+  },
+  async markNotificationRead(id: string) {
+    return request<{ notification: any }>(`/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH", body: "{}" });
+  },
   async createJournalConsigne(data: unknown) {
     return (await request<{ entry: any }>("/consignes-journal", { method: "POST", body: body(data) })).entry;
   },
@@ -498,6 +504,9 @@ export const serviceApi = {
   async deleteVisitor(id: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
     return request<{ id: string; deleted: boolean }>(`/visitors/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
+  },
+  async setVisitorSiteBan(id: string, siteId: string, banned: boolean) {
+    return request<{ visitorId: string; siteId: string; banned: boolean }>(`/visitors/${encodeURIComponent(id)}/site-ban`, { method: "PUT", body: body({ siteId, banned }) });
   },
   async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
   async listVehicles(siteId?: string) { return (await request<{ vehicles: VehicleMovement[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },

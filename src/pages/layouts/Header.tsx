@@ -1,4 +1,5 @@
 import ClocheAnomalies from "@/components/ClocheAnomalies";
+import ClocheNotifications from "@/components/ClocheNotifications";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, CircleHelp, LogOut, Menu, MessageSquare, X } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -31,6 +32,7 @@ export default function Header({ open, setOpen, current, role, signOut }: Header
           <Link to="/dashboard/messagerie"><MessageSquare /></Link>
         </Button>
         <ClocheAnomalies />
+        <ClocheNotifications />
         <Button asChild variant="ghost" size="icon" title="Documents du site" className="hidden sm:inline-flex">
           <Link to="/dashboard/documents"><CircleHelp /></Link>
         </Button>
