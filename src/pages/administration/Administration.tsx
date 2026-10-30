@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { serviceApi, type AdminPost, type EmergencyContact, type Provider } from "@/lib/service-api";
+import { serviceApi, type AdminPost, type EmergencyContact, type Provider, type SiteService } from "@/lib/service-api";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
 import { roleLabel } from "@/pages/layouts/navigation";
@@ -17,7 +17,7 @@ type Employee = { id: string; firstName: string; lastName: string; matricule: st
 type CameraItem = { id: string; name: string; status: string; siteId: string; siteName: string; zoneName: string };
 type Zone = { id: string; name: string; siteId: string; siteName: string };
 type UserAccount = { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null };
-type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Postes de garde" | "Prestataires" | "Utilisateurs" | "Contacts d’urgence";
+type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Postes de garde" | "Services du site" | "Prestataires" | "Utilisateurs" | "Contacts d’urgence";
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>("Vue société");
@@ -30,6 +30,15 @@ export default function Administration() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [savingPost, setSavingPost] = useState(false);
   const [showInactivePosts, setShowInactivePosts] = useState(false);
+  const [siteServices, setSiteServices] = useState<SiteService[]>([]);
+  const [serviceSiteFilter, setServiceSiteFilter] = useState("");
+  const [serviceFormSiteId, setServiceFormSiteId] = useState("");
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDepartment, setServiceDepartment] = useState("");
+  const [serviceResponsible, setServiceResponsible] = useState("");
+  const [editingSiteServiceId, setEditingSiteServiceId] = useState<string | null>(null);
+  const [savingSiteService, setSavingSiteService] = useState(false);
+  const [showInactiveSiteServices, setShowInactiveSiteServices] = useState(false);
   const [showInactiveProviders, setShowInactiveProviders] = useState(false);
   const [providerName, setProviderName] = useState("");
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
@@ -73,18 +82,21 @@ export default function Administration() {
       const siteResult = await serviceApi.listSites();
       setSites(siteResult.sites);
       if (siteResult.sites.length) setPostSiteId((current) => current || siteResult.sites[0].id);
+      if (siteResult.sites.length) setServiceFormSiteId((current) => current || siteResult.sites[0].id);
       if (siteResult.sites.length) setEmergencySiteId((current) => current || siteResult.sites[0].id);
       setCanManageSites(siteResult.canCreate && siteResult.canDelete);
       const emergencyResults = await Promise.allSettled(siteResult.sites.map((site) => serviceApi.listEmergencyContacts(site.id)));
       setEmergencyContacts(emergencyResults.flatMap((result) => result.status === "fulfilled" ? result.value : []));
       if (siteResult.canCreate) {
-        const [userRows, providerRows, postRows] = await Promise.all([serviceApi.listUsers(), serviceApi.listProviders(), serviceApi.listAdminPosts()]);
+        const [userRows, providerRows, postRows, serviceRows] = await Promise.all([serviceApi.listUsers(), serviceApi.listProviders(), serviceApi.listAdminPosts(), serviceApi.listSiteServices()]);
         setUsers(userRows);
         setProviders(providerRows);
         setPosts(postRows);
+        setSiteServices(serviceRows);
       } else {
         setProviders([]);
         setPosts([]);
+        setSiteServices([]);
       }
       const employeeResult = await serviceApi.listEmployees();
       setEmployees(employeeResult);
@@ -128,6 +140,8 @@ export default function Administration() {
 
   const displayedPosts = (showInactivePosts ? posts : posts.filter((post) => post.actif))
     .filter((post) => !postSiteId || post.siteId === postSiteId);
+  const displayedSiteServices = (showInactiveSiteServices ? siteServices : siteServices.filter((service) => service.actif))
+    .filter((service) => !serviceSiteFilter || service.siteId === serviceSiteFilter);
 
   const resetPostForm = () => { setEditingPostId(null); setPostName(""); };
 
@@ -168,6 +182,49 @@ export default function Administration() {
       if (editingPostId === post.id) resetPostForm();
       toast.success("Poste désactivé ; ses historiques sont conservés.");
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Désactivation du poste impossible."); }
+  };
+
+  const resetSiteServiceForm = () => {
+    setEditingSiteServiceId(null); setServiceName(""); setServiceDepartment(""); setServiceResponsible("");
+  };
+
+  const saveSiteService = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!serviceFormSiteId) { toast.error("Choisissez un site."); return; }
+    setSavingSiteService(true);
+    try {
+      const payload = { siteId: serviceFormSiteId, nom: serviceName.trim(), departement: serviceDepartment.trim(), responsable: serviceResponsible.trim() };
+      if (editingSiteServiceId) {
+        const current = siteServices.find((service) => service.id === editingSiteServiceId);
+        const updated = await serviceApi.updateSiteService(editingSiteServiceId, { ...payload, actif: current?.actif ?? true });
+        setSiteServices((items) => items.map((service) => service.id === updated.id ? updated : service));
+        toast.success("Service du site modifié.");
+      } else {
+        const created = await serviceApi.createSiteService(payload);
+        setSiteServices((items) => [...items, created].sort((a, b) => a.siteName.localeCompare(b.siteName) || a.nom.localeCompare(b.nom)));
+        toast.success("Service du site ajouté.");
+      }
+      resetSiteServiceForm();
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Enregistrement du service impossible."); }
+    finally { setSavingSiteService(false); }
+  };
+
+  const toggleSiteService = async (service: SiteService) => {
+    try {
+      const updated = await serviceApi.updateSiteService(service.id, { siteId: service.siteId, nom: service.nom, departement: service.departement, responsable: service.responsable, actif: !service.actif });
+      setSiteServices((items) => items.map((item) => item.id === updated.id ? updated : item));
+      toast.success(updated.actif ? "Service réactivé." : "Service désactivé.");
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Modification du service impossible."); }
+  };
+
+  const deleteSiteService = async (service: SiteService) => {
+    if (!(await confirmDeletion(`Désactiver « ${service.nom} » sur ${service.siteName} ?`))) return;
+    try {
+      await serviceApi.deleteSiteService(service.id);
+      setSiteServices((items) => items.map((item) => item.id === service.id ? { ...item, actif: false } : item));
+      if (editingSiteServiceId === service.id) resetSiteServiceForm();
+      toast.success("Service désactivé.");
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Désactivation du service impossible."); }
   };
 
   const resetUserForm = () => {
@@ -330,7 +387,7 @@ export default function Administration() {
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Désactivation du contact impossible."); }
   };
 
-  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", "Contacts d’urgence", ...(canManageSites ? ["Postes de garde" as const, "Prestataires" as const, "Utilisateurs" as const] : [])];
+  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", "Contacts d’urgence", ...(canManageSites ? ["Postes de garde" as const, "Services du site" as const, "Prestataires" as const, "Utilisateurs" as const] : [])];
   return <div className="space-y-6">
     <PageHeader title="Administration de la société" subtitle="Vue globale des sites, des équipes et des équipements enregistrés dans la base." action={<Button variant="outline" onClick={() => void load(true)} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualiser</Button>} />
 
@@ -390,6 +447,25 @@ export default function Administration() {
             <div><Label htmlFor="admin-post-site">Site</Label><select id="admin-post-site" required disabled={Boolean(editingPostId)} value={postSiteId} onChange={(event) => setPostSiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Choisir un site</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select>{editingPostId && <p className="mt-1 text-xs text-muted-foreground">Le site reste fixe pour préserver les historiques liés à ce poste.</p>}</div>
             <div><Label htmlFor="admin-post-name">Nom du poste</Label><Input id="admin-post-name" required maxLength={160} value={postName} onChange={(event) => setPostName(event.target.value)} placeholder="Ex. PG3" /></div>
             <div className="flex gap-2"><Button className="flex-1" disabled={savingPost || !sites.length}><Plus className="h-4 w-4" />{savingPost ? "Enregistrement…" : editingPostId ? "Enregistrer" : "Ajouter le poste"}</Button>{editingPostId && <Button type="button" variant="outline" onClick={resetPostForm}>Annuler</Button>}</div>
+          </form>
+        </Panel>
+      </div>}
+
+      {tab === "Services du site" && canManageSites && <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel title={`Services du site (${displayedSiteServices.length})`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <select aria-label="Filtrer les services par site" value={serviceSiteFilter} onChange={(event) => setServiceSiteFilter(event.target.value)} className="h-10 min-w-56 rounded-md border border-input bg-background px-3 text-sm"><option value="">Tous les sites</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactiveSiteServices} onChange={(event) => setShowInactiveSiteServices(event.target.checked)} />Afficher les services désactivés</label>
+          </div>
+          {displayedSiteServices.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Service</th><th className="py-3 pr-4">Département</th><th className="py-3 pr-4">Responsable</th><th className="py-3 pr-4">Site</th><th className="py-3 pr-4">État</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{displayedSiteServices.map((service) => <tr key={service.id}><td className="py-3 pr-4 font-medium">{service.nom}</td><td className="py-3 pr-4">{service.departement || "—"}</td><td className="py-3 pr-4">{service.responsable || "—"}</td><td className="py-3 pr-4">{service.siteName}</td><td className="py-3 pr-4"><Badge variant={service.actif ? "outline" : "secondary"}>{service.actif ? "Actif" : "Désactivé"}</Badge></td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${service.nom}`} onClick={() => { setEditingSiteServiceId(service.id); setServiceFormSiteId(service.siteId); setServiceName(service.nom); setServiceDepartment(service.departement); setServiceResponsible(service.responsable); }}><Pencil className="h-4 w-4" /></Button>{service.actif ? <Button type="button" variant="ghost" size="icon" aria-label={`Désactiver ${service.nom}`} onClick={() => void deleteSiteService(service)}><Trash2 className="h-4 w-4 text-destructive" /></Button> : <Button type="button" variant="outline" size="sm" onClick={() => void toggleSiteService(service)}>Réactiver</Button>}</div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun service pour ce filtre.</p>}
+        </Panel>
+        <Panel title={editingSiteServiceId ? "Modifier un service" : "Ajouter un service"}>
+          <form className="space-y-4" onSubmit={(event) => void saveSiteService(event)}>
+            <div><Label htmlFor="site-service-site">Site</Label><select id="site-service-site" required value={serviceFormSiteId} onChange={(event) => setServiceFormSiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Choisir un site</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>
+            <div><Label htmlFor="site-service-name">Nom du service</Label><Input id="site-service-name" required maxLength={160} value={serviceName} onChange={(event) => setServiceName(event.target.value)} placeholder="Ex. Maintenance" /></div>
+            <div><Label htmlFor="site-service-department">Département interne</Label><Input id="site-service-department" maxLength={160} value={serviceDepartment} onChange={(event) => setServiceDepartment(event.target.value)} placeholder="Ex. Direction technique" /></div>
+            <div><Label htmlFor="site-service-responsible">Responsable</Label><Input id="site-service-responsible" maxLength={160} value={serviceResponsible} onChange={(event) => setServiceResponsible(event.target.value)} placeholder="Nom du responsable" /></div>
+            <div className="flex gap-2"><Button className="flex-1" disabled={savingSiteService || !sites.length}><Plus className="h-4 w-4" />{savingSiteService ? "Enregistrement…" : editingSiteServiceId ? "Enregistrer" : "Ajouter le service"}</Button>{editingSiteServiceId && <Button type="button" variant="outline" onClick={resetSiteServiceForm}>Annuler</Button>}</div>
           </form>
         </Panel>
       </div>}
