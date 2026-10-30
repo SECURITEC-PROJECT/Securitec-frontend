@@ -61,6 +61,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/visiteurs", label: "Visiteurs", icon: Users },
       { to: "/dashboard/materiels-star", label: "Matériels Star", icon: Package },
       { to: "/dashboard/chauffeurs", label: "Chauffeurs", icon: Contact },
+      { to: "/dashboard/transporteurs", label: "Transporteurs", icon: Truck },
     ]
   },
   { title: "FICHES", items: [
@@ -81,7 +82,7 @@ const SECURITY_ROUTES = new Set([
   "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
   "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
   "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
-  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/visiteurs", "/dashboard/materiels-star", "/dashboard/chauffeurs",
+  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/visiteurs", "/dashboard/materiels-star", "/dashboard/chauffeurs", "/dashboard/transporteurs",
   "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
   "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
   "/dashboard/documents",
@@ -95,7 +96,7 @@ const POST_AGENT_ROUTES = new Set([
   "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
   "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
   "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
-  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/materiels-star", "/dashboard/chauffeurs",
+  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/materiels-star", "/dashboard/chauffeurs", "/dashboard/transporteurs",
   "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets",
 ]);
 

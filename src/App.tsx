@@ -17,6 +17,7 @@ import CompteRendu from '@/pages/compteRendu/CompteRendu';
 import Dashboard from '@/pages/dashboard/Dashboard';
 import Documents from '@/pages/documentation/Documentation';
 import Chauffeurs from '@/pages/chauffeurs/Chauffeurs';
+import Transporteurs from '@/pages/transporteurs/Transporteurs';
 import Employes from '@/pages/employes/Employes';
 import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
 // import Messagerie from '@/pages/messagerie/Messagerie';
@@ -131,6 +132,7 @@ export default function App() {
           {/* <Route path="messagerie" element={<Messagerie />} /> */}
           <Route path="documents" element={<Documents />} />
           <Route path="chauffeurs" element={<Chauffeurs />} />
+          <Route path="transporteurs" element={<Transporteurs />} />
           <Route path="employes" element={<Employes />} />
           <Route path="administration" element={<Administration />} />
           
