@@ -41,6 +41,8 @@ import MouvementsAPS from '@/pages/pointageAps/MouvementsAPS';
 import Anomalie from '@/pages/anomalie/Anomalie';
 import PostesDeGarde from '@/pages/postes/PostesDeGarde';
 import PosteOperationnel from '@/pages/postes/PosteOperationnel';
+import FichePrestataire from '@/pages/prestataires/FichePrestataire';
+import Prestataires from '@/pages/prestataires/Prestataires';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -99,6 +101,8 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="postes" element={<PostesDeGarde />} />
           <Route path="postes/:posteId" element={<PosteOperationnel />} />
+          <Route path="prestataires" element={<Prestataires />} />
+          <Route path="prestataires/:providerId" element={<FichePrestataire />} />
 
           {/* Les autres pages du menu */}
           <Route path="statistiques" element={<Statistiques />} />

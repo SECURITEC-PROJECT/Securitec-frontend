@@ -2,14 +2,15 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, CheckCircle2, ClipboardList, FileText, Handshake, ShieldAlert, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, CheckCircle2, ClipboardList, FileText, Handshake, Phone, ShieldAlert, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { SIDEBAR_GROUPS } from "@/pages/layouts/navigation";
+import type { EmergencyContact } from "@/lib/service-api";
 
 type Shift = { id: string; serviceId?: string; posteId?: string; posteNom?: string; nom: string; prenom: string; matricule: string; shiftType?: string; fonctionService?: string; ended_at?: string | null };
 type Instruction = { id: string; date: string; dateFin?: string | null; jusquauNouvelOrdre?: boolean; consigne: string; emetteur?: string; tousPostes?: boolean; posteId?: string | null; posteIds?: string[]; lectures?: { posteId: string; posteNom?: string; readAt?: string | null }[] };
-const bookItems = SIDEBAR_GROUPS.flatMap((group) => group.items).filter((item) => item.to.startsWith("/dashboard/") && !["/dashboard", "/dashboard/postes", "/dashboard/statistiques", "/dashboard/administration", "/dashboard/employes", "/dashboard/documents", "/dashboard/cameras", "/dashboard/comptes-rendus"].includes(item.to));
+const bookItems = SIDEBAR_GROUPS.flatMap((group) => group.items).filter((item) => item.to.startsWith("/dashboard/") && !["/dashboard", "/dashboard/postes", "/dashboard/prestataires", "/dashboard/statistiques", "/dashboard/administration", "/dashboard/employes", "/dashboard/documents", "/dashboard/cameras", "/dashboard/comptes-rendus"].includes(item.to));
 
 function instructionIsActive(entry: Instruction) {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Indian/Antananarivo" });
@@ -26,6 +27,7 @@ export default function PosteOperationnel() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [instructions, setInstructions] = useState<Instruction[]>([]);
   const [siteBans, setSiteBans] = useState<{ id: string; full_name: string }[]>([]);
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -33,11 +35,11 @@ export default function PosteOperationnel() {
   }, [siteId, posteId]);
 
   useEffect(() => {
-    setPosts([]); setShifts([]); setInstructions([]); setSiteBans([]); setError("");
+    setPosts([]); setShifts([]); setInstructions([]); setSiteBans([]); setEmergencyContacts([]); setError("");
     if (!siteId) return;
     let active = true;
-    Promise.allSettled([serviceApi.listShiftPosts(siteId), serviceApi.listShifts(siteId), serviceApi.listJournalConsignes(siteId, true), serviceApi.listVisitors(siteId)])
-      .then(([postResult, shiftResult, instructionResult, visitorResult]) => { if (active) {
+    Promise.allSettled([serviceApi.listShiftPosts(siteId), serviceApi.listShifts(siteId), serviceApi.listJournalConsignes(siteId, true), serviceApi.listVisitors(siteId), serviceApi.listEmergencyContacts(siteId)])
+      .then(([postResult, shiftResult, instructionResult, visitorResult, emergencyResult]) => { if (active) {
         if (postResult.status === "fulfilled") setPosts(postResult.value);
         if (shiftResult.status === "fulfilled") setShifts(shiftResult.value);
         if (instructionResult.status === "fulfilled") setInstructions(instructionResult.value);
@@ -45,7 +47,8 @@ export default function PosteOperationnel() {
           const banned = visitorResult.value.filter((visitor) => visitor.site_banned);
           setSiteBans([...new Map(banned.map((visitor) => [visitor.full_name.trim().toLocaleLowerCase("fr"), { id: visitor.id, full_name: visitor.full_name }])).values()]);
         }
-        const failures = [postResult, shiftResult, instructionResult, visitorResult].filter((result) => result.status === "rejected");
+        if (emergencyResult.status === "fulfilled") setEmergencyContacts(emergencyResult.value);
+        const failures = [postResult, shiftResult, instructionResult, visitorResult, emergencyResult].filter((result) => result.status === "rejected");
         if (failures.length) setError("Certaines informations du poste n’ont pas pu être chargées.");
       } })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Chargement du poste impossible."); });
@@ -98,6 +101,10 @@ export default function PosteOperationnel() {
     </section>
     <section><h2 className="mb-3 text-lg font-semibold">Circuits du poste</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{operationalLinks.map(({ to, label, description, icon: Icon }) => <Link key={to} to={to} state={{ siteId, posteId, posteNom: heading }} className="rounded-xl border bg-card p-4 transition hover:border-primary/50 hover:shadow-sm"><Icon className="size-5 text-primary" /><h3 className="mt-3 font-semibold">{label}</h3><p className="mt-1 text-sm text-muted-foreground">{description}</p></Link>)}</div></section>
     <section><div className="mb-3 flex items-center gap-2"><BookOpen className="size-5 text-primary" /><h2 className="text-lg font-semibold">Cahiers d’enregistrement</h2></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{bookItems.map((item) => <Link key={item.to} to={item.to} state={{ siteId, posteId, posteNom: heading }} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm hover:border-primary/50"><ClipboardList className="size-4 shrink-0 text-muted-foreground" /><span className="flex-1">{item.label}</span><ArrowRight className="size-4 text-muted-foreground" /></Link>)}</div></section>
-    <section className="rounded-xl border border-dashed p-4"><div className="flex items-center gap-2"><Users className="size-4 text-muted-foreground" /><h2 className="text-sm font-semibold">Prestataires et personnes autorisées</h2></div><p className="mt-1 text-sm text-muted-foreground">Les fiches de prestataires et les contrôles d’accès sont accessibles depuis les modules du site.</p><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" asChild><Link to="/dashboard/chauffeurs" state={{ siteId, posteId, posteNom: heading }}>Chauffeurs</Link></Button><Button variant="outline" size="sm" asChild><Link to="/dashboard/visiteurs" state={{ siteId, posteId, posteNom: heading }}>Visiteurs et accès</Link></Button><Button variant="outline" size="sm" asChild><Link to="/dashboard/materiels-sous-traitant" state={{ siteId, posteId, posteNom: heading }}>Matériels sous-traitants</Link></Button></div></section>
+    <section className="rounded-xl border border-dashed p-4"><div className="flex items-center gap-2"><Users className="size-4 text-muted-foreground" /><h2 className="text-sm font-semibold">Prestataires et personnes autorisées</h2></div><p className="mt-1 text-sm text-muted-foreground">Consultez les fiches entreprises, les personnes et véhicules associés aux prestataires, ainsi que les contrôles d’accès.</p><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" asChild><Link to="/dashboard/prestataires" state={{ siteId, posteId, posteNom: heading }}>Fiches prestataires</Link></Button><Button variant="outline" size="sm" asChild><Link to="/dashboard/chauffeurs" state={{ siteId, posteId, posteNom: heading }}>Chauffeurs</Link></Button><Button variant="outline" size="sm" asChild><Link to="/dashboard/visiteurs" state={{ siteId, posteId, posteNom: heading }}>Visiteurs et accès</Link></Button><Button variant="outline" size="sm" asChild><Link to="/dashboard/materiels-sous-traitant" state={{ siteId, posteId, posteNom: heading }}>Matériels sous-traitants</Link></Button></div></section>
+    <section className="rounded-xl border bg-card p-4"><div className="flex items-center gap-2"><Phone className="size-4 text-primary" /><h2 className="text-sm font-semibold">Contacts d’urgence</h2></div>
+      {emergencyContacts.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{emergencyContacts.map((contact) => <article key={contact.id} className="rounded-lg border p-3"><p className="font-medium">{contact.nom}</p><p className="text-xs text-muted-foreground">{contact.fonction}</p><a className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline" href={`tel:${contact.telephone.replace(/[^+\d]/g, "")}`}><Phone className="size-3.5" />{contact.telephone}</a>{contact.email && <p className="mt-1 text-xs"><a className="text-primary hover:underline" href={`mailto:${contact.email}`}>{contact.email}</a></p>}{contact.instructions && <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">{contact.instructions}</p>}</article>)}</div> : <p className="mt-2 text-sm text-muted-foreground">Aucun contact d’urgence n’a été configuré pour ce site.</p>}
+      <Button className="mt-3" variant="outline" size="sm" asChild><Link to="/dashboard/administration">Gérer les contacts</Link></Button>
+    </section>
   </div>;
 }

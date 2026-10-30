@@ -33,7 +33,7 @@ import {
 
 export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
   { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
-  { title: "POSTES DE GARDE", items: [{ to: "/dashboard/postes", label: "Choisir un poste", icon: ShieldCheck }] },
+  { title: "POSTES DE GARDE", items: [{ to: "/dashboard/postes", label: "Choisir un poste", icon: ShieldCheck }, { to: "/dashboard/prestataires", label: "Prestataires", icon: ContactRound }] },
   { title: "CAHIERS", items: [
       { to: "/dashboard/mouvements-cles", label: "Mouvements clés", icon: KeyRound },
       { to: "/dashboard/carte-grise-permis", label: "Carte grise / Permis", icon: FileSignature },

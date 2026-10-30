@@ -35,6 +35,28 @@ export interface KeyTrackingEntry {
   returnTime: string | null;
 }
 
+export interface EmergencyContact {
+  id: string;
+  siteId: string;
+  nom: string;
+  fonction: string;
+  telephone: string;
+  email: string | null;
+  instructions: string | null;
+  ordre: number;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  readAt: string | null;
+  createdAt: string;
+  siteId: string;
+  entityId: string | null;
+}
+
 export interface EmptyBottleDelivery {
   id: string;
   date: string;
@@ -157,6 +179,8 @@ export interface ChauffeurRecord {
   expirationPermis: string | null;
   vehicule: string | null;
   matricule: string | null;
+  providerId: string | null;
+  provider?: string | null;
   siteId: string;
   createdAt: string;
 }
@@ -427,10 +451,10 @@ export const serviceApi = {
   async updateUser(id: string, data: { name: string; identifier: string; role: number; pin?: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>(`/users/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).user; },
   async deleteUser(id: string) { return request<{ id: string; deleted: boolean }>(`/users/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listChauffeurs(siteId: string) { return (await request<{ chauffeurs: ChauffeurRecord[] }>(`/chauffeurs?siteId=${encodeURIComponent(siteId)}`)).chauffeurs; },
-  async createChauffeur(data: Omit<ChauffeurRecord, "id" | "siteId" | "createdAt"> & { siteId: string }) {
+  async createChauffeur(data: Omit<ChauffeurRecord, "id" | "siteId" | "createdAt" | "provider"> & { siteId: string }) {
     return (await request<{ chauffeur: ChauffeurRecord }>("/chauffeurs", { method: "POST", body: body(data) })).chauffeur;
   },
-  async updateChauffeur(id: string, data: Omit<ChauffeurRecord, "id" | "siteId" | "createdAt"> & { siteId: string }) {
+  async updateChauffeur(id: string, data: Omit<ChauffeurRecord, "id" | "siteId" | "createdAt" | "provider"> & { siteId: string }) {
     return (await request<{ chauffeur: ChauffeurRecord }>(`/chauffeurs/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).chauffeur;
   },
   async deleteChauffeur(id: string, siteId: string) {
@@ -485,6 +509,10 @@ export const serviceApi = {
   },
   async deleteDocument(id: string) { return request<{ id: string; deleted: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
+  async listEmergencyContacts(siteId: string) { return (await request<{ contacts: EmergencyContact[] }>(`/emergency-contacts?siteId=${encodeURIComponent(siteId)}`)).contacts; },
+  async createEmergencyContact(data: Omit<EmergencyContact, "id" | "ordre">) { return (await request<{ contact: EmergencyContact }>("/emergency-contacts", { method: "POST", body: body(data) })).contact; },
+  async updateEmergencyContact(id: string, data: Omit<EmergencyContact, "id" | "ordre">) { return (await request<{ contact: EmergencyContact }>(`/emergency-contacts/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).contact; },
+  async deleteEmergencyContact(id: string, siteId: string) { return request<{ id: string; deactivated: boolean }>(`/emergency-contacts/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" }); },
   async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
   async listShifts(siteId?: string) {
@@ -504,8 +532,8 @@ export const serviceApi = {
     if (activeOnly) params.set("activeOnly", "true");
     return (await request<{ entries: any[] }>(`/consignes-journal?${params}`)).entries;
   },
-  async listNotifications() {
-    return (await request<{ notifications: any[] }>("/notifications")).notifications;
+  async listNotifications(): Promise<AppNotification[]> {
+    return (await request<{ notifications: AppNotification[] }>("/notifications")).notifications;
   },
   async markNotificationRead(id: string) {
     return request<{ notification: any }>(`/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH", body: "{}" });
