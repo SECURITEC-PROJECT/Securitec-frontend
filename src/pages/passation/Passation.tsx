@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import FormPassation, { type PassationFormData } from "./FormPassation";
 import ListPassation from "./ListPassation";
+import { useSites } from "@/hooks/useSites";
 
 import { API_URL, authHeaders } from "@/lib/api";
 
@@ -34,8 +35,11 @@ export default function Passation() {
   const location = useLocation();
 
   const routeState = location.state as {
+    siteId?: string;
     agentSortant?: { id?: string; nom: string; prenom: string; matricule?: string; site: string; siteId?: string; posteId?: string | null; posteNom?: string | null; shiftType?: "JOUR" | "NUIT" | null; serviceId?: string };
   } | null;
+  const { sites } = useSites();
+  const siteId = routeState?.agentSortant?.siteId || routeState?.siteId || sites[0]?.id || "";
 
   const agentSortantId = routeState?.agentSortant?.id;
   const agentSortantNom = routeState?.agentSortant?.nom || "";
@@ -148,6 +152,7 @@ export default function Passation() {
       />
       <div className="grid gap-6 lg:grid-cols-2">
         <FormPassation
+          siteId={siteId}
           agentSortantNom={agentSortantNom}
           agentSortantPrenom={agentSortantPrenom}
           agentSortantMatricule={routeState?.agentSortant?.matricule || ""}

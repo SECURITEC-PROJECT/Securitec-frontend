@@ -1,6 +1,8 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 
+const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
+
 // 💡 EXPORT OBLIGATOIRE DE L'INTERFACE SHIFT
 export interface Shift {
   id: string;
@@ -47,15 +49,16 @@ export default function ListHistoriquePriseDePoste({
   const activeShifts = groups.filter((shift) => shift.ended_at === null);
   const finishedShifts = groups.filter((shift) => shift.ended_at !== null);
 
-  const todayStr = new Date().toLocaleDateString();
+  const todayStr = new Date().toLocaleDateString("fr-FR", { timeZone: MADAGASCAR_TIME_ZONE });
 
   const fmtFull = (dateStr: string | null) => {
     if (!dateStr) return "—";
     const date = new Date(dateStr);
     if (Number.isNaN(date.getTime())) return "—";
-    return `${date.toLocaleDateString()} à ${date.toLocaleTimeString([], {
+    return `${date.toLocaleDateString("fr-FR", { timeZone: MADAGASCAR_TIME_ZONE })} à ${date.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: MADAGASCAR_TIME_ZONE,
     })}`;
   };
 

@@ -333,6 +333,10 @@ export interface RegisterEmployeeOption {
   lastName: string;
   matricule: string;
   section: string;
+  providerId?: string;
+  prestataire?: string;
+  siteId?: string;
+  siteName?: string;
 }
 
 export interface WasteScrapRegisterEntry {

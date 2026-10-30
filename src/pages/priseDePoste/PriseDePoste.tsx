@@ -1,15 +1,19 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import FormPriseDePoste, { type ShiftFormData } from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
 import { API_URL, authHeaders } from "@/lib/api";
 
+const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
+
 export default function PriseDePoste() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeContext = location.state as { siteId?: string; posteId?: string; posteNom?: string } | null;
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [selectedShiftForEnd, setSelectedShiftForEnd] = useState<Shift | null>(null);
@@ -132,9 +136,10 @@ export default function PriseDePoste() {
     if (!dateStr) return "En cours";
     const date = new Date(dateStr);
     if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleTimeString([], {
+    return date.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: MADAGASCAR_TIME_ZONE,
     });
   };
 
@@ -148,6 +153,9 @@ export default function PriseDePoste() {
       <div className="grid gap-6 lg:grid-cols-2">
         <FormPriseDePoste
           onStart={handleStart}
+          initialSiteId={routeContext?.siteId}
+          initialPosteId={routeContext?.posteId}
+          initialPosteNom={routeContext?.posteNom}
         />
         <ListHistoriquePriseDePoste
           shifts={shifts}

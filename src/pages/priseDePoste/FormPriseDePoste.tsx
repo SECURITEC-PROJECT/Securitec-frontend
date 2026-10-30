@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { API_URL, authHeaders } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useSites } from "@/hooks/useSites";
+import { useEffect, useMemo, useState } from "react";
 import SelecteursPoste from "./components/SelecteursPoste";
 import { serviceApi, type RegisterEmployeeOption } from "@/lib/service-api";
 
@@ -25,202 +25,188 @@ export interface ShiftFormData {
 
 interface FormPriseDePosteProps {
   onStart: (data: ShiftFormData) => Promise<boolean>;
+  initialSiteId?: string;
+  initialPosteId?: string;
+  initialPosteNom?: string;
 }
 
-export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
-  const [matricule, setMatricule] = useState("");
-  const [status, setStatus] = useState<"idle" | "verifying" | "valid" | "invalid">("idle");
+const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").trim();
 
-  const [nom, setNom] = useState("");
-  const [prenom, setPrenom] = useState("");
-
-  const [prestataires, setPrestataires] = useState([]);
-  const [sites, setSites] = useState([]);
-  const [prestataire, setPrestataire] = useState("");
+export default function FormPriseDePoste({ onStart, initialSiteId = "", initialPosteId = "", initialPosteNom = "" }: FormPriseDePosteProps) {
+  const { sites: availableSites } = useSites();
+  const [siteId, setSiteId] = useState(initialSiteId);
   const [siteDeTravail, setSiteDeTravail] = useState("");
-  const [notes, setNotes] = useState("");
-  const [siteId, setSiteId] = useState("");
-  const [posteId, setPosteId] = useState("");
+  const [posteId, setPosteId] = useState(initialPosteId);
   const [postes, setPostes] = useState<{ id: string; nom: string }[]>([]);
-  const [shiftType, setShiftType] = useState<"JOUR" | "NUIT">("JOUR");
   const [employees, setEmployees] = useState<RegisterEmployeeOption[]>([]);
+  const [employeeQuery, setEmployeeQuery] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<RegisterEmployeeOption | null>(null);
+  const [showEmployeeOptions, setShowEmployeeOptions] = useState(false);
+  const [highlightedEmployee, setHighlightedEmployee] = useState(0);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [shiftType, setShiftType] = useState<"JOUR" | "NUIT">("JOUR");
+  const [notes, setNotes] = useState("");
   const [loadingCrew, setLoadingCrew] = useState(false);
+  const posteIsPreselected = Boolean(initialPosteId);
 
-  // Charger les options depuis la base de données
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(`${API_URL}/options-prise-de-poste`, { headers: authHeaders(), signal: controller.signal })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Chargement des options impossible.");
-        return data;
-      })
-      .then((data) => {
-        if (data.prestataires?.length) {
-          setPrestataires(data.prestataires);
-          setPrestataire(data.prestataires[0].prestataire);
-        }
-        if (data.sites?.length) {
-          setSites(data.sites);
-          setSiteDeTravail(data.sites[0].site);
-          setSiteId(data.sites[0].id);
-        }
-      })
-      .catch((err) => { if (err.name !== "AbortError") console.error("Erreur chargement options:", err); });
-    return () => controller.abort();
-  }, []);
+    const selectedSite = availableSites.find((site) => site.id === initialSiteId)
+      || availableSites.find((site) => site.id === siteId)
+      || availableSites[0];
+    if (!selectedSite) return;
+    if (initialSiteId) setSiteId(initialSiteId);
+    else if (!siteId) setSiteId(selectedSite.id);
+    setSiteDeTravail(selectedSite.name);
+  }, [initialSiteId, siteId, availableSites]);
 
   useEffect(() => {
     if (!siteId) return;
     let active = true;
     setLoadingCrew(true);
+    setEmployees([]);
+    setSelectedEmployee(null);
+    setEmployeeQuery("");
+    setSelectedAgents([]);
     Promise.all([serviceApi.listShiftPosts(siteId), serviceApi.listRegisterEmployees(siteId)])
       .then(([availablePosts, availableEmployees]) => {
         if (!active) return;
         setPostes(availablePosts);
-        setPosteId((current) => availablePosts.some((post) => post.id === current) ? current : availablePosts[0]?.id || "");
+        const nextPostId = initialPosteId
+          ? availablePosts.some((post) => post.id === initialPosteId) ? initialPosteId : ""
+          : availablePosts.some((post) => post.id === posteId) ? posteId : availablePosts[0]?.id || "";
+        setPosteId(nextPostId);
         setEmployees(availableEmployees);
       })
-      .catch((error) => {
-        if (active) console.error("Chargement des postes et agents impossible:", error);
-      })
+      .catch((error) => { if (active) console.error("Chargement des postes et agents impossible:", error); })
       .finally(() => { if (active) setLoadingCrew(false); });
     return () => { active = false; };
-  }, [siteId]);
+  }, [siteId, initialPosteId]);
 
-  // Vérification automatique du matricule
   useEffect(() => {
-    const trimmed = matricule.trim();
+    const selectedSite = availableSites.find((site) => site.id === siteId);
+    if (selectedSite?.name) setSiteDeTravail(selectedSite.name);
+  }, [siteId, availableSites]);
 
-    if (!trimmed) {
-      setStatus("idle");
-      setNom("");
-      setPrenom("");
-      return;
-    }
+  const siteOptions = useMemo(() => availableSites.map((site) => ({ id: site.id, site: site.name })), [availableSites]);
 
-    setStatus("verifying");
-    const controller = new AbortController();
-    let active = true;
+  const matchingEmployees = useMemo(() => {
+    const query = normalize(employeeQuery);
+    if (!query) return employees.slice(0, 8);
+    return employees.filter((employee) => normalize(`${employee.matricule} ${employee.firstName} ${employee.lastName} ${employee.prestataire || ""}`).includes(query)).slice(0, 8);
+  }, [employeeQuery, employees]);
 
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_URL}/employes/${encodeURIComponent(trimmed)}`, {
-          headers: authHeaders(), signal: controller.signal,
-        });
-        if (res.ok) {
-          const employee = await res.json();
-          setNom(employee.nom);
-          setPrenom(employee.prenom);
-          setStatus("valid");
-        } else {
-          setNom("");
-          setPrenom("");
-          setStatus("invalid");
-        }
-      } catch (error) {
-        if (active) setStatus("invalid");
-      }
-    }, 400);
+  const selectEmployee = (employee: RegisterEmployeeOption) => {
+    setSelectedEmployee(employee);
+    setEmployeeQuery(employee.matricule);
+    setShowEmployeeOptions(false);
+    setHighlightedEmployee(0);
+    if (employee.siteId) setSiteId(employee.siteId);
+    if (employee.siteName) setSiteDeTravail(employee.siteName);
+    setSelectedAgents((current) => current.filter((matricule) => matricule.toUpperCase() !== employee.matricule.toUpperCase()));
+  };
 
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [matricule]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (status !== "valid" || !siteId || !posteId) return;
-
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedEmployee || !siteId || !posteId) return;
+    const posteNom = postes.find((post) => post.id === posteId)?.nom || initialPosteNom;
     const saved = await onStart({
-      matricule: matricule.trim(),
-      nom: nom.trim(),
-      prenom: prenom.trim(),
-      prestataire,
-      site_de_travail: siteDeTravail,
-      siteId,
+      matricule: selectedEmployee.matricule,
+      nom: selectedEmployee.lastName,
+      prenom: selectedEmployee.firstName,
+      prestataire: selectedEmployee.prestataire || "",
+      site_de_travail: selectedEmployee.siteName || siteDeTravail,
+      siteId: selectedEmployee.siteId || siteId,
       posteId,
-      posteNom: postes.find((post) => post.id === posteId)?.nom || "",
+      posteNom,
       shiftType,
-      chefMatricule: matricule.trim(),
-      agentMatricules: selectedAgents.filter((value) => value.toUpperCase() !== matricule.trim().toUpperCase()),
+      chefMatricule: selectedEmployee.matricule,
+      agentMatricules: selectedAgents.filter((value) => value.toUpperCase() !== selectedEmployee.matricule.toUpperCase()),
       notes: notes.trim(),
     });
-
     if (!saved) return;
-
-    setMatricule("");
-    setNom("");
-    setPrenom("");
-    setStatus("idle");
+    setSelectedEmployee(null);
+    setEmployeeQuery("");
+    setShowEmployeeOptions(false);
     setNotes("");
     setSelectedAgents([]);
   };
 
-  const getInputStyles = () => {
-    if (status === "valid") return "border-emerald-500 focus-visible:ring-emerald-500 bg-emerald-50/20";
-    if (status === "invalid") return "border-red-500 focus-visible:ring-red-500 bg-red-50/20";
-    return "";
-  };
+  const currentPostName = postes.find((post) => post.id === posteId)?.nom || initialPosteNom;
+  const otherEmployees = employees.filter((employee) => employee.matricule.toUpperCase() !== selectedEmployee?.matricule.toUpperCase());
 
   return (
     <Panel title="Nouvelle prise de poste">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <Label htmlFor="matricule">Matricule de l'employé *</Label>
-          <div className="relative mt-1">
-            <Input
-              id="matricule"
-              required
-              value={matricule}
-              onChange={(e) => setMatricule(e.target.value)}
-              placeholder="Ex: EMP001"
-              className={`transition-colors ${getInputStyles()}`}
-            />
-          </div>
-
-          {status === "verifying" && (
-            <p className="text-xs text-muted-foreground mt-1">Vérification en cours...</p>
-          )}
-          {status === "invalid" && (
-            <p className="text-xs text-red-500 font-medium mt-1">
-              ✕ Ce matricule n'existe pas dans la base de données.
-            </p>
-          )}
-          {status === "valid" && (
-            <p className="text-xs text-emerald-600 font-medium mt-1">
-              ✓ Employé identifié : {nom} {prenom}
-            </p>
-          )}
+        <div className="relative">
+          <Label htmlFor="shift-employee-search">Matricule de l’employé responsable *</Label>
+          <Input
+            id="shift-employee-search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={showEmployeeOptions}
+            aria-controls="shift-employee-options"
+            autoComplete="off"
+            value={employeeQuery}
+            onFocus={() => setShowEmployeeOptions(true)}
+            onChange={(event) => {
+              setEmployeeQuery(event.target.value);
+              setSelectedEmployee(null);
+              setHighlightedEmployee(0);
+              setShowEmployeeOptions(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" && matchingEmployees.length) {
+                event.preventDefault();
+                setHighlightedEmployee((current) => (current + 1) % matchingEmployees.length);
+                setShowEmployeeOptions(true);
+              } else if (event.key === "ArrowUp" && matchingEmployees.length) {
+                event.preventDefault();
+                setHighlightedEmployee((current) => (current - 1 + matchingEmployees.length) % matchingEmployees.length);
+              } else if (event.key === "Enter" && showEmployeeOptions && matchingEmployees[highlightedEmployee]) {
+                event.preventDefault();
+                selectEmployee(matchingEmployees[highlightedEmployee]);
+              } else if (event.key === "Escape") setShowEmployeeOptions(false);
+            }}
+            placeholder="Tapez un matricule, un nom ou une lettre…"
+            disabled={loadingCrew || !siteId}
+          />
+          {showEmployeeOptions && !selectedEmployee && <div id="shift-employee-options" role="listbox" aria-label="Employés actifs du site" className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+            {loadingCrew ? <p className="px-3 py-2 text-sm text-muted-foreground">Recherche des employés…</p>
+              : matchingEmployees.length ? matchingEmployees.map((employee, index) => <button
+                key={employee.id}
+                type="button"
+                role="option"
+                aria-selected={index === highlightedEmployee}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectEmployee(employee)}
+                className={`flex w-full flex-col items-start rounded px-3 py-2 text-left text-sm ${index === highlightedEmployee ? "bg-accent" : "hover:bg-accent/60"}`}
+              ><span className="font-medium">{employee.matricule} · {employee.firstName} {employee.lastName}</span><span className="text-xs text-muted-foreground">{employee.prestataire || "Prestataire non renseigné"} · {employee.siteName || siteDeTravail}</span></button>)
+              : <p className="px-3 py-2 text-sm text-muted-foreground">Aucun employé actif ne correspond à cette recherche.</p>}
+          </div>}
+          {selectedEmployee && <p className="mt-1 text-xs font-medium text-emerald-700">Employé sélectionné : {selectedEmployee.firstName} {selectedEmployee.lastName}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="nom">Nom</Label>
-            <Input id="nom" readOnly value={nom} className="mt-1 bg-muted" placeholder="Nom" />
-          </div>
-          <div>
-            <Label htmlFor="prenom">Prénom</Label>
-            <Input id="prenom" readOnly value={prenom} className="mt-1 bg-muted" placeholder="Prénom" />
-          </div>
+          <div><Label htmlFor="shift-last-name">Nom</Label><Input id="shift-last-name" readOnly value={selectedEmployee?.lastName || ""} className="mt-1 bg-muted" /></div>
+          <div><Label htmlFor="shift-first-name">Prénom</Label><Input id="shift-first-name" readOnly value={selectedEmployee?.firstName || ""} className="mt-1 bg-muted" /></div>
+          <div><Label htmlFor="shift-provider">Prestataire</Label><Input id="shift-provider" readOnly value={selectedEmployee?.prestataire || ""} className="mt-1 bg-muted" /></div>
+          <div><Label htmlFor="shift-site-name">Site de travail</Label><Input id="shift-site-name" readOnly value={selectedEmployee?.siteName || ""} className="mt-1 bg-muted" /></div>
         </div>
 
-        <SelecteursPoste
-          prestataires={prestataires}
-          sites={sites}
-          prestataire={prestataire}
-          setPrestataire={setPrestataire}
+        {!initialSiteId && <SelecteursPoste
+          sites={siteOptions}
           siteDeTravail={siteDeTravail}
           setSiteDeTravail={setSiteDeTravail}
-          onSiteChange={(siteName, id) => { setSiteDeTravail(siteName); setSiteId(id); setSelectedAgents([]); }}
-        />
+          onSiteChange={(name, id) => { setSiteDeTravail(name); setSiteId(id); setSelectedEmployee(null); setEmployeeQuery(""); }}
+        />}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="poste-garde">Poste de garde *</Label>
-            <select id="poste-garde" required value={posteId} onChange={(event) => setPosteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" disabled={loadingCrew || !postes.length}>
+            {posteIsPreselected ? <Input id="poste-garde" readOnly value={currentPostName} className="mt-1 bg-muted" /> : <select id="poste-garde" required value={posteId} onChange={(event) => setPosteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" disabled={loadingCrew || !postes.length}>
               {!postes.length && <option value="">Aucun poste configuré</option>}
               {postes.map((post) => <option key={post.id} value={post.id}>{post.nom}</option>)}
-            </select>
+            </select>}
           </div>
           <div>
             <Label htmlFor="shift-type">Service *</Label>
@@ -231,33 +217,17 @@ export default function FormPriseDePoste({ onStart }: FormPriseDePosteProps) {
         </div>
 
         <fieldset className="space-y-2 rounded-md border p-3">
-          <legend className="px-1 text-sm font-medium">Autres agents présents</legend>
-          {loadingCrew ? <p className="text-sm text-muted-foreground">Chargement des agents…</p> : employees.filter((employee) => employee.matricule.toUpperCase() !== matricule.trim().toUpperCase()).length ? (
-            <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2">
-              {employees.filter((employee) => employee.matricule.toUpperCase() !== matricule.trim().toUpperCase()).map((employee) => (
-                <label key={employee.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
-                  <input type="checkbox" checked={selectedAgents.includes(employee.matricule)} onChange={(event) => setSelectedAgents((current) => event.target.checked ? [...current, employee.matricule] : current.filter((value) => value !== employee.matricule))} />
-                  <span>{employee.firstName} {employee.lastName} <span className="text-muted-foreground">· {employee.matricule}</span></span>
-                </label>
-              ))}
-            </div>
-          ) : <p className="text-sm text-muted-foreground">Aucun autre agent actif n’est affecté à ce site.</p>}
+          <legend className="px-1 text-sm font-medium">Autres agents présents (facultatif)</legend>
+          {loadingCrew ? <p className="text-sm text-muted-foreground">Chargement des agents…</p> : otherEmployees.length ? <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2">
+            {otherEmployees.map((employee) => <label key={employee.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
+              <input type="checkbox" checked={selectedAgents.includes(employee.matricule)} onChange={(event) => setSelectedAgents((current) => event.target.checked ? [...current, employee.matricule] : current.filter((value) => value !== employee.matricule))} />
+              <span>{employee.firstName} {employee.lastName} <span className="text-muted-foreground">· {employee.matricule}</span></span>
+            </label>)}
+          </div> : <p className="text-sm text-muted-foreground">Aucun autre agent actif n’est affecté à ce site.</p>}
         </fieldset>
 
-        <div>
-          <Label htmlFor="shift-notes">Observations</Label>
-          <Textarea
-            id="shift-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Matériel manquant, anomalie constatée…"
-            className="mt-1"
-          />
-        </div>
-
-        <Button type="submit" className="w-full" disabled={status !== "valid" || !siteId || !posteId || loadingCrew}>
-          Valider la prise de poste
-        </Button>
+        <div><Label htmlFor="shift-notes">Observations (facultatif)</Label><Textarea id="shift-notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Matériel manquant, anomalie constatée…" className="mt-1" /></div>
+        <Button type="submit" className="w-full" disabled={!selectedEmployee || !siteId || !posteId || loadingCrew}>Ouvrir le service</Button>
       </form>
     </Panel>
   );

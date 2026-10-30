@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { API_URL, authHeaders } from "@/lib/api";
-import { useEffect, useState, type FormEvent } from "react";
+import { serviceApi, type RegisterEmployeeOption } from "@/lib/service-api";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import SignaturePad from "./SignaturePad";
 
 export type InventoryRow = {
@@ -41,6 +41,7 @@ export interface PassationFormData {
 }
 
 interface FormPassationProps {
+  siteId?: string;
   agentSortantNom?: string;
   agentSortantPrenom?: string;
   agentSortantMatricule?: string;
@@ -49,13 +50,15 @@ interface FormPassationProps {
 
 const emptyInventory = (): InventoryRow => ({ designation: "", quantiteSortie: 1, etatSortie: "BON", quantiteEntree: 1, etatEntree: "BON", observation: "" });
 const emptyDocument = (): RetainedDocument => ({ type: "PIECE", reference: "", description: "", quantite: 1, detenuPar: "", destination: "", restitue: false });
+const normalizeSearch = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").trim();
 
-export default function FormPassation({ agentSortantNom = "", agentSortantPrenom = "", agentSortantMatricule = "", onSubmit }: FormPassationProps) {
-  const [matricule, setMatricule] = useState("");
-  const [status, setStatus] = useState<"idle" | "verifying" | "valid" | "invalid">("idle");
-  const [nomMontant, setNomMontant] = useState("");
-  const [prenomMontant, setPrenomMontant] = useState("");
-  const [prestataireMontant, setPrestataireMontant] = useState("");
+export default function FormPassation({ siteId = "", agentSortantNom = "", agentSortantPrenom = "", agentSortantMatricule = "", onSubmit }: FormPassationProps) {
+  const [employees, setEmployees] = useState<RegisterEmployeeOption[]>([]);
+  const [employeeQuery, setEmployeeQuery] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<RegisterEmployeeOption | null>(null);
+  const [showEmployeeOptions, setShowEmployeeOptions] = useState(false);
+  const [highlightedEmployee, setHighlightedEmployee] = useState(0);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [equipment, setEquipment] = useState("");
   const [ongoingEvents, setOngoingEvents] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -65,37 +68,37 @@ export default function FormPassation({ agentSortantNom = "", agentSortantPrenom
   const [incomingSigned, setIncomingSigned] = useState(false);
 
   useEffect(() => {
-    const trimmed = matricule.trim();
-    if (!trimmed) {
-      setStatus("idle"); setNomMontant(""); setPrenomMontant(""); setPrestataireMontant("");
-      return;
-    }
-    setStatus("verifying");
-    const controller = new AbortController();
+    if (!siteId) { setEmployees([]); return; }
     let active = true;
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_URL}/employes/${encodeURIComponent(trimmed)}`, { headers: authHeaders(), signal: controller.signal });
-        if (!active) return;
-        if (res.ok) {
-          const employee = await res.json();
-          setNomMontant(employee.nom ?? ""); setPrenomMontant(employee.prenom ?? ""); setPrestataireMontant(employee.prestataire ?? ""); setStatus("valid");
-        } else {
-          setNomMontant(""); setPrenomMontant(""); setPrestataireMontant(""); setStatus("invalid");
-        }
-      } catch { if (active) setStatus("invalid"); }
-    }, 400);
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [matricule]);
+    setLoadingEmployees(true);
+    serviceApi.listRegisterEmployees(siteId)
+      .then((rows) => { if (active) setEmployees(rows); })
+      .catch(() => { if (active) setEmployees([]); })
+      .finally(() => { if (active) setLoadingEmployees(false); });
+    return () => { active = false; };
+  }, [siteId]);
 
-  const isFormValid = agentSortantNom.trim() !== "" && agentSortantPrenom.trim() !== "" && agentSortantMatricule.trim() !== "" && status === "valid" && outgoingSigned && incomingSigned && inventory.length > 0 && inventory.every((row) => row.designation.trim() && row.etatSortie && row.etatEntree && row.quantiteSortie >= 0 && row.quantiteEntree >= 0) && documents.every((row) => row.reference.trim() && row.description.trim() && row.detenuPar.trim());
+  const matchingEmployees = useMemo(() => {
+    const query = normalizeSearch(employeeQuery);
+    if (!query) return employees.slice(0, 8);
+    return employees.filter((employee) => normalizeSearch(`${employee.matricule} ${employee.firstName} ${employee.lastName} ${employee.prestataire || ""}`).includes(query)).slice(0, 8);
+  }, [employeeQuery, employees]);
+
+  const selectEmployee = (employee: RegisterEmployeeOption) => {
+    setSelectedEmployee(employee);
+    setEmployeeQuery(employee.matricule);
+    setShowEmployeeOptions(false);
+    setHighlightedEmployee(0);
+  };
+
+  const isFormValid = agentSortantNom.trim() !== "" && agentSortantPrenom.trim() !== "" && agentSortantMatricule.trim() !== "" && Boolean(selectedEmployee) && outgoingSigned && incomingSigned && inventory.length > 0 && inventory.every((row) => row.designation.trim() && row.etatSortie && row.etatEntree && row.quantiteSortie >= 0 && row.quantiteEntree >= 0) && documents.every((row) => row.reference.trim() && row.description.trim() && row.detenuPar.trim());
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!isFormValid) return;
     onSubmit({
-      incoming_matricule: matricule.trim(), incoming_prestataire: prestataireMontant,
-      incoming_nom: nomMontant.trim(), incoming_prenom: prenomMontant.trim(), equipment,
+      incoming_matricule: selectedEmployee!.matricule, incoming_prestataire: selectedEmployee!.prestataire || "",
+      incoming_nom: selectedEmployee!.lastName.trim(), incoming_prenom: selectedEmployee!.firstName.trim(), equipment,
       ongoing_events: ongoingEvents, instructions, inventaire: inventory, documents_retenus: documents,
       confirmation_sortant: outgoingSigned, confirmation_entrant: incomingSigned,
     });
@@ -118,12 +121,36 @@ export default function FormPassation({ agentSortantNom = "", agentSortantPrenom
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">Chef entrant</h3>
-          <div><Label htmlFor="matricule-montant">Matricule *</Label><Input id="matricule-montant" required value={matricule} onChange={(event) => setMatricule(event.target.value)} placeholder="ex. MAT-0001" className="mt-1" />
-            {status === "verifying" && <p className="mt-1 text-xs text-muted-foreground">Vérification en cours…</p>}
-            {status === "invalid" && <p className="mt-1 text-xs text-red-500">Ce matricule n'existe pas dans la base de données.</p>}
-            {status === "valid" && <p className="mt-1 text-xs text-emerald-600">Agent identifié : {prenomMontant} {nomMontant}</p>}
+          <div className="relative"><Label htmlFor="incoming-employee-search">Matricule *</Label><Input
+              id="incoming-employee-search"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={showEmployeeOptions}
+              aria-controls="incoming-employee-options"
+              autoComplete="off"
+              value={employeeQuery}
+              onFocus={() => setShowEmployeeOptions(true)}
+              onChange={(event) => { setEmployeeQuery(event.target.value); setSelectedEmployee(null); setHighlightedEmployee(0); setShowEmployeeOptions(true); }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" && matchingEmployees.length) { event.preventDefault(); setHighlightedEmployee((index) => (index + 1) % matchingEmployees.length); setShowEmployeeOptions(true); }
+                else if (event.key === "ArrowUp" && matchingEmployees.length) { event.preventDefault(); setHighlightedEmployee((index) => (index - 1 + matchingEmployees.length) % matchingEmployees.length); }
+                else if (event.key === "Enter" && showEmployeeOptions && matchingEmployees[highlightedEmployee]) { event.preventDefault(); selectEmployee(matchingEmployees[highlightedEmployee]); }
+                else if (event.key === "Escape") setShowEmployeeOptions(false);
+              }}
+              placeholder="Tapez un matricule, un nom ou une lettre…"
+              className="mt-1"
+              disabled={!siteId || loadingEmployees}
+            />
+            {showEmployeeOptions && !selectedEmployee && <div id="incoming-employee-options" role="listbox" aria-label="Employés actifs du site" className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+              {loadingEmployees ? <p className="px-3 py-2 text-sm text-muted-foreground">Recherche des employés…</p>
+                : matchingEmployees.length ? matchingEmployees.map((employee, index) => <button key={employee.id} type="button" role="option" aria-selected={index === highlightedEmployee} onMouseDown={(event) => event.preventDefault()} onClick={() => selectEmployee(employee)} className={`flex w-full flex-col items-start rounded px-3 py-2 text-left text-sm ${index === highlightedEmployee ? "bg-accent" : "hover:bg-accent/60"}`}>
+                  <span className="font-medium">{employee.matricule} · {employee.firstName} {employee.lastName}</span><span className="text-xs text-muted-foreground">{employee.prestataire || "Prestataire non renseigné"}</span>
+                </button>)
+                  : <p className="px-3 py-2 text-sm text-muted-foreground">Aucun employé actif ne correspond à cette recherche.</p>}
+            </div>}
+            {selectedEmployee && <p className="mt-1 text-xs text-emerald-600">Chef entrant identifié : {selectedEmployee.firstName} {selectedEmployee.lastName}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3"><div><Label>Nom</Label><Input readOnly value={nomMontant} className="mt-1 bg-muted" /></div><div><Label>Prénom</Label><Input readOnly value={prenomMontant} className="mt-1 bg-muted" /></div></div>
+          <div className="grid grid-cols-2 gap-3"><div><Label>Nom</Label><Input readOnly value={selectedEmployee?.lastName || ""} className="mt-1 bg-muted" /></div><div><Label>Prénom</Label><Input readOnly value={selectedEmployee?.firstName || ""} className="mt-1 bg-muted" /></div></div>
         </section>
 
         <section className="space-y-3 rounded-md border p-3">
