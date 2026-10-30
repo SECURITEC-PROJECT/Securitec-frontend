@@ -147,9 +147,11 @@ export default function Dashboard() {
   const selectedSite = sites.find((site) => site.id === siteId);
   const filteredShifts = useMemo(() => activeShifts.filter((shift) => !postId || shift.posteId === postId), [activeShifts, postId]);
   const activeServices = useMemo(() => new Set(filteredShifts.map((shift) => shift.serviceId || shift.id)).size, [filteredShifts]);
-  const activeServiceId = siteId && typeof window !== "undefined" ? window.localStorage.getItem(`securitec-active-shift:${siteId}`) : null;
+  const activePostId = siteId && typeof window !== "undefined" ? window.localStorage.getItem(`securitec-active-post:${siteId}`) : null;
+  const contextPostId = postId || activePostId || "";
+  const activeServiceId = siteId && contextPostId && typeof window !== "undefined" ? window.localStorage.getItem(`securitec-active-shift:${siteId}:${contextPostId}`) : null;
   const currentPostShift = activeShifts.find((shift) => activeServiceId && (shift.id === activeServiceId || shift.serviceId === activeServiceId));
-  const readingPostId = currentPostShift?.posteId || postId;
+  const readingPostId = currentPostShift?.posteId || contextPostId;
   const readingPostName = posts.find((post) => post.id === readingPostId)?.nom || currentPostShift?.posteNom;
 
   const operationalConsignes = useMemo(() => data.consignes.filter((entry) => openInstruction(entry)
@@ -220,7 +222,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tableau de bord du site" subtitle={dateLabel.format(new Date())} action={<Button asChild><Link to="/dashboard/main-courante"><Plus /> Nouvel événement</Link></Button>} />
+      <PageHeader title="Tableau de bord du site" subtitle={dateLabel.format(new Date())} action={<Button asChild><Link to="/dashboard/postes"><Plus /> Accéder aux postes</Link></Button>} />
 
       {!readingPostId && data.consignes.some((entry) => openInstruction(entry)) && <div className="flex flex-wrap items-center gap-3 border-l-4 border-warning bg-warning/10 px-4 py-3">
         <AlertTriangle className="size-5 shrink-0 text-warning-foreground" />
@@ -285,7 +287,7 @@ export default function Dashboard() {
             <tbody>{staffing.map((post) => {
               const services = [...new Set(post.members.map((member) => member.shiftType === "NUIT" ? "Nuit" : member.shiftType === "JOUR" ? "Jour" : "Service non précisé"))];
               const providers = [...post.members.reduce((counts, member) => counts.set(member.prestataire || "Prestataire non renseigné", (counts.get(member.prestataire || "Prestataire non renseigné") || 0) + 1), new Map<string, number>())].map(([provider, count]) => `${provider} (${count})`);
-              return <tr key={post.id} className="border-t align-top"><td className="px-4 py-3 font-medium">{post.name}</td><td className="px-4 py-3">{services.join(", ") || "—"}</td><td className="px-4 py-3">{post.members.length}</td><td className="max-w-xl px-4 py-3 text-xs text-muted-foreground">{providers.length ? providers.join(" · ") : "Aucun agent en service"}</td></tr>;
+              return <tr key={post.id} className="border-t align-top"><td className="px-4 py-3 font-medium"><Link className="text-primary hover:underline" to={`/dashboard/postes/${post.id}`} state={{ siteId, posteNom: post.name }}>{post.name}</Link></td><td className="px-4 py-3">{services.join(", ") || "—"}</td><td className="px-4 py-3">{post.members.length}</td><td className="max-w-xl px-4 py-3 text-xs text-muted-foreground">{providers.length ? providers.join(" · ") : "Aucun agent en service"}</td></tr>;
             })}
             {!staffing.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste ne correspond au filtre.</td></tr>}</tbody>
           </table>

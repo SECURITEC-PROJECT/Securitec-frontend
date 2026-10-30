@@ -16,6 +16,7 @@ type ChauffeurForm = {
   expirationPermis: string;
   vehicule: string;
   matricule: string;
+  providerId: string;
 };
 
 const emptyForm = (): ChauffeurForm => ({
@@ -26,6 +27,7 @@ const emptyForm = (): ChauffeurForm => ({
   expirationPermis: "",
   vehicule: "",
   matricule: "",
+  providerId: "",
 });
 
 const noChauffeurs: ChauffeurRecord[] = [];
@@ -34,6 +36,7 @@ export default function Chauffeurs() {
   const { sites, siteError } = useSites();
   const [siteId, setSiteId] = useState("");
   const [registry, setRegistry] = useState<{ siteId: string; records: ChauffeurRecord[] }>({ siteId: "", records: [] });
+  const [providers, setProviders] = useState<{ id: string; name: string; active: boolean }[]>([]);
   const [form, setForm] = useState<ChauffeurForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -43,6 +46,10 @@ export default function Chauffeurs() {
   const selectedSiteId = siteId || sites[0]?.id || "";
   const records = registry.siteId === selectedSiteId ? registry.records : noChauffeurs;
   const loading = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
+
+  useEffect(() => {
+    serviceApi.listProviders().then(setProviders).catch(() => setProviders([]));
+  }, []);
 
   useEffect(() => {
     if (!selectedSiteId) return;
@@ -62,7 +69,7 @@ export default function Chauffeurs() {
     const query = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
     if (!query) return records;
     return records.filter((driver) =>
-      [driver.nomPrenom, driver.telephone, driver.cin, driver.numeroPermis, driver.vehicule, driver.matricule]
+      [driver.nomPrenom, driver.telephone, driver.cin, driver.numeroPermis, driver.vehicule, driver.matricule, driver.provider]
         .filter(Boolean)
         .join(" ")
         .normalize("NFD")
@@ -86,13 +93,15 @@ export default function Chauffeurs() {
     try {
       if (editingId) {
         const updated = await serviceApi.updateChauffeur(editingId, payload);
+        const withProvider = { ...updated, provider: providers.find((item) => item.id === updated.providerId)?.name || null };
         setRegistry((current) => current.siteId !== selectedSiteId ? current : ({
           ...current,
-          records: current.records.map((driver) => driver.id === editingId ? updated : driver),
+          records: current.records.map((driver) => driver.id === editingId ? withProvider : driver),
         }));
         toast.success("Fiche chauffeur modifiée.");
       } else {
-        const created = await serviceApi.createChauffeur(payload);
+        const saved = await serviceApi.createChauffeur(payload);
+        const created = { ...saved, provider: providers.find((item) => item.id === saved.providerId)?.name || null };
         setRegistry((current) => current.siteId !== selectedSiteId ? current : ({
           ...current,
           records: [...current.records, created].sort((a, b) => a.nomPrenom.localeCompare(b.nomPrenom, "fr")),
@@ -117,6 +126,7 @@ export default function Chauffeurs() {
       expirationPermis: driver.expirationPermis || "",
       vehicule: driver.vehicule || "",
       matricule: driver.matricule || "",
+      providerId: driver.providerId || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -188,6 +198,10 @@ export default function Chauffeurs() {
               <label htmlFor="driver-registration" className="text-sm font-medium">Matricule du véhicule</label>
               <Input id="driver-registration" maxLength={40} value={form.matricule} onChange={(event) => setForm({ ...form, matricule: event.target.value })} />
             </div>
+            <div className="space-y-1.5">
+              <label htmlFor="driver-provider" className="text-sm font-medium">Prestataire / entreprise</label>
+              <select id="driver-provider" value={form.providerId} onChange={(event) => setForm({ ...form, providerId: event.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Aucun prestataire associé</option>{providers.filter((provider) => provider.active || provider.id === form.providerId).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select>
+            </div>
           </div>
           <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
             {editingId && <Button type="button" variant="outline" disabled={saving} onClick={resetForm}><X className="mr-2 h-4 w-4" />Annuler</Button>}
@@ -219,12 +233,13 @@ export default function Chauffeurs() {
                 <th className="border-b px-3 py-3">Permis / expiration</th>
                 <th className="border-b px-3 py-3">Véhicule</th>
                 <th className="border-b px-3 py-3">Matricule</th>
+                <th className="border-b px-3 py-3">Prestataire</th>
                 <th className="border-b px-3 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Chargement des chauffeurs…</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{records.length ? "Aucun chauffeur ne correspond à la recherche." : "Aucun chauffeur enregistré pour ce site."}</td></tr>
+              {loading ? <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Chargement des chauffeurs…</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">{records.length ? "Aucun chauffeur ne correspond à la recherche." : "Aucun chauffeur enregistré pour ce site."}</td></tr>
                   : filtered.map((driver) => (
                     <tr key={driver.id} className="align-top hover:bg-muted/30">
                       <td className="border-b px-3 py-3 font-medium">{driver.nomPrenom}</td>
@@ -233,6 +248,7 @@ export default function Chauffeurs() {
                       <td className="border-b px-3 py-3">{driver.numeroPermis || "—"}{driver.expirationPermis && <span className="block text-xs text-muted-foreground">Expire le {new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${driver.expirationPermis}T00:00:00Z`))}</span>}</td>
                       <td className="border-b px-3 py-3">{driver.vehicule || "—"}</td>
                       <td className="border-b px-3 py-3">{driver.matricule || "—"}</td>
+                      <td className="border-b px-3 py-3">{driver.provider || "—"}</td>
                       <td className="border-b px-3 py-3">
                         <div className="flex justify-end gap-1">
                           <Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${driver.nomPrenom}`} onClick={() => edit(driver)} disabled={workingId === driver.id}><Pencil className="h-4 w-4" /></Button>

@@ -7,16 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { serviceApi, type Provider } from "@/lib/service-api";
+import { serviceApi, type EmergencyContact, type Provider } from "@/lib/service-api";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { roleLabel } from "@/pages/layouts/navigation";
 
 type Site = { id: string; name: string; type: "USINE" | "AGENCE" };
 type Employee = { id: string; firstName: string; lastName: string; matricule: string; providerId: string; provider: string; active: boolean; siteId: string | null; siteName: string | null };
 type CameraItem = { id: string; name: string; status: string; siteId: string; siteName: string; zoneName: string };
 type Zone = { id: string; name: string; siteId: string; siteName: string };
 type UserAccount = { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null };
-type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Prestataires" | "Utilisateurs";
+type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Prestataires" | "Utilisateurs" | "Contacts d’urgence";
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>("Vue société");
@@ -37,7 +38,7 @@ export default function Administration() {
   const [savingUser, setSavingUser] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [newUserIdentifier, setNewUserIdentifier] = useState("");
-  const [newUserRole, setNewUserRole] = useState("3");
+  const [newUserRole, setNewUserRole] = useState("5");
   const [newUserSiteId, setNewUserSiteId] = useState("");
   const [newUserPin, setNewUserPin] = useState("");
   const [canManageSites, setCanManageSites] = useState(false);
@@ -49,6 +50,15 @@ export default function Administration() {
   const [siteAddress, setSiteAddress] = useState("");
   const [siteType, setSiteType] = useState<Site["type"]>("USINE");
   const [savingSite, setSavingSite] = useState(false);
+  const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
+  const [emergencySiteId, setEmergencySiteId] = useState("");
+  const [editingEmergencyId, setEditingEmergencyId] = useState<string | null>(null);
+  const [emergencyName, setEmergencyName] = useState("");
+  const [emergencyRole, setEmergencyRole] = useState("");
+  const [emergencyPhone, setEmergencyPhone] = useState("");
+  const [emergencyEmail, setEmergencyEmail] = useState("");
+  const [emergencyInstructions, setEmergencyInstructions] = useState("");
+  const [savingEmergency, setSavingEmergency] = useState(false);
 
   const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true); else setLoading(true);
@@ -56,7 +66,10 @@ export default function Administration() {
     try {
       const siteResult = await serviceApi.listSites();
       setSites(siteResult.sites);
+      if (siteResult.sites.length) setEmergencySiteId((current) => current || siteResult.sites[0].id);
       setCanManageSites(siteResult.canCreate && siteResult.canDelete);
+      const emergencyResults = await Promise.allSettled(siteResult.sites.map((site) => serviceApi.listEmergencyContacts(site.id)));
+      setEmergencyContacts(emergencyResults.flatMap((result) => result.status === "fulfilled" ? result.value : []));
       if (siteResult.canCreate) {
         const [userRows, providerRows] = await Promise.all([serviceApi.listUsers(), serviceApi.listProviders()]);
         setUsers(userRows);
@@ -95,7 +108,7 @@ export default function Administration() {
   const filteredUsers = useMemo(() => {
     const needle = userQuery.trim().toLocaleLowerCase();
     return users.filter((user) => {
-      const role = user.role === 1 ? "ADMIN" : user.role === 2 ? "SUPERVISEUR" : "AGENT";
+      const role = String(user.role);
       return (userRoleFilter === "ALL" || role === userRoleFilter) && (!needle || `${user.name} ${user.identifier} ${user.siteName || ""}`.toLocaleLowerCase().includes(needle));
     });
   }, [users, userQuery, userRoleFilter]);
@@ -106,12 +119,12 @@ export default function Administration() {
 
   const resetUserForm = () => {
     setShowUserForm(false); setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
-    setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin("");
+    setNewUserRole("5"); setNewUserSiteId(""); setNewUserPin("");
   };
 
   const startCreateUser = () => {
     setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
-    setNewUserRole("3"); setNewUserSiteId(""); setNewUserPin(""); setShowUserForm(true);
+    setNewUserRole("5"); setNewUserSiteId(""); setNewUserPin(""); setShowUserForm(true);
   };
 
   const editUser = (user: UserAccount) => {
@@ -137,7 +150,7 @@ export default function Administration() {
     const role = Number(newUserRole);
     const siteId = newUserSiteId || null;
     if (role !== 1 && !siteId) {
-      toast.error("Un site est obligatoire pour un agent ou un superviseur.");
+      toast.error("Un site est obligatoire pour ce profil.");
       return;
     }
     setSavingUser(true);
@@ -232,7 +245,39 @@ export default function Administration() {
     }
   };
 
-  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", ...(canManageSites ? ["Prestataires" as const, "Utilisateurs" as const] : [])];
+  const resetEmergencyForm = () => { setEditingEmergencyId(null); setEmergencyName(""); setEmergencyRole(""); setEmergencyPhone(""); setEmergencyEmail(""); setEmergencyInstructions(""); };
+
+  const saveEmergencyContact = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!emergencySiteId) { toast.error("Choisissez un site."); return; }
+    setSavingEmergency(true);
+    try {
+      const payload = { siteId: emergencySiteId, nom: emergencyName.trim(), fonction: emergencyRole.trim(), telephone: emergencyPhone.trim(), email: emergencyEmail.trim() || null, instructions: emergencyInstructions.trim() || null };
+      if (editingEmergencyId) {
+        const updated = await serviceApi.updateEmergencyContact(editingEmergencyId, payload);
+        setEmergencyContacts((current) => current.map((contact) => contact.id === updated.id ? updated : contact));
+        toast.success("Contact d’urgence mis à jour.");
+      } else {
+        const created = await serviceApi.createEmergencyContact(payload);
+        setEmergencyContacts((current) => [...current, created]);
+        toast.success("Contact d’urgence ajouté.");
+      }
+      resetEmergencyForm();
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Enregistrement du contact impossible."); }
+    finally { setSavingEmergency(false); }
+  };
+
+  const removeEmergencyContact = async (contact: EmergencyContact) => {
+    if (!(await confirmDeletion(`Désactiver le contact « ${contact.nom} » ?`))) return;
+    try {
+      await serviceApi.deleteEmergencyContact(contact.id, contact.siteId);
+      setEmergencyContacts((current) => current.filter((item) => item.id !== contact.id));
+      if (editingEmergencyId === contact.id) resetEmergencyForm();
+      toast.success("Contact désactivé.");
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Désactivation du contact impossible."); }
+  };
+
+  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", "Contacts d’urgence", ...(canManageSites ? ["Prestataires" as const, "Utilisateurs" as const] : [])];
   return <div className="space-y-6">
     <PageHeader title="Administration de la société" subtitle="Vue globale des sites, des équipes et des équipements enregistrés dans la base." action={<Button variant="outline" onClick={() => void load(true)} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualiser</Button>} />
 
@@ -293,7 +338,7 @@ export default function Administration() {
             </Button>
           </div>
           {displayedProviders.length ? <div className="divide-y">{displayedProviders.map((provider) => <div key={provider.id} className="flex flex-wrap items-center gap-3 py-4">
-            <div className="min-w-0 flex-1"><p className="font-medium">{provider.name}</p><p className="text-xs text-muted-foreground">{provider.employeeCount} employé(s) · {provider.materialCount} mouvement(s) matériel</p></div>
+            <div className="min-w-0 flex-1"><Link to={`/dashboard/prestataires/${provider.id}`} className="font-medium text-primary hover:underline">{provider.name}</Link><p className="text-xs text-muted-foreground">{provider.employeeCount} employé(s) · {provider.materialCount} mouvement(s) matériel</p></div>
             <Badge variant={provider.active ? "secondary" : "outline"}>{provider.active ? "Actif" : "Inactif"}</Badge>
             <RegistryAuditHistory entity="prestataire" recordId={provider.id} />
             <Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${provider.name}`} title="Modifier" onClick={() => { setEditingProviderId(provider.id); setProviderName(provider.name); }}><Pencil className="h-4 w-4" /></Button>
@@ -308,12 +353,35 @@ export default function Administration() {
           </form>
         </Panel>
       </div>}
+      {tab === "Contacts d’urgence" && <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel title={`Contacts actifs (${emergencyContacts.length})`}>
+          {sites.map((site) => {
+            const siteContacts = emergencyContacts.filter((contact) => contact.siteId === site.id);
+            return <section key={site.id} className="mb-6 last:mb-0"><h2 className="mb-2 border-b pb-2 text-sm font-semibold">{site.name}</h2>
+              {siteContacts.length ? <div className="divide-y">{siteContacts.map((contact) => <div key={contact.id} className="flex flex-wrap items-start gap-3 py-3"><div className="min-w-0 flex-1"><p className="font-medium">{contact.nom}</p><p className="text-xs text-muted-foreground">{contact.fonction || "Contact d’urgence"}{contact.email ? ` · ${contact.email}` : ""}</p>{contact.instructions && <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{contact.instructions}</p>}<a className="mt-1 inline-block text-sm font-semibold text-primary hover:underline" href={`tel:${contact.telephone.replace(/[^+\d]/g, "")}`}>{contact.telephone}</a></div>
+                {canManageSites && <div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${contact.nom}`} onClick={() => { setEmergencySiteId(contact.siteId); setEditingEmergencyId(contact.id); setEmergencyName(contact.nom); setEmergencyRole(contact.fonction); setEmergencyPhone(contact.telephone); setEmergencyEmail(contact.email || ""); setEmergencyInstructions(contact.instructions || ""); }}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Désactiver ${contact.nom}`} onClick={() => void removeEmergencyContact(contact)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div>}
+              </div>)}</div> : <p className="py-3 text-sm text-muted-foreground">Aucun contact configuré pour ce site.</p>}
+            </section>;
+          })}
+        </Panel>
+        {canManageSites ? <Panel title={editingEmergencyId ? "Modifier un contact" : "Ajouter un contact d’urgence"}>
+          <form className="space-y-4" onSubmit={(event) => void saveEmergencyContact(event)}>
+            <div><Label htmlFor="emergency-site">Site</Label><select id="emergency-site" required value={emergencySiteId} onChange={(event) => setEmergencySiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Choisir un site</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>
+            <div><Label htmlFor="emergency-name">Nom</Label><Input id="emergency-name" required maxLength={160} value={emergencyName} onChange={(event) => setEmergencyName(event.target.value)} /></div>
+            <div><Label htmlFor="emergency-role">Fonction</Label><Input id="emergency-role" maxLength={120} value={emergencyRole} onChange={(event) => setEmergencyRole(event.target.value)} placeholder="Ex. Responsable sécurité" /></div>
+            <div><Label htmlFor="emergency-phone">Téléphone</Label><Input id="emergency-phone" required maxLength={40} type="tel" value={emergencyPhone} onChange={(event) => setEmergencyPhone(event.target.value)} /></div>
+            <div><Label htmlFor="emergency-email">E-mail</Label><Input id="emergency-email" maxLength={255} type="email" value={emergencyEmail} onChange={(event) => setEmergencyEmail(event.target.value)} /></div>
+            <div><Label htmlFor="emergency-instructions">Instructions d’appel</Label><textarea id="emergency-instructions" maxLength={2000} value={emergencyInstructions} onChange={(event) => setEmergencyInstructions(event.target.value)} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Informations utiles lors de l’appel" /></div>
+            <div className="flex gap-2"><Button className="flex-1" disabled={savingEmergency}>{savingEmergency ? "Enregistrement…" : editingEmergencyId ? "Enregistrer" : "Ajouter"}</Button>{editingEmergencyId && <Button type="button" variant="outline" onClick={resetEmergencyForm}>Annuler</Button>}</div>
+          </form>
+        </Panel> : <p className="text-sm text-muted-foreground">Seul un administrateur peut ajouter ou modifier ces contacts.</p>}
+      </div>}
       {tab === "Utilisateurs" && canManageSites && <Panel title={`Comptes utilisateurs (${filteredUsers.length})`}>
         <div className="mb-4 flex justify-end"><Button type="button" onClick={() => showUserForm ? resetUserForm() : startCreateUser()}><Plus className="h-4 w-4" />{showUserForm ? "Annuler" : "Ajouter un utilisateur"}</Button></div>
         {showUserForm && <form className="mb-6 grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2" onSubmit={(event) => void saveUser(event)}>
           <div><Label htmlFor="new-user-name">Nom complet</Label><Input id="new-user-name" required maxLength={255} value={newUserName} onChange={(event) => setNewUserName(event.target.value)} /></div>
           <div><Label htmlFor="new-user-identifier">Identifiant de connexion</Label><Input id="new-user-identifier" required maxLength={100} autoComplete="username" value={newUserIdentifier} onChange={(event) => setNewUserIdentifier(event.target.value)} /></div>
-          <div><Label htmlFor="new-user-role">Rôle</Label><select id="new-user-role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="1">Administrateur</option><option value="2">Superviseur</option><option value="3">Agent</option></select></div>
+            <div><Label htmlFor="new-user-role">Rôle</Label><select id="new-user-role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="5">Agent APS</option><option value="2">Chef de poste</option><option value="3">Responsable sécurité</option><option value="4">Direction / RAF / chefs de service</option><option value="1">Administrateur</option></select></div>
           <div><Label htmlFor="new-user-site">Site {newUserRole === "1" ? "(facultatif)" : ""}</Label><select id="new-user-site" required={newUserRole !== "1"} value={newUserSiteId} onChange={(event) => setNewUserSiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">{newUserRole === "1" ? "Aucun site" : "Choisir un site"}</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>
           <div><Label htmlFor="new-user-pin">PIN {editingUserId ? "(laisser vide pour conserver l’actuel)" : "temporaire"} · 6 chiffres</Label><Input id="new-user-pin" required={!editingUserId} type="password" inputMode="numeric" pattern={newUserPin ? "[0-9]{6}" : editingUserId ? undefined : "[0-9]{6}"} minLength={newUserPin ? 6 : editingUserId ? undefined : 6} maxLength={6} autoComplete="new-password" value={newUserPin} onChange={(event) => setNewUserPin(event.target.value.replace(/\D/g, "").slice(0, 6))} /></div>
           <div className="flex items-end"><Button type="submit" disabled={savingUser}>{savingUser ? "Enregistrement…" : editingUserId ? "Enregistrer les modifications" : "Créer le compte"}</Button></div>
@@ -321,10 +389,10 @@ export default function Administration() {
         <div className="mb-4 flex flex-wrap gap-3">
           <Input aria-label="Rechercher un utilisateur" placeholder="Nom, identifiant ou site…" className="max-w-md" value={userQuery} onChange={(event) => setUserQuery(event.target.value)} />
           <select aria-label="Filtrer par rôle" value={userRoleFilter} onChange={(event) => setUserRoleFilter(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-            <option value="ALL">Tous les rôles</option><option value="ADMIN">Administrateur</option><option value="SUPERVISEUR">Superviseur</option><option value="AGENT">Agent</option>
+            <option value="ALL">Tous les rôles</option><option value="1">Administrateur</option><option value="2">Chef de poste</option><option value="3">Responsable sécurité</option><option value="4">Direction / RAF / chefs de service</option><option value="5">Agent APS</option>
           </select>
         </div>
-        {filteredUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Nom</th><th className="py-3 pr-4">Identifiant</th><th className="py-3 pr-4">Rôle</th><th className="py-3 pr-4">Site</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => <tr key={user.id}><td className="py-3 pr-4 font-medium">{user.name}</td><td className="py-3 pr-4 font-mono text-xs">{user.identifier}</td><td className="py-3 pr-4">{user.role === 1 ? "Administrateur" : user.role === 2 ? "Superviseur" : "Agent"}</td><td className="py-3 pr-4">{user.siteName || "—"}</td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${user.name}`} title="Modifier" onClick={() => editUser(user)}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${user.name}`} title="Supprimer" onClick={() => void deleteUser(user)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun utilisateur ne correspond aux filtres.</p>}
+        {filteredUsers.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Nom</th><th className="py-3 pr-4">Identifiant</th><th className="py-3 pr-4">Rôle</th><th className="py-3 pr-4">Site</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{filteredUsers.map((user) => <tr key={user.id}><td className="py-3 pr-4 font-medium">{user.name}</td><td className="py-3 pr-4 font-mono text-xs">{user.identifier}</td><td className="py-3 pr-4">{roleLabel(user.role)}</td><td className="py-3 pr-4">{user.siteName || "—"}</td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${user.name}`} title="Modifier" onClick={() => editUser(user)}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Supprimer ${user.name}`} title="Supprimer" onClick={() => void deleteUser(user)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun utilisateur ne correspond aux filtres.</p>}
       </Panel>}
     </>}
   </div>;

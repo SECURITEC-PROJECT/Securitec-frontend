@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FileText,
   LayoutDashboard,
+  ShieldCheck,
   Repeat,
   Route as RouteIcon,
   Settings2,
@@ -31,7 +32,8 @@ import {
 } from "lucide-react";
 
 export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string; icon: LucideIcon }[] }[] = [
-  { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Vue d’ensemble", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
+  { title: "PILOTAGE", items: [{ to: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard }, { to: "/dashboard/statistiques", label: "Statistiques", icon: BarChart3 }] },
+  { title: "POSTES DE GARDE", items: [{ to: "/dashboard/postes", label: "Choisir un poste", icon: ShieldCheck }, { to: "/dashboard/prestataires", label: "Prestataires", icon: ContactRound }] },
   { title: "CAHIERS", items: [
       { to: "/dashboard/mouvements-cles", label: "Mouvements clés", icon: KeyRound },
       { to: "/dashboard/carte-grise-permis", label: "Carte grise / Permis", icon: FileSignature },
@@ -71,3 +73,59 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
   },
   { title: "ÉQUIPE & ADMINISTRATION", items: [{ to: "/dashboard/employes", label: "Employés", icon: ContactRound }, { to: "/dashboard/administration", label: "Administration", icon: Settings2 }, { to: "/dashboard/documents", label: "Documents du site", icon: BookOpen }, { to: "/dashboard/cameras", label: "Caméras", icon: Video }] },
 ];
+
+const SECURITY_ROUTES = new Set([
+  "/dashboard", "/dashboard/statistiques", "/dashboard/postes", "/dashboard/prestataires",
+  "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
+  "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
+  "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
+  "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
+  "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
+  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/visiteurs", "/dashboard/materiels-star", "/dashboard/chauffeurs",
+  "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
+  "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
+  "/dashboard/documents",
+]);
+
+const POST_AGENT_ROUTES = new Set([
+  "/dashboard", "/dashboard/postes", "/dashboard/prestataires",
+  "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance",
+  "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
+  "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
+  "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
+  "/dashboard/courrier", "/dashboard/anomalie", "/dashboard/alcootest", "/dashboard/consigne",
+  "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
+  "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/materiels-star", "/dashboard/chauffeurs",
+  "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets",
+]);
+
+const CHEF_ROUTES = new Set([
+  ...POST_AGENT_ROUTES,
+  "/dashboard",
+  "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
+]);
+const DIRECTION_ROUTES = new Set([
+  "/dashboard", "/dashboard/statistiques", "/dashboard/comptes-rendus",
+]);
+
+export function homeRouteForRole(_role: number): string {
+  return "/dashboard";
+}
+
+export function canAccessRoute(role: number, path: string): boolean {
+  let normalizedPath = path.split("#")[0].replace(/\/$/, "") || "/dashboard";
+  if (["/dashboard/prise-de-poste", "/dashboard/passation"].includes(normalizedPath)) return role === 2;
+  if (role === 1) return true;
+  if (/^\/dashboard\/postes\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/postes";
+  if (/^\/dashboard\/prestataires\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/prestataires";
+  if (normalizedPath === "/dashboard/test-alcool") normalizedPath = "/dashboard/alcootest";
+  if (role === 2) return CHEF_ROUTES.has(normalizedPath);
+  if (role === 3) return SECURITY_ROUTES.has(normalizedPath);
+  if (role === 4) return DIRECTION_ROUTES.has(normalizedPath);
+  if (role === 5) return POST_AGENT_ROUTES.has(normalizedPath);
+  return false;
+}
+
+export function roleLabel(role: number): string {
+  return ({ 1: "Administrateur", 2: "Chef de poste", 3: "Responsable sécurité", 4: "Direction / RAF / chefs de service", 5: "Agent APS" } as Record<number, string>)[role] || "Utilisateur";
+}

@@ -39,8 +39,20 @@ import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
 import PointageAPS from '@/pages/pointageAps/PointageAPS';
 import MouvementsAPS from '@/pages/pointageAps/MouvementsAPS';
 import Anomalie from '@/pages/anomalie/Anomalie';
+import PostesDeGarde from '@/pages/postes/PostesDeGarde';
+import PosteOperationnel from '@/pages/postes/PosteOperationnel';
+import FichePrestataire from '@/pages/prestataires/FichePrestataire';
+import Prestataires from '@/pages/prestataires/Prestataires';
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { canAccessRoute, homeRouteForRole } from '@/pages/layouts/navigation';
+
+function RoleAccessGuard({ role }: { role: number }) {
+  const location = useLocation();
+  return canAccessRoute(role, location.pathname)
+    ? <Outlet />
+    : <Navigate to={homeRouteForRole(role)} replace state={{ deniedPath: location.pathname }} />;
+}
 
 export default function App() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
@@ -76,11 +88,13 @@ export default function App() {
                 onLoginSuccess={(userData) => setUser(userData)}
               />
             ) : (
-              <Navigate to="/dashboard" replace />
+              <Navigate to={homeRouteForRole(user.role)} replace />
             )
           }
         />
         <Route path="/auth" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />} />
+        <Route path="/choisir-poste" element={!user ? <Navigate to="/login" replace /> : <Navigate to="/dashboard/postes" replace />} />
 
         {/* page protégée (LayoutPrincipal) */}
         <Route
@@ -93,14 +107,19 @@ export default function App() {
             )
           }
         >
+          <Route element={<RoleAccessGuard role={user?.role ?? 0} />}>
           {/* Vue d'ensemble (Page principale) */}
           <Route index element={<Dashboard />} />
+          <Route path="postes" element={<PostesDeGarde />} />
+          <Route path="postes/:posteId" element={user ? <PosteOperationnel user={user} /> : <Navigate to="/login" replace />} />
+          <Route path="prestataires" element={<Prestataires />} />
+          <Route path="prestataires/:providerId" element={<FichePrestataire />} />
 
           {/* Les autres pages du menu */}
           <Route path="statistiques" element={<Statistiques />} />
           <Route path="prise-de-poste" element={<PriseDePoste />} />
           <Route path="passation" element={<Passation />} />
-          <Route path="visiteurs" element={<AgentAccueil canManageSiteBans={Boolean(user && user.role <= 2)} />} />
+          <Route path="visiteurs" element={<AgentAccueil canManageSiteBans={Boolean(user && [1, 3].includes(user.role))} />} />
           <Route path="logistique" element={<FluxLogistique />} />
           <Route path="controle-acces" element={<ControleAcces />} />
           <Route path="flux-logistiques" element={<FluxLogistique />} />
@@ -119,22 +138,19 @@ export default function App() {
           <Route path="mouvements-cles" element={<ControleAcces />} />
           <Route path="carte-grise-permis" element={<CarteGrisePermis />} />
           <Route path="dechets-levee" element={<DechetsLevee />} />
-          <Route path="mouvements-aps" element={<MouvementsAPS />} />
+          <Route path="mouvements-aps" element={<MouvementsAPS canManagePassations={user?.role === 2} canConfigurePosts={user?.role === 1} />} />
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<Vehicule />} />
-          <Route path="mouvements-vehicules" element={<AgentAccueil />} />
           <Route path="pointage-aps" element={<PointageAPS />} />
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<Courrier />} />
-          <Route path="courrier" element={<MainCourante />} />
           <Route path="anomalie" element={<Anomalie/>} />
           <Route path="alcootest" element={<Alcootest />} />
           <Route path="test-alcool" element={<Navigate to="/dashboard/alcootest" replace />} />
           <Route path="consigne" element={<Consignes />} />
           <Route path="chargements-star-particuliers" element={<ChargementsStarParticuliers />} />
-          <Route path="chargements-star-particuliers" element={<FluxLogistique />} />
           <Route path="materiels-sous-traitant" element={<MaterielsSousTraitant />} />
           <Route path="enregistrements-ordures" element={<OrduresFerrailles kind="ordures" />} />
           <Route path="ordures" element={<FluxLogistique kind="ordures" />} />
@@ -148,12 +164,13 @@ export default function App() {
           <Route path="questionnaires-visiteurs" element={<QuestionnaireVisiteur />} />
           <Route path="recoter" element={<FluxLogistique />} />
           <Route path="declaration-objets" element={<DeclarationObjets />} />
+          </Route>
         </Route>
 
         {/* Redirection par défaut */}
         <Route
           path="*"
-          element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
+          element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />}
         />
       </Routes>}
     </BrowserRouter>
