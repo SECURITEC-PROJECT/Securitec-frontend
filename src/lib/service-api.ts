@@ -46,6 +46,16 @@ export interface EmergencyContact {
   ordre: number;
 }
 
+export interface AdminPost {
+  id: string;
+  siteId: string;
+  siteName: string;
+  nom: string;
+  actif: boolean;
+  serviceCount: number;
+  reportCount: number;
+}
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -514,6 +524,10 @@ export const serviceApi = {
   },
   async deleteDocument(id: string) { return request<{ id: string; deleted: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
+  async listAdminPosts() { return (await request<{ posts: AdminPost[] }>("/admin/posts")).posts; },
+  async createAdminPost(data: { siteId: string; nom: string }) { return (await request<{ post: AdminPost }>("/admin/posts", { method: "POST", body: body(data) })).post; },
+  async updateAdminPost(id: string, data: { nom: string; actif: boolean }) { return (await request<{ post: AdminPost }>(`/admin/posts/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).post; },
+  async deleteAdminPost(id: string) { return request<{ id: string; deactivated: boolean }>(`/admin/posts/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listEmergencyContacts(siteId: string) { return (await request<{ contacts: EmergencyContact[] }>(`/emergency-contacts?siteId=${encodeURIComponent(siteId)}`)).contacts; },
   async createEmergencyContact(data: Omit<EmergencyContact, "id" | "ordre">) { return (await request<{ contact: EmergencyContact }>("/emergency-contacts", { method: "POST", body: body(data) })).contact; },
   async updateEmergencyContact(id: string, data: Omit<EmergencyContact, "id" | "ordre">) { return (await request<{ contact: EmergencyContact }>(`/emergency-contacts/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).contact; },
