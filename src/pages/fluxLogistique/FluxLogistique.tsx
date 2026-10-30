@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
@@ -7,9 +7,10 @@ import { printRecord } from "@/lib/printRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarDays, Clock3, Pencil, Printer, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, Clock3, Download, FilePlus2, Pencil, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { exportXlsx } from "@/lib/export-xlsx";
 
 type TruckForm = {
   date: string;
@@ -19,12 +20,20 @@ type TruckForm = {
   nbr: string;
   facture: string;
   destinataire: string;
+  typeDocument: string;
+  emetteur: string;
+  verification: string;
+  visaAgent: string;
 };
 
 type TruckEntry = TruckForm & {
   id: string;
   type: "DECHARGEMENT" | "ORDURES";
   siteName?: string;
+  createdAt?: string;
+  createdBy?: string;
+  attachmentCount?: number;
+  pendingSync?: boolean;
 };
 
 const wasteDesignations = ["Verres cassées", "Ordures", "Gravat"] as const;
@@ -45,6 +54,10 @@ const emptyTruck = (): TruckForm => ({
   nbr: "",
   facture: "",
   destinataire: "",
+  typeDocument: "BON",
+  emetteur: "",
+  verification: "",
+  visaAgent: "",
 });
 
 const escapeHtml = (value: string) =>
@@ -55,6 +68,87 @@ const escapeHtml = (value: string) =>
     "\"": "&quot;",
     "'": "&#39;",
   })[character] || character);
+
+function LogisticsAttachments({ entryId, count, siteId }: { entryId: string; count: number; siteId: string }) {
+  const [attachments, setAttachments] = useState<{ id: string; name: string; createdAt: string }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    if (loaded || loading) return;
+    setLoading(true);
+    try {
+      setAttachments(await serviceApi.listLogisticsAttachments(entryId, siteId));
+      setLoaded(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chargement des pièces jointes impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <details className="relative" onToggle={(event) => { if (event.currentTarget.open) void load(); }}>
+      <summary className="cursor-pointer list-none whitespace-nowrap text-sm underline-offset-4 hover:underline">
+        Pièces jointes ({count})
+      </summary>
+      <div className="absolute right-0 z-20 mt-2 max-h-64 min-w-64 overflow-auto rounded-md border bg-background p-3 shadow-lg">
+        {loading && <p className="text-sm text-muted-foreground">Chargement…</p>}
+        {!loading && loaded && attachments.length === 0 && <p className="text-sm text-muted-foreground">Aucune pièce jointe.</p>}
+        <ul className="space-y-2">
+          {attachments.map((attachment) => (
+            <li key={attachment.id}>
+              <button type="button" className="text-left text-sm text-primary underline" onClick={async () => {
+                try {
+                  const file = await serviceApi.downloadDocument(attachment.id);
+                  const url = URL.createObjectURL(file.blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = file.name;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Téléchargement impossible.");
+                }
+              }}>{attachment.name}</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
+}
+
+function LogisticsAudit({ entryId, siteId }: { entryId: string; siteId: string }) {
+  const [history, setHistory] = useState<{ id: string; action: string; createdAt: string; createdBy: string | null }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    if (loaded || loading) return;
+    setLoading(true);
+    try {
+      setHistory(await serviceApi.listLogisticsAudit(entryId, siteId));
+      setLoaded(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chargement de l’historique impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <details className="relative" onToggle={(event) => { if (event.currentTarget.open) void load(); }}>
+      <summary className="cursor-pointer list-none whitespace-nowrap text-sm underline-offset-4 hover:underline">Historique</summary>
+      <div className="absolute right-0 z-20 mt-2 max-h-64 min-w-72 overflow-auto rounded-md border bg-background p-3 shadow-lg">
+        {loading && <p className="text-sm text-muted-foreground">Chargement…</p>}
+        {!loading && loaded && history.length === 0 && <p className="text-sm text-muted-foreground">Aucune correction enregistrée.</p>}
+        <ul className="space-y-2">
+          {history.map((item) => <li key={item.id} className="text-sm">
+            <strong>{item.action === "ANNULATION" ? "Annulation" : "Modification"}</strong>
+            <span className="block text-muted-foreground">{item.createdBy || "Utilisateur"} · {new Date(item.createdAt).toLocaleString("fr-FR")}</span>
+          </li>)}
+        </ul>
+      </div>
+    </details>
+  );
+}
 
 export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-facture" | "ordures" }) {
   const isWasteRegister = kind === "ordures";
@@ -68,12 +162,22 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   const [editingTruck, setEditingTruck] = useState<TruckEntry | null>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncing, setSyncing] = useState(false);
+  const [openShiftId, setOpenShiftId] = useState<string | null>(null);
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = sites.find((item) => item.name === selectedSiteName);
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!query) return entries;
-    return entries.filter((entry) => [
+    return entries.filter((entry) => {
+      const date = String(entry.date || "").slice(0, 10);
+      if (fromDate && date < fromDate) return false;
+      if (toDate && date > toDate) return false;
+      if (!query) return true;
+      return [
       entry.date,
       entry.immatriculationVehicule,
       isWasteRegister ? "" : entry.heureSortie,
@@ -81,22 +185,76 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       entry.nbr,
       entry.facture,
       entry.destinataire,
+      entry.typeDocument,
+      entry.emetteur,
+      entry.verification,
+      entry.visaAgent,
       entry.siteName,
-    ].some((value) => String(value || "").toLocaleLowerCase().includes(query)));
-  }, [entries, search, isWasteRegister]);
+      entry.createdBy,
+    ].some((value) => String(value || "").toLocaleLowerCase().includes(query));
+    });
+  }, [entries, search, isWasteRegister, fromDate, toDate]);
+
+  const reloadEntries = useCallback(async () => {
+    if (!site?.id) return;
+    const rows = await serviceApi.listLogistics(site.id);
+    setEntries(rows.filter((entry: TruckEntry) => entry.type === entryType));
+  }, [site?.id, entryType]);
+
+  useEffect(() => {
+    if (!site?.id) return;
+    const storageKey = `securitec-logistics-shift:${site.id}`;
+    if (!navigator.onLine) {
+      setOpenShiftId(localStorage.getItem(storageKey));
+      return;
+    }
+    let active = true;
+    serviceApi.listShifts().then((shifts) => {
+      const shift = shifts
+        .filter((item: any) => !item.ended_at && String(item.site_de_travail || "").trim().toLocaleLowerCase() === selectedSiteName.trim().toLocaleLowerCase())
+        .sort((left: any, right: any) => new Date(right.started_at).getTime() - new Date(left.started_at).getTime())[0];
+      if (!active) return;
+      const id = shift?.id ? String(shift.id) : null;
+      setOpenShiftId(id);
+      if (id) localStorage.setItem(storageKey, id);
+      else localStorage.removeItem(storageKey);
+    }).catch(() => {
+      if (active) setOpenShiftId(localStorage.getItem(storageKey));
+    });
+    return () => { active = false; };
+  }, [site?.id, selectedSiteName, isOnline]);
 
   useEffect(() => {
     if (!site?.id) return;
     let active = true;
-    serviceApi.listLogistics(site.id)
-      .then((rows) => {
-        if (active) setEntries(rows.filter((entry) => entry.type === entryType));
-      })
-      .catch((error) => {
+    reloadEntries().catch((error) => {
         if (active) toast.error(error instanceof Error ? error.message : `Chargement du registre ${isWasteRegister ? "des ordures" : "bon/facture"} impossible.`);
       });
     return () => { active = false; };
-  }, [site?.id, entryType, isWasteRegister]);
+  }, [reloadEntries, isWasteRegister]);
+
+  useEffect(() => {
+    const updateConnectivity = () => setIsOnline(navigator.onLine);
+    const syncWhenOnline = () => {
+      updateConnectivity();
+      if (!navigator.onLine || !site?.id) return;
+      setSyncing(true);
+      serviceApi.syncPendingLogistics(site.id)
+        .then(async ({ synced, pending }) => {
+          await reloadEntries();
+          if (synced) toast.success(`${synced} saisie${synced > 1 ? "s" : ""} synchronisée${synced > 1 ? "s" : ""}.`);
+          if (pending) toast.warning(`${pending} saisie${pending > 1 ? "s" : ""} reste${pending > 1 ? "nt" : ""} en attente.`);
+        })
+        .catch(() => {})
+        .finally(() => setSyncing(false));
+    };
+    window.addEventListener("online", syncWhenOnline);
+    window.addEventListener("offline", updateConnectivity);
+    return () => {
+      window.removeEventListener("online", syncWhenOnline);
+      window.removeEventListener("offline", updateConnectivity);
+    };
+  }, [site?.id, reloadEntries]);
 
   const saveTruck = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -106,22 +264,43 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     }
     setSaving(true);
     try {
-      const payload = { ...truckForm, type: entryType, siteId: site.id, siteName: selectedSiteName, siteType: site.type };
+      if (!openShiftId) {
+        toast.error("Ouvrez une prise de poste pour ce site avant d’enregistrer le flux.");
+        return;
+      }
+      const payload = { ...truckForm, type: entryType, siteId: site.id, siteName: selectedSiteName, siteType: site.type, priseDePosteId: openShiftId };
+      let savedEntry: TruckEntry | undefined;
+      let attachmentErrors: string[] = [];
       if (editingTruck) {
         const { entry } = await serviceApi.updateTruckLogistics(editingTruck.id, entryType, payload);
-        setEntries((current) => current.map((row) => row.id === editingTruck.id
-          ? { ...row, ...entry, siteName: selectedSiteName }
-          : row));
+        savedEntry = { ...editingTruck, ...entry, siteName: selectedSiteName };
+        for (const file of attachmentFiles) {
+          try {
+            const document = await serviceApi.uploadDocument(site.id, file, "Flux logistique");
+            await serviceApi.linkLogisticsDocument(editingTruck.id, document.id, site.id);
+            savedEntry!.attachmentCount = (savedEntry!.attachmentCount || 0) + 1;
+          } catch (error) {
+            attachmentErrors.push(error instanceof Error ? error.message : `Impossible d’ajouter ${file.name}.`);
+          }
+        }
+        setEntries((current) => current.map((row) => row.id === editingTruck.id ? savedEntry! : row));
       } else {
-        const result = await serviceApi.createLogistics(payload);
+        const result = await serviceApi.createLogistics(payload, attachmentFiles);
         if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement sauvegardé.");
-        setEntries((current) => [result.entry, ...current]);
+        savedEntry = result.entry as TruckEntry;
+        if (!savedEntry.pendingSync) savedEntry.attachmentCount = attachmentFiles.length;
+        attachmentErrors = result.attachmentErrors || [];
+        setEntries((current) => [savedEntry!, ...current]);
+        if (!savedEntry.pendingSync) void reloadEntries();
       }
       setTruckForm(emptyTruck());
       setEditingTruck(null);
-      toast.success(editingTruck
-        ? `Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} modifié.`
-        : `Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} ajouté.`);
+      setAttachmentFiles([]);
+      if (attachmentErrors.length) toast.warning(`Enregistrement sauvegardé, mais ${attachmentErrors.length} pièce(s) jointe(s) n’ont pas été ajoutées.`);
+      if (savedEntry?.pendingSync) toast.info("Saisie enregistrée hors connexion. Elle sera synchronisée au retour du réseau.");
+      else toast.success(editingTruck
+          ? `Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} modifié.`
+          : `Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} ajouté.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -139,12 +318,20 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       nbr: entry.nbr || "",
       facture: entry.facture || "",
       destinataire: entry.destinataire || "",
+      typeDocument: entry.typeDocument || "BON",
+      emetteur: entry.emetteur || "",
+      verification: entry.verification || "",
+      visaAgent: entry.visaAgent || "",
     });
   };
 
   const deleteTruck = async (entry: TruckEntry) => {
     if (!site?.id) return;
-    if (!(await confirmDeletion(`Supprimer l’enregistrement du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`))) return;
+    if (entry.pendingSync) {
+      toast.info("Cette saisie sera envoyée avant de pouvoir être annulée.");
+      return;
+    }
+    if (!(await confirmDeletion(`Annuler l’enregistrement du véhicule « ${entry.immatriculationVehicule} » ? L’action restera visible dans l’historique.`))) return;
     try {
       await serviceApi.deleteTruckLogistics(entry.id, entryType, site.id);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
@@ -152,10 +339,44 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         setEditingTruck(null);
         setTruckForm(emptyTruck());
       }
-      toast.success(`Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} supprimé.`);
+      toast.success(`Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} annulé.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     }
+  };
+
+  const synchronize = async () => {
+    if (!site?.id || !isOnline || syncing) return;
+    setSyncing(true);
+    try {
+      const { synced, pending } = await serviceApi.syncPendingLogistics(site.id);
+      await reloadEntries();
+      toast[synced && !pending ? "success" : "info"](synced ? `${synced} saisie(s) synchronisée(s).` : "Aucune saisie en attente.");
+      if (pending) toast.warning(`${pending} saisie(s) reste(nt) en attente.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Synchronisation impossible.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const exportSpreadsheet = () => {
+    const columns = [
+      "Date", isWasteRegister ? "Véhicule" : "Transport (matricule)",
+      ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre",
+      isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination",
+      ...(!isWasteRegister ? ["Type de document", "Émetteur", "Vérification", "Visa agent"] : []),
+      "Auteur", "Horodatage de saisie",
+    ];
+    const rows = filteredEntries.map((entry) => [
+      entry.date, entry.immatriculationVehicule, ...(!isWasteRegister ? [entry.heureSortie] : []),
+      entry.designation, entry.nbr, entry.facture, entry.destinataire,
+      ...(!isWasteRegister ? [entry.typeDocument || "", entry.emetteur || "", entry.verification || "", entry.visaAgent || ""] : []),
+      entry.createdBy || "",
+      entry.createdAt ? new Date(entry.createdAt).toLocaleString("fr-FR") : "",
+    ]);
+    const stamp = today().replaceAll("-", "");
+    exportXlsx(`${isWasteRegister ? "registre-ordures" : "registre-bons-factures"}-${stamp}.xlsx`, pageTitle, columns, rows);
   };
 
   const printEntries = (items: TruckEntry[], title: string) => {
@@ -176,6 +397,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         entry.nbr || "—",
         entry.facture || "—",
         entry.destinataire || "—",
+        ...(!isWasteRegister ? [entry.typeDocument || "—", entry.emetteur || "—", entry.verification || "—", entry.visaAgent || "—"] : []),
       ];
       return `<tr>${cells.map((value) => `<td>${escapeHtml(String(value))}</td>`).join("")}</tr>`;
     }).join("");
@@ -187,6 +409,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       "Nombre",
       isWasteRegister ? "Facture" : "Numéro Bon / Facture",
       "Destination",
+      ...(!isWasteRegister ? ["Type de document", "Émetteur", "Vérification", "Visa agent"] : []),
     ].map((heading) => `<th>${escapeHtml(heading)}</th>`).join("");
 
     printWindow.document.open();
@@ -232,6 +455,12 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       ["Nombre", entry.nbr || "—"],
       [isWasteRegister ? "Facture" : "Numéro Bon / Facture", entry.facture || "—"],
       ["Destination", entry.destinataire || "—"],
+      ...(!isWasteRegister ? [
+        ["Type de document", entry.typeDocument || "—"] as [string, string],
+        ["Émetteur", entry.emetteur || "—"] as [string, string],
+        ["Vérification", entry.verification || "—"] as [string, string],
+        ["Visa de l’agent", entry.visaAgent || "—"] as [string, string],
+      ] : []),
     ]);
   };
 
@@ -261,8 +490,9 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         />
       </div>
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
+      {site?.id && !openShiftId && <p className="text-sm text-amber-700">Aucune prise de poste ouverte sur ce site. Ouvrez le service avant d’enregistrer un flux.</p>}
 
-      <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Enregistrer une sortie"}>
+          <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Enregistrer une sortie"}>
         <form className="space-y-6" onSubmit={(event) => void saveTruck(event)}>
           {isWasteRegister && <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
@@ -454,24 +684,61 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                 id="flux-invoice"
                 className="h-12 text-base"
                 required
-                maxLength={4}
-                pattern="\\d{1,4}"
-                inputMode="numeric"
-                title="Saisissez 1 à 4 chiffres."
+                maxLength={160}
+                placeholder="Ex. BL-2026-084"
                 value={truckForm.facture}
                 onChange={(event) => setTruckForm({ ...truckForm, facture: event.target.value })}
               />
             </div>
           </div>
           </>}
+          {!isWasteRegister && <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor="flux-document-type" className="flex min-h-10 items-center text-base font-semibold">Type de document</Label>
+              <select id="flux-document-type" required value={truckForm.typeDocument} onChange={(event) => setTruckForm({ ...truckForm, typeDocument: event.target.value })} className="flex h-12 w-full rounded-md border border-input bg-background px-3 text-base shadow-sm">
+                <option value="BON">Bon</option><option value="FACTURE">Facture</option><option value="BON_SORTIE">Bon de sortie</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="flux-emetteur" className="flex min-h-10 items-center text-base font-semibold">Émetteur</Label>
+              <Input id="flux-emetteur" required maxLength={255} className="h-12 text-base" value={truckForm.emetteur} onChange={(event) => setTruckForm({ ...truckForm, emetteur: event.target.value })} />
+            </div>
+            <div className="space-y-2 xl:col-span-2">
+              <Label htmlFor="flux-verification" className="flex min-h-10 items-center text-base font-semibold">Vérification</Label>
+              <Input id="flux-verification" required maxLength={2000} className="h-12 text-base" value={truckForm.verification} onChange={(event) => setTruckForm({ ...truckForm, verification: event.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="flux-visa-agent" className="flex min-h-10 items-center text-base font-semibold">Visa de l’agent</Label>
+              <Input id="flux-visa-agent" required maxLength={255} className="h-12 text-base" value={truckForm.visaAgent} onChange={(event) => setTruckForm({ ...truckForm, visaAgent: event.target.value })} />
+            </div>
+          </div>}
+          <div className="space-y-2">
+            <Label htmlFor="flux-attachments" className="flex items-center gap-2 text-base font-semibold"><FilePlus2 className="h-4 w-4" />Pièces justificatives</Label>
+            <Input
+              id="flux-attachments"
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt"
+              disabled={saving}
+              onChange={(event) => {
+                const selected = Array.from(event.target.files || []);
+                const allowedExtensions = new Set(["pdf", "jpg", "jpeg", "png", "webp", "doc", "docx", "xls", "xlsx", "csv", "txt"]);
+                const valid = selected.filter((file) => allowedExtensions.has(file.name.split(".").pop()?.toLowerCase() || "") && file.size > 0 && file.size <= 15 * 1024 * 1024);
+                if (valid.length !== selected.length) toast.error("Formats autorisés : PDF, image, Office, CSV ou TXT; 15 Mo maximum par fichier.");
+                setAttachmentFiles(valid);
+              }}
+            />
+            {attachmentFiles.length > 0 && <p className="text-sm text-muted-foreground">{attachmentFiles.map((file) => file.name).join(", ")}</p>}
+          </div>
           {!site?.id && <p className="text-base text-muted-foreground">Sélectionnez un site pour ajouter un enregistrement.</p>}
+          {site?.id && !openShiftId && <p className="text-base text-amber-700">Aucune prise de poste ouverte pour ce site.</p>}
           <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
             {editingTruck && (
               <Button type="button" variant="outline" className="h-11 px-5 text-base" disabled={saving} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); }}>
                 <X /> Annuler
               </Button>
             )}
-            <Button className="h-11 px-5 text-base" disabled={saving || !site?.id}>
+            <Button className="h-11 px-5 text-base" disabled={saving || !site?.id || !openShiftId || (!isOnline && !!editingTruck)}>
               {editingTruck && <Pencil />}
               {saving ? "Enregistrement…" : editingTruck ? "Enregistrer les modifications" : isWasteRegister ? "Ajouter au registre" : "Enregistrer la sortie"}
             </Button>
@@ -492,22 +759,36 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               className="pl-9"
             />
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Label className="sr-only" htmlFor="flux-from-date">Du</Label>
+            <Input id="flux-from-date" type="date" aria-label="Filtrer depuis le" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="w-auto" />
+            <Label className="sr-only" htmlFor="flux-to-date">Au</Label>
+            <Input id="flux-to-date" type="date" aria-label="Filtrer jusqu’au" value={toDate} onChange={(event) => setToDate(event.target.value)} className="w-auto" />
+          </div>
+          {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
+          {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
+          <Button type="button" variant="outline" disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
+            <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
+          </Button>
+          <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
+            <Download className="h-4 w-4" />Exporter Excel
+          </Button>
           <Button
             type="button"
             variant="outline"
-            disabled={!entries.length}
-            onClick={() => printEntries(entries, pageTitle)}
+            disabled={!filteredEntries.length}
+            onClick={() => printEntries(filteredEntries, pageTitle)}
           >
             <Printer className="h-4 w-4" />
-            Imprimer tout le registre
+            Exporter PDF / imprimer
           </Button>
         </div>
         <div className="overflow-hidden rounded-lg border">
           <div className="max-h-[560px] overflow-auto">
-            <table className="w-full min-w-[800px] text-left text-sm">
+            <table className="w-full min-w-[1450px] text-left text-sm">
               <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                 <tr>
-                  {["Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(!isWasteRegister ? ["Site"] : []), "Actions"].map((label) => (
+                  {["Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(!isWasteRegister ? ["Type document", "Émetteur", "Vérification", "Visa agent"] : []), "Saisie par / le", "Pièces jointes", "Historique", "Actions"].map((label) => (
                     <th key={label} className="whitespace-nowrap border-b px-3 py-3 font-medium">{label}</th>
                   ))}
                 </tr>
@@ -522,16 +803,24 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                     <td className="px-3 py-3">{entry.nbr || "—"}</td>
                     <td className="px-3 py-3">{entry.facture || "—"}</td>
                     <td className="px-3 py-3">{entry.destinataire || "—"}</td>
-                    {!isWasteRegister && <td className="px-3 py-3">{entry.siteName || "—"}</td>}
+                    {!isWasteRegister && <>
+                      <td className="px-3 py-3">{entry.typeDocument || "—"}</td>
+                      <td className="px-3 py-3">{entry.emetteur || "—"}</td>
+                      <td className="max-w-xs whitespace-pre-wrap px-3 py-3">{entry.verification || "—"}</td>
+                      <td className="px-3 py-3">{entry.visaAgent || "—"}</td>
+                    </>}
+                    <td className="px-3 py-3 text-xs">{entry.createdBy || "—"}<span className="block text-muted-foreground">{entry.createdAt ? new Date(entry.createdAt).toLocaleString("fr-FR") : "—"}</span>{entry.pendingSync && <span className="text-amber-700">En attente réseau</span>}</td>
+                    <td className="px-3 py-3">{entry.pendingSync ? "À joindre après synchronisation" : <LogisticsAttachments entryId={entry.id} siteId={site?.id || ""} count={Number(entry.attachmentCount || 0)} />}</td>
+                    <td className="px-3 py-3">{entry.pendingSync ? "—" : <LogisticsAudit entryId={entry.id} siteId={site?.id || ""} />}</td>
                     <td className="whitespace-nowrap px-3 py-3">
                       <div className="flex items-center gap-1">
                         <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la ligne" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                           <Printer className="h-4 w-4" />
                         </Button>
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier l’enregistrement" title="Modifier l’enregistrement" onClick={() => editTruck(entry)}>
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier l’enregistrement" title="Modifier l’enregistrement" disabled={entry.pendingSync || !isOnline} onClick={() => editTruck(entry)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer l’enregistrement" title="Supprimer l’enregistrement" onClick={() => void deleteTruck(entry)}>
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler l’enregistrement" title="Annuler l’enregistrement (conservé dans l’historique)" disabled={entry.pendingSync || !isOnline} onClick={() => void deleteTruck(entry)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -539,7 +828,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                   </tr>
                 ))}
                 {!filteredEntries.length && (
-                  <tr><td colSpan={isWasteRegister ? 7 : 9} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  <tr><td colSpan={isWasteRegister ? 10 : 15} className="px-3 py-8 text-center text-sm text-muted-foreground">
                     {entries.length ? "Aucun résultat pour cette recherche." : `Aucun enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} pour ce site.`}
                   </td></tr>
                 )}

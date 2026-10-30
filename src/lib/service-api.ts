@@ -1,8 +1,27 @@
 import { API_URL, authHeaders } from "@/lib/api";
 import type { VisitorRecord } from "@/types/visitor";
+import {
+  cacheLogisticsEntries,
+  getCachedLogisticsEntries,
+  getQueuedLogisticsWrites,
+  queueLogisticsWrite,
+  removeQueuedLogisticsWrite,
+} from "@/lib/offline-logistics";
 
 const apiBaseUrl = API_URL;
 const tokenKey = "securitec-access-token";
+
+function pendingLogisticsEntry(item: { requestId: string; siteId: string; payload: Record<string, unknown>; createdAt: string }): any {
+  return {
+    ...item.payload,
+    id: `pending-${item.requestId}`,
+    clientRequestId: item.requestId,
+    siteId: item.siteId,
+    date: item.payload.date || item.payload.dateOperation || item.createdAt.slice(0, 10),
+    createdAt: item.createdAt,
+    pendingSync: true,
+  };
+}
 
 export interface KeyTrackingEntry {
   id: string | number;
@@ -420,11 +439,27 @@ export const serviceApi = {
     const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     return { blob: await response.blob(), name: encoded ? decodeURIComponent(encoded) : "document" };
   },
+  async listLogisticsAttachments(entryId: string, siteId?: string) {
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    return (await request<{ attachments: SiteDocument[] }>(`/logistics/${encodeURIComponent(entryId)}/attachments${query}`)).attachments;
+  },
+  async linkLogisticsDocument(entryId: string, documentId: string, siteId: string) {
+    return request<{ linked: boolean }>(`/logistics/${encodeURIComponent(entryId)}/attachments`, {
+      method: "POST", body: body({ documentId, siteId }),
+    });
+  },
+  async listLogisticsAudit(entryId: string, siteId?: string) {
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    return (await request<{ entries: { id: string; action: string; createdAt: string; createdBy: string | null; before: Record<string, unknown>; after: Record<string, unknown> }[] }>(`/logistics/${encodeURIComponent(entryId)}/audit${query}`)).entries;
+  },
   async deleteDocument(id: string) { return request<{ id: string; deleted: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }); },
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
   async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
-  async listShifts() { return (await request<{ shifts: any[] }>("/shifts")).shifts; },
+  async listShifts() {
+    const result = await request<{ shifts?: any[] } | any[]>("/shifts");
+    return Array.isArray(result) ? result : result.shifts || [];
+  },
   async startShift(data: unknown) { return (await request<{ shift: any }>("/shifts", { method: "POST", body: body(data) })).shift; },
   async endShift(id: string) { return (await request<{ shift: any }>(`/shifts/${id}/end`, { method: "POST", body: "{}" })).shift; },
   async listPassations() { return (await request<{ passations: any[] }>("/passations")).passations; },
@@ -486,7 +521,23 @@ export const serviceApi = {
     const params = new URLSearchParams({ siteId });
     return request<{ id: string; deleted: boolean }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
-  async listLogistics(siteId?: string) { return (await request<{ entries: any[] }>(`/logistics${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
+  async listLogistics(siteId?: string) {
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    try {
+      if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+      const entries = (await request<{ entries: any[] }>(`/logistics${query}`)).entries;
+      if (siteId) await cacheLogisticsEntries(siteId, entries);
+      const pending = await getQueuedLogisticsWrites(siteId);
+      return [...pending.map(pendingLogisticsEntry), ...entries];
+    } catch (error) {
+      if (!siteId) throw error;
+      const [cached, pending] = await Promise.all([
+        getCachedLogisticsEntries(siteId), getQueuedLogisticsWrites(siteId),
+      ]);
+      if (!cached.length && !pending.length) throw error;
+      return [...pending.map(pendingLogisticsEntry), ...cached];
+    }
+  },
   async getTruckChecklist(siteId: string, date: string) {
     const params = new URLSearchParams({ siteId, date });
     return (await request<{ entry: TruckChecklist | null }>(`/truck-checklists?${params}`)).entry;
@@ -494,8 +545,61 @@ export const serviceApi = {
   async saveTruckChecklist(data: { siteId: string; date: string; rows: TruckChecklistRow[] }) {
     return (await request<{ entry: TruckChecklist }>("/truck-checklists", { method: "PUT", body: body(data) })).entry;
   },
-  async createLogistics(data: unknown) {
-    return request<{ entry?: any; entries?: any[] }>("/logistics", { method: "POST", body: body(data) });
+  async createLogistics(data: unknown, files: File[] = []) {
+    const payload = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+    const requestId = crypto.randomUUID();
+    try {
+      const result = await request<{ entry?: any; entries?: any[] }>("/logistics", {
+        method: "POST", body: body({ ...payload, clientRequestId: requestId }),
+      });
+      const attachmentErrors: string[] = [];
+      if (result.entry) {
+        for (const file of files) {
+          try {
+            const document = await serviceApi.uploadDocument(String(payload.siteId || ""), file, "Flux logistique");
+            await serviceApi.linkLogisticsDocument(String(result.entry.id), document.id, String(payload.siteId || ""));
+          } catch (error) {
+            attachmentErrors.push(error instanceof Error ? error.message : `Impossible d’ajouter ${file.name}.`);
+          }
+        }
+      }
+      return { ...result, attachmentErrors };
+    } catch (error) {
+      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, files);
+      return {
+        entry: pendingLogisticsEntry({ requestId, siteId, payload, createdAt: new Date().toISOString() }),
+        attachmentErrors: [],
+      };
+    }
+  },
+  async syncPendingLogistics(siteId?: string) {
+    if (!navigator.onLine) return { synced: 0, pending: (await getQueuedLogisticsWrites(siteId)).length };
+    const queued = await getQueuedLogisticsWrites(siteId);
+    let synced = 0;
+    for (const item of queued) {
+      try {
+        const result = await request<{ entry?: any }>(item.path || "/logistics", {
+          method: "POST", body: body({ ...item.payload, clientRequestId: item.requestId }),
+        });
+        if (!result.entry?.id) throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
+        for (const file of item.files) {
+          const upload = await serviceApi.uploadDocument(
+            item.siteId,
+            new File([file.blob], file.name, { type: file.type, lastModified: file.lastModified }),
+            "Flux logistique",
+          );
+          await serviceApi.linkLogisticsDocument(result.entry.id, upload.id, item.siteId);
+        }
+        await removeQueuedLogisticsWrite(item.requestId);
+        synced += 1;
+      } catch {
+        // Keep the write and its files for a later retry.
+      }
+    }
+    return { synced, pending: queued.length - synced };
   },
   async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", data: unknown) {
     return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=${type}`, { method: "PUT", body: body(data) });
@@ -506,11 +610,28 @@ export const serviceApi = {
   },
   async listStarParticulierLoadings(siteId: string) {
     const query = `?siteId=${encodeURIComponent(siteId)}`;
-    const rows = await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`);
-    return rows.entries.filter((entry) => entry.typeChargement === "STAR" || entry.typeChargement === "PARTICULIER");
+    try {
+      if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+      const rows = await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`);
+      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
+      return [...pending.map((entry) => pendingLogisticsEntry(entry)), ...rows.entries]
+        .filter((entry) => entry.typeChargement === "STAR" || entry.typeChargement === "PARTICULIER");
+    } catch (error) {
+      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
+      if (!pending.length) throw error;
+      return pending.map((entry) => pendingLogisticsEntry(entry)) as StarParticulierLoading[];
+    }
   },
   async createStarParticulierLoading(data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
-    return (await request<{ entry: StarParticulierLoading }>("/logistics/star-particulier", { method: "POST", body: body(data) })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: StarParticulierLoading }>("/logistics/star-particulier", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/logistics/star-particulier");
+      return pendingLogisticsEntry({ requestId, siteId: data.siteId, payload, createdAt: new Date().toISOString() }) as StarParticulierLoading;
+    }
   },
   async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
     return (await request<{ entry: StarParticulierLoading }>(`/logistics/star-particulier/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
