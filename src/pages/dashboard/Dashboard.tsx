@@ -1,8 +1,9 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { AlertTriangle, ClipboardCheck, Clock, Plus, RefreshCw, Route as RouteIcon, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, Clock, Plus, RefreshCw, Route as RouteIcon, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ApercuSite from "./ApercuSite";
@@ -77,9 +78,11 @@ function asActivity(entry: any, source: "main" | "incident" | "consigne") {
 }
 
 function openInstruction(entry: any): boolean {
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Indian/Antananarivo" });
+  const starts = String(entry.date || "").slice(0, 10);
+  if (starts && starts > today) return false;
   if (entry.jusquauNouvelOrdre) return true;
   const until = String(entry.dateFin || entry.date || "").slice(0, 10);
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Indian/Antananarivo" });
   return !!until && until >= today;
 }
 
@@ -94,6 +97,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [acknowledging, setAcknowledging] = useState<string | null>(null);
 
   useEffect(() => {
     if (!siteId && sites.length) setSiteId(sites[0].id);
@@ -143,11 +147,38 @@ export default function Dashboard() {
   const selectedSite = sites.find((site) => site.id === siteId);
   const filteredShifts = useMemo(() => activeShifts.filter((shift) => !postId || shift.posteId === postId), [activeShifts, postId]);
   const activeServices = useMemo(() => new Set(filteredShifts.map((shift) => shift.serviceId || shift.id)).size, [filteredShifts]);
+  const activeServiceId = siteId && typeof window !== "undefined" ? window.localStorage.getItem(`securitec-active-shift:${siteId}`) : null;
+  const currentPostShift = activeShifts.find((shift) => activeServiceId && (shift.id === activeServiceId || shift.serviceId === activeServiceId));
+  const readingPostId = currentPostShift?.posteId || postId;
+  const readingPostName = posts.find((post) => post.id === readingPostId)?.nom || currentPostShift?.posteNom;
 
+  const operationalConsignes = useMemo(() => data.consignes.filter((entry) => openInstruction(entry)
+    && (!readingPostId || entry.tousPostes || !entry.posteIds?.length || entry.posteIds.includes(readingPostId) || entry.posteId === readingPostId)),
+  [data.consignes, readingPostId]);
   const activeConsignes = useMemo(() => data.consignes.filter((entry) => openInstruction(entry)
-    && (!postId || !entry.posteId || entry.posteId === postId)
+    && (!postId || entry.tousPostes || !entry.posteIds?.length || entry.posteIds.includes(postId) || entry.posteId === postId)
     && (!fromDate || dateOf(entry) >= fromDate)
     && (!toDate || dateOf(entry) <= toDate)), [data.consignes, postId, fromDate, toDate]);
+  const priorityTargets = readingPostId ? operationalConsignes.flatMap((entry) => (entry.lectures || [])
+    .filter((receipt: any) => (!readingPostId || receipt.posteId === readingPostId) && !receipt.readAt)
+    .map((receipt: any) => ({ entry, posteId: receipt.posteId, posteNom: receipt.posteNom }))) : [];
+
+  const acknowledgeConsigne = async (entry: any, targetPostId: string) => {
+    if (!siteId || !targetPostId) return;
+    setAcknowledging(`${entry.id}:${targetPostId}`);
+    try {
+      const receipt = await serviceApi.acknowledgeJournalConsigne(entry.id, siteId, targetPostId);
+      setData((current) => ({
+        ...current,
+        consignes: current.consignes.map((item) => item.id !== entry.id ? item : {
+          ...item,
+          lectures: (item.lectures || []).map((row: any) => row.posteId === targetPostId ? { ...row, readAt: receipt.readAt } : row),
+        }),
+      }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Confirmation de lecture impossible.");
+    } finally { setAcknowledging(null); }
+  };
 
   const activities = useMemo(() => [
     ...data.mainCourante.map((entry) => asActivity(entry, "main")),
@@ -190,6 +221,29 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <PageHeader title="Tableau de bord du site" subtitle={dateLabel.format(new Date())} action={<Button asChild><Link to="/dashboard/main-courante"><Plus /> Nouvel événement</Link></Button>} />
+
+      {!readingPostId && data.consignes.some((entry) => openInstruction(entry)) && <div className="flex flex-wrap items-center gap-3 border-l-4 border-warning bg-warning/10 px-4 py-3">
+        <AlertTriangle className="size-5 shrink-0 text-warning-foreground" />
+        <p className="min-w-0 flex-1 text-sm">Des consignes actives attendent une lecture. Sélectionnez un poste pour afficher et confirmer celles qui le concernent.</p>
+      </div>}
+
+      <Dialog open={priorityTargets.length > 0} onOpenChange={() => {}}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto [&>button]:hidden" onEscapeKeyDown={(event) => event.preventDefault()} onInteractOutside={(event) => event.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Consignes à lire avant la prise de service</DialogTitle>
+            <DialogDescription>{readingPostId ? `${readingPostName || "Poste sélectionné"} · ` : "Tous postes · "}{priorityTargets.length} lecture(s) à confirmer</DialogDescription>
+          </DialogHeader>
+          <div className="divide-y rounded-md border">
+            {priorityTargets.map(({ entry, posteId: targetPostId, posteNom }) => <article key={`${entry.id}:${targetPostId}`} className="space-y-3 p-4">
+              <p className="whitespace-pre-wrap text-sm font-medium">{entry.consigne}</p>
+              <p className="text-xs text-muted-foreground">{posteNom} · Émise par {entry.emetteur} · {entry.jusquauNouvelOrdre ? "Jusqu’à nouvel ordre" : `Valable jusqu’au ${String(entry.dateFin || entry.date).slice(0, 10)}`}</p>
+              <Button size="sm" onClick={() => void acknowledgeConsigne(entry, targetPostId)} disabled={acknowledging === `${entry.id}:${targetPostId}`}>
+                <CheckCircle2 className="mr-2 size-4" />{acknowledging === `${entry.id}:${targetPostId}` ? "Enregistrement…" : `Confirmer pour ${posteNom}`}
+              </Button>
+            </article>)}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <section className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 xl:grid-cols-6">
         <div className="space-y-1"><label htmlFor="dashboard-site" className="text-xs font-medium text-muted-foreground">Site</label><select id="dashboard-site" value={siteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>

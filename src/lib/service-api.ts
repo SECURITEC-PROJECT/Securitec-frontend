@@ -495,6 +495,9 @@ export const serviceApi = {
   async updateJournalConsigne(id: string, data: unknown) {
     return (await request<{ entry: any }>(`/consignes-journal/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   },
+  async acknowledgeJournalConsigne(id: string, siteId: string, posteId: string) {
+    return (await request<{ receipt: { consigneId: string; posteId: string; readAt: string } }>(`/consignes-journal/${encodeURIComponent(id)}/read`, { method: "POST", body: body({ siteId, posteId }) })).receipt;
+  },
   async deleteJournalConsigne(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/consignes-journal/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
