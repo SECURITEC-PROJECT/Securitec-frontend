@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { serviceApi, type EmergencyContact, type Provider } from "@/lib/service-api";
+import { serviceApi, type AdminPost, type EmergencyContact, type Provider } from "@/lib/service-api";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
 import { roleLabel } from "@/pages/layouts/navigation";
@@ -17,13 +17,19 @@ type Employee = { id: string; firstName: string; lastName: string; matricule: st
 type CameraItem = { id: string; name: string; status: string; siteId: string; siteName: string; zoneName: string };
 type Zone = { id: string; name: string; siteId: string; siteName: string };
 type UserAccount = { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null };
-type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Prestataires" | "Utilisateurs" | "Contacts d’urgence";
+type Tab = "Vue société" | "Sites" | "Équipe et équipements" | "Postes de garde" | "Prestataires" | "Utilisateurs" | "Contacts d’urgence";
 
 export default function Administration() {
   const [tab, setTab] = useState<Tab>("Vue société");
   const [sites, setSites] = useState<Site[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [posts, setPosts] = useState<AdminPost[]>([]);
+  const [postSiteId, setPostSiteId] = useState("");
+  const [postName, setPostName] = useState("");
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [savingPost, setSavingPost] = useState(false);
+  const [showInactivePosts, setShowInactivePosts] = useState(false);
   const [showInactiveProviders, setShowInactiveProviders] = useState(false);
   const [providerName, setProviderName] = useState("");
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
@@ -66,16 +72,19 @@ export default function Administration() {
     try {
       const siteResult = await serviceApi.listSites();
       setSites(siteResult.sites);
+      if (siteResult.sites.length) setPostSiteId((current) => current || siteResult.sites[0].id);
       if (siteResult.sites.length) setEmergencySiteId((current) => current || siteResult.sites[0].id);
       setCanManageSites(siteResult.canCreate && siteResult.canDelete);
       const emergencyResults = await Promise.allSettled(siteResult.sites.map((site) => serviceApi.listEmergencyContacts(site.id)));
       setEmergencyContacts(emergencyResults.flatMap((result) => result.status === "fulfilled" ? result.value : []));
       if (siteResult.canCreate) {
-        const [userRows, providerRows] = await Promise.all([serviceApi.listUsers(), serviceApi.listProviders()]);
+        const [userRows, providerRows, postRows] = await Promise.all([serviceApi.listUsers(), serviceApi.listProviders(), serviceApi.listAdminPosts()]);
         setUsers(userRows);
         setProviders(providerRows);
+        setPosts(postRows);
       } else {
         setProviders([]);
+        setPosts([]);
       }
       const employeeResult = await serviceApi.listEmployees();
       setEmployees(employeeResult);
@@ -116,6 +125,50 @@ export default function Administration() {
   const displayedProviders = showInactiveProviders
     ? providers
     : providers.filter((provider) => provider.active);
+
+  const displayedPosts = (showInactivePosts ? posts : posts.filter((post) => post.actif))
+    .filter((post) => !postSiteId || post.siteId === postSiteId);
+
+  const resetPostForm = () => { setEditingPostId(null); setPostName(""); };
+
+  const savePost = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!postSiteId && !editingPostId) { toast.error("Choisissez un site."); return; }
+    setSavingPost(true);
+    try {
+      if (editingPostId) {
+        const current = posts.find((post) => post.id === editingPostId);
+        const updated = await serviceApi.updateAdminPost(editingPostId, { nom: postName.trim(), actif: current?.actif ?? true });
+        setPosts((items) => items.map((post) => post.id === updated.id ? { ...post, ...updated } : post));
+        toast.success("Poste modifié.");
+      } else {
+        const created = await serviceApi.createAdminPost({ siteId: postSiteId, nom: postName.trim() });
+        const site = sites.find((item) => item.id === created.siteId);
+        setPosts((items) => [...items, { ...created, siteName: created.siteName || site?.name || "", serviceCount: 0, reportCount: 0 }].sort((a, b) => a.siteName.localeCompare(b.siteName) || a.nom.localeCompare(b.nom)));
+        toast.success("Poste ajouté.");
+      }
+      resetPostForm();
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Enregistrement du poste impossible."); }
+    finally { setSavingPost(false); }
+  };
+
+  const togglePost = async (post: AdminPost) => {
+    try {
+      const updated = await serviceApi.updateAdminPost(post.id, { nom: post.nom, actif: !post.actif });
+      setPosts((items) => items.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+      toast.success(updated.actif ? "Poste réactivé." : "Poste désactivé.");
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Modification du poste impossible."); }
+  };
+
+  const deletePost = async (post: AdminPost) => {
+    if (!(await confirmDeletion(`Désactiver « ${post.nom} » sur ${post.siteName} ? Les historiques de service seront conservés.`))) return;
+    try {
+      await serviceApi.deleteAdminPost(post.id);
+      setPosts((items) => items.map((item) => item.id === post.id ? { ...item, actif: false } : item));
+      if (editingPostId === post.id) resetPostForm();
+      toast.success("Poste désactivé ; ses historiques sont conservés.");
+    } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Désactivation du poste impossible."); }
+  };
 
   const resetUserForm = () => {
     setShowUserForm(false); setEditingUserId(null); setNewUserName(""); setNewUserIdentifier("");
@@ -277,7 +330,7 @@ export default function Administration() {
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Désactivation du contact impossible."); }
   };
 
-  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", "Contacts d’urgence", ...(canManageSites ? ["Prestataires" as const, "Utilisateurs" as const] : [])];
+  const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", "Contacts d’urgence", ...(canManageSites ? ["Postes de garde" as const, "Prestataires" as const, "Utilisateurs" as const] : [])];
   return <div className="space-y-6">
     <PageHeader title="Administration de la société" subtitle="Vue globale des sites, des équipes et des équipements enregistrés dans la base." action={<Button variant="outline" onClick={() => void load(true)} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualiser</Button>} />
 
@@ -324,6 +377,23 @@ export default function Administration() {
           {cameras.length ? <div className="divide-y">{cameras.map((camera) => <div key={camera.id} className="flex flex-wrap items-center gap-3 py-3"><Camera className="h-4 w-4 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm font-medium">{camera.name}</p><p className="text-xs text-muted-foreground">{camera.siteName} · {camera.zoneName}</p></div><Badge variant={camera.status === "EN_SERVICE" ? "secondary" : "outline"}>{camera.status === "EN_SERVICE" ? "En service" : camera.status}</Badge></div>)}</div> : <p className="py-5 text-sm text-muted-foreground">Aucune caméra enregistrée.</p>}
         </Panel>
       </div>}
+      {tab === "Postes de garde" && canManageSites && <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel title={`Postes de garde (${displayedPosts.length})`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <select aria-label="Filtrer les postes par site" value={postSiteId} onChange={(event) => setPostSiteId(event.target.value)} className="h-10 min-w-56 rounded-md border border-input bg-background px-3 text-sm"><option value="">Tous les sites</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactivePosts} onChange={(event) => setShowInactivePosts(event.target.checked)} />Afficher les postes désactivés</label>
+          </div>
+          {displayedPosts.length ? <div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm"><thead className="border-b text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Poste</th><th className="py-3 pr-4">Site</th><th className="py-3 pr-4">Historiques</th><th className="py-3 pr-4">État</th><th className="py-3">Actions</th></tr></thead><tbody className="divide-y">{displayedPosts.map((post) => <tr key={post.id}><td className="py-3 pr-4 font-medium">{post.nom}</td><td className="py-3 pr-4">{post.siteName}</td><td className="py-3 pr-4">{post.serviceCount} service(s), {post.reportCount} cahier(s)</td><td className="py-3 pr-4"><Badge variant={post.actif ? "outline" : "secondary"}>{post.actif ? "Actif" : "Désactivé"}</Badge></td><td className="py-3"><div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label={`Modifier ${post.nom}`} onClick={() => { setEditingPostId(post.id); setPostSiteId(post.siteId); setPostName(post.nom); }}><Pencil className="h-4 w-4" /></Button>{post.actif ? <Button type="button" variant="ghost" size="icon" aria-label={`Désactiver ${post.nom}`} onClick={() => void deletePost(post)}><Trash2 className="h-4 w-4 text-destructive" /></Button> : <Button type="button" variant="outline" size="sm" onClick={() => void togglePost(post)}>Réactiver</Button>}</div></td></tr>)}</tbody></table></div> : <p className="py-6 text-center text-sm text-muted-foreground">Aucun poste pour ce filtre.</p>}
+        </Panel>
+        <Panel title={editingPostId ? "Modifier un poste" : "Ajouter un poste"}>
+          <form className="space-y-4" onSubmit={(event) => void savePost(event)}>
+            <div><Label htmlFor="admin-post-site">Site</Label><select id="admin-post-site" required disabled={Boolean(editingPostId)} value={postSiteId} onChange={(event) => setPostSiteId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Choisir un site</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select>{editingPostId && <p className="mt-1 text-xs text-muted-foreground">Le site reste fixe pour préserver les historiques liés à ce poste.</p>}</div>
+            <div><Label htmlFor="admin-post-name">Nom du poste</Label><Input id="admin-post-name" required maxLength={160} value={postName} onChange={(event) => setPostName(event.target.value)} placeholder="Ex. PG3" /></div>
+            <div className="flex gap-2"><Button className="flex-1" disabled={savingPost || !sites.length}><Plus className="h-4 w-4" />{savingPost ? "Enregistrement…" : editingPostId ? "Enregistrer" : "Ajouter le poste"}</Button>{editingPostId && <Button type="button" variant="outline" onClick={resetPostForm}>Annuler</Button>}</div>
+          </form>
+        </Panel>
+      </div>}
+
       {tab === "Prestataires" && canManageSites && <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel title={`Prestataires (${displayedProviders.length})`}>
           <div className="mb-3 flex flex-wrap justify-end gap-2">
