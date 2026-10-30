@@ -83,13 +83,13 @@ const SECURITY_ROUTES = new Set([
   "/dashboard/chargements-star-particuliers", "/dashboard/materiels-sous-traitant", "/dashboard/enregistrements-ordures", "/dashboard/ordures", "/dashboard/ferrailles",
   "/dashboard/mouvement-velos", "/dashboard/mouvement-moto", "/dashboard/visiteurs", "/dashboard/materiels-star", "/dashboard/chauffeurs",
   "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets", "/dashboard/comptes-rendus",
-  "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
+  "/dashboard/cameras", "/dashboard/main-courante", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/controle-acces", "/dashboard/logistique",
   "/dashboard/documents",
 ]);
 
 const POST_AGENT_ROUTES = new Set([
-  "/dashboard/postes", "/dashboard/prestataires", "/dashboard/prise-de-poste",
-  "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
+  "/dashboard", "/dashboard/postes", "/dashboard/prestataires",
+  "/dashboard/visiteurs", "/dashboard/controle-acces", "/dashboard/logistique", "/dashboard/rondes", "/dashboard/points-vigilance",
   "/dashboard/mouvements-cles", "/dashboard/carte-grise-permis", "/dashboard/dechets-levee", "/dashboard/mouvements-aps",
   "/dashboard/dechargements-bennes-vides", "/dashboard/dechargements-matiere-premiere", "/dashboard/depotage-fuel-gasoil",
   "/dashboard/mouvements-vehicules", "/dashboard/pointage-aps", "/dashboard/enregistrements-bon-facture-bon-sortie",
@@ -99,20 +99,23 @@ const POST_AGENT_ROUTES = new Set([
   "/dashboard/check-list-camion", "/dashboard/questionnaires-visiteurs", "/dashboard/recoter", "/dashboard/declaration-objets",
 ]);
 
-const CHEF_ROUTES = new Set([...POST_AGENT_ROUTES, "/dashboard/passation"]);
+const CHEF_ROUTES = new Set([
+  ...POST_AGENT_ROUTES,
+  "/dashboard",
+  "/dashboard/prise-de-poste", "/dashboard/passation", "/dashboard/main-courante", "/dashboard/comptes-rendus", "/dashboard/documents",
+]);
 const DIRECTION_ROUTES = new Set([
   "/dashboard", "/dashboard/statistiques", "/dashboard/comptes-rendus",
 ]);
 
-export function homeRouteForRole(role: number): string {
-  if (role === 2) return "/dashboard/prise-de-poste";
-  if (role === 5) return "/dashboard/postes";
+export function homeRouteForRole(_role: number): string {
   return "/dashboard";
 }
 
 export function canAccessRoute(role: number, path: string): boolean {
+  let normalizedPath = path.split("#")[0].replace(/\/$/, "") || "/dashboard";
+  if (["/dashboard/prise-de-poste", "/dashboard/passation"].includes(normalizedPath)) return role === 2;
   if (role === 1) return true;
-  let normalizedPath = path.replace(/\/$/, "") || "/dashboard";
   if (/^\/dashboard\/postes\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/postes";
   if (/^\/dashboard\/prestataires\/[^/]+$/.test(normalizedPath)) normalizedPath = "/dashboard/prestataires";
   if (normalizedPath === "/dashboard/test-alcool") normalizedPath = "/dashboard/alcootest";

@@ -823,7 +823,12 @@ export const serviceApi = {
   async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[]) { return (await request<{ patrol: any }>(`/patrols/${id}`, { method: "PATCH", body: body({ checkpoints }) })).patrol; },
   async finishPatrol(id: string, observations: string) { return (await request<{ patrol: any }>(`/patrols/${id}/finish`, { method: "POST", body: body({ observations }) })).patrol; },
   async listVigilance(siteId?: string) { return (await request<{ entries: VigilanceEntry[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
-  async createVigilance(data: unknown) { return request<{ entries: any[] }>("/vigilance", { method: "POST", body: body(data) }); },
+  async createVigilance(data: unknown) {
+    const scopedData = Array.isArray(data)
+      ? data.map((entry) => entry && typeof entry === "object" ? JSON.parse(body(entry)) : entry)
+      : data;
+    return request<{ entries: any[] }>("/vigilance", { method: "POST", body: body(scopedData) });
+  },
   async listMainCourante(siteId?: string) { return (await request<{ entries: any[] }>(`/main-courante${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createMainCourante(data: unknown) { return request<{ entry: any }>("/main-courante", { method: "POST", body: body(data) }); },
   async listCourrierMovements(siteId?: string) {

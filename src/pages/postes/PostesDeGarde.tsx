@@ -36,7 +36,7 @@ export default function PostesDeGarde() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{posts.map((post) => {
         const crew = shifts.filter((shift) => !shift.ended_at && shift.posteId === post.id);
         const service = crew[0];
-        return <Link key={post.id} to={`/dashboard/postes/${post.id}`} state={{ siteId, posteNom: post.nom }} className="group rounded-xl border bg-card p-5 transition hover:border-primary/50 hover:shadow-sm">
+        return <Link key={post.id} to={`/dashboard/postes/${post.id}`} state={{ siteId, posteId: post.id, posteNom: post.nom }} className="group rounded-xl border bg-card p-5 transition hover:border-primary/50 hover:shadow-sm">
           <div className="flex items-start justify-between gap-3"><div className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary"><ShieldCheck className="size-5" /></div><ArrowRight className="size-4 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-primary" /></div>
           <h2 className="mt-4 text-lg font-semibold">{post.nom}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{service ? `Service ${service.shiftType === "NUIT" ? "de nuit" : "de jour"} · ${crew.length} agent${crew.length > 1 ? "s" : ""}` : "Aucun service ouvert"}</p>

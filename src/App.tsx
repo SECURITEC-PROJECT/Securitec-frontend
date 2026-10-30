@@ -94,6 +94,7 @@ export default function App() {
         />
         <Route path="/auth" element={<Navigate to="/login" replace />} />
         <Route path="/" element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />} />
+        <Route path="/choisir-poste" element={!user ? <Navigate to="/login" replace /> : <Navigate to="/dashboard/postes" replace />} />
 
         {/* page protégée (LayoutPrincipal) */}
         <Route
@@ -110,7 +111,7 @@ export default function App() {
           {/* Vue d'ensemble (Page principale) */}
           <Route index element={<Dashboard />} />
           <Route path="postes" element={<PostesDeGarde />} />
-          <Route path="postes/:posteId" element={<PosteOperationnel />} />
+          <Route path="postes/:posteId" element={user ? <PosteOperationnel user={user} /> : <Navigate to="/login" replace />} />
           <Route path="prestataires" element={<Prestataires />} />
           <Route path="prestataires/:providerId" element={<FichePrestataire />} />
 
@@ -137,7 +138,7 @@ export default function App() {
           <Route path="mouvements-cles" element={<ControleAcces />} />
           <Route path="carte-grise-permis" element={<CarteGrisePermis />} />
           <Route path="dechets-levee" element={<DechetsLevee />} />
-          <Route path="mouvements-aps" element={<MouvementsAPS />} />
+          <Route path="mouvements-aps" element={<MouvementsAPS canManagePassations={user?.role === 2} canConfigurePosts={user?.role === 1} />} />
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />

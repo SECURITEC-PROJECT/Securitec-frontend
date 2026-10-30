@@ -43,7 +43,7 @@ function normalizeData(
   return normalized;
 }
 
-export default function MouvementsAPS() {
+export default function MouvementsAPS({ canManagePassations = false, canConfigurePosts = false }: { canManagePassations?: boolean; canConfigurePosts?: boolean }) {
   const { sites, siteError } = useSites();
   const [employeesBySite, setEmployeesBySite] = useState<Record<string, RegisterEmployeeOption[]>>({});
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
@@ -230,7 +230,7 @@ export default function MouvementsAPS() {
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 print:hidden" aria-label="Modules des mouvements APS">
           <TabsTrigger value="pointage-aps">Pointage APS (Jour et Nuit)</TabsTrigger>
           <TabsTrigger value="module-2">Mouvement</TabsTrigger>
-          <TabsTrigger value="module-3">Passation de service</TabsTrigger>
+          {canManagePassations && <TabsTrigger value="module-3">Passation de service</TabsTrigger>}
         </TabsList>
         <TabsContent value="pointage-aps" className="mt-0 space-y-5">
       <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service des mouvements APS">
@@ -270,7 +270,7 @@ export default function MouvementsAPS() {
           </div>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">Ce registre est indépendant du Pointage APS. Les données enregistrées ici contiennent uniquement le nom et le matricule.</p>
-        <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4 print:hidden">
+        {canConfigurePosts && <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4 print:hidden">
           <div className="min-w-52 flex-1">
             <label htmlFor="new-aps-movement-post" className="mb-1.5 block text-sm font-medium">Ajouter un poste</label>
             <input id="new-aps-movement-post" value={newPostName} onChange={(event) => setNewPostName(event.target.value)} placeholder="Nom du nouveau poste" className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
@@ -284,7 +284,7 @@ export default function MouvementsAPS() {
           <button type="button" onClick={addPost} disabled={loading || saving || savingConfiguration || !activeSiteId} className="inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50">
             <Plus className="size-4" />Ajouter le poste
           </button>
-        </div>
+        </div>}
       </section>
 
       {loading && <p className="text-sm text-muted-foreground">Chargement des mouvements APS…</p>}
@@ -303,15 +303,15 @@ export default function MouvementsAPS() {
                 {index === 0 && <th rowSpan={poste.count} className="border-b bg-muted/20 px-4 py-3 align-top font-semibold">
                   <div className="flex items-start justify-between gap-2">
                     <span>{poste.name}</span>
-                    <button type="button" onClick={() => void removePost(poste.name)} disabled={savingConfiguration || saving} aria-label={`Supprimer le poste ${poste.name}`} title="Supprimer le poste" className="rounded p-1 text-destructive hover:bg-destructive/10 disabled:opacity-50 print:hidden">
+                    {canConfigurePosts && <button type="button" onClick={() => void removePost(poste.name)} disabled={savingConfiguration || saving} aria-label={`Supprimer le poste ${poste.name}`} title="Supprimer le poste" className="rounded p-1 text-destructive hover:bg-destructive/10 disabled:opacity-50 print:hidden">
                       <Trash2 className="size-4" />
-                    </button>
+                    </button>}
                   </div>
                   <label className="mt-2 block text-xs font-normal text-muted-foreground">
                     Effectif
-                    <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => void setPostCount(poste.name, Number(event.target.value))} className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
+                    {canConfigurePosts && <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => void setPostCount(poste.name, Number(event.target.value))} className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
                       {Array.from({ length: 30 }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
-                    </select>
+                    </select>}
                     <span className="hidden print:inline">{poste.count} personne(s)</span>
                   </label>
                 </th>}
@@ -348,12 +348,12 @@ export default function MouvementsAPS() {
             activeSiteName={sites.find((site) => site.id === activeSiteId)?.name ?? ""}
           />
         </TabsContent>
-        <TabsContent value="module-3" className="mt-0">
+        {canManagePassations && <TabsContent value="module-3" className="mt-0">
           <PassationServiceAPS
             activeSiteId={activeSiteId}
             activeSiteName={sites.find((site) => site.id === activeSiteId)?.name ?? ""}
           />
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );
