@@ -79,6 +79,7 @@ export default function PriseDePoste() {
           id: shift.id, // Transmis pour pouvoir clôturer lors de la confirmation
           nom: shift.nom,
           prenom: shift.prenom,
+          matricule: shift.matricule,
           site: shift.site_de_travail,
           siteId: shift.siteId,
           posteId: shift.posteId,

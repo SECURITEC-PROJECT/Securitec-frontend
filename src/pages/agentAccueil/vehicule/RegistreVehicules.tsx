@@ -7,6 +7,9 @@ import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import type { VehicleMovement } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
+import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 
 const formatDate = (value: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "—";
@@ -26,10 +29,11 @@ export default function RegistreVehicules({
   onDelete: (id: string) => Promise<void>;
 }) {
   const [search, setSearch] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const filtered = rows.filter((vehicle) =>
-    [vehicle.plate, vehicle.ownerName, vehicle.category].join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
-  );
+  const filtered = rows.filter((vehicle) => isWithinRegistryPeriod(vehicle.entryDate, periodStart, periodEnd)
+    && [vehicle.plate, vehicle.ownerName, vehicle.category].join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
 
   const handlePrint = () => {
     const originalTitle = window.document.title;
@@ -54,11 +58,11 @@ export default function RegistreVehicules({
   };
 
   const deleteEntry = async (vehicle: VehicleMovement) => {
-    if (!(await confirmDeletion(`Supprimer le mouvement du véhicule « ${vehicle.plate} » ? Cette action est définitive.`))) return;
+    if (vehicle.annuleLe || !(await confirmDeletion(`Annuler le mouvement du véhicule « ${vehicle.plate} » ? Il restera dans l’historique.`))) return;
     setDeletingId(vehicle.id);
     try {
       await onDelete(vehicle.id);
-      toast.success("Mouvement véhicule supprimé.");
+      toast.success("Mouvement véhicule annulé et conservé dans l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
@@ -80,6 +84,13 @@ export default function RegistreVehicules({
           className="min-h-11 pl-9"
         />
         </div>
+        <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filtered} filename="mouvements-vehicules" columns={[
+          { label: "Date entrée", value: (row) => row.entryDate }, { label: "Immatriculation", value: (row) => row.plate },
+          { label: "Propriétaire", value: (row) => row.ownerName }, { label: "Catégorie", value: (row) => row.category },
+          { label: "Nombre entrée", value: (row) => row.passengersEntry }, { label: "Heure entrée", value: (row) => row.entryTime },
+          { label: "Nombre sortie", value: (row) => row.passengersOut }, { label: "Heure sortie", value: (row) => row.exitTime },
+          { label: "Annulé le", value: (row) => row.annuleLe },
+        ]} />
         <Button type="button" variant="outline" className="print:hidden" disabled={!rows.length} onClick={handlePrint}>
           <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
         </Button>
@@ -96,8 +107,8 @@ export default function RegistreVehicules({
             </thead>
             <tbody className="divide-y divide-border/70">
               {filtered.map((vehicle) => (
-                <tr key={vehicle.id} className="transition-colors hover:bg-muted/30">
-                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(vehicle.entryDate)}</td>
+                <tr key={vehicle.id} className={`transition-colors hover:bg-muted/30 ${vehicle.annuleLe ? "text-muted-foreground" : ""}`}>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(vehicle.entryDate)}{vehicle.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-medium">{vehicle.plate}</td>
                   <td className="px-3 py-3">{vehicle.ownerName || "—"}</td>
                   <td className="px-3 py-3">{vehicle.category || "—"}</td>
@@ -110,21 +121,23 @@ export default function RegistreVehicules({
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(vehicle)}>
                         <Printer className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => onEdit(vehicle)}>
+                      {!vehicle.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => onEdit(vehicle)}>
                         <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {!vehicle.annuleLe && <Button
                         type="button"
                         size="icon"
                         variant="ghost"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        aria-label={vehicle.exited_at ? "Supprimer le mouvement" : "La sortie doit être enregistrée avant la suppression"}
-                        title={vehicle.exited_at ? "Supprimer le mouvement" : "Enregistrez la sortie avant de supprimer ce mouvement"}
+                        aria-label={vehicle.exited_at ? "Annuler le mouvement" : "La sortie doit être enregistrée avant l’annulation"}
+                        title={vehicle.exited_at ? "Annuler le mouvement" : "Enregistrez la sortie avant d’annuler ce mouvement"}
                         disabled={!vehicle.exited_at || deletingId === vehicle.id}
                         onClick={() => void deleteEntry(vehicle)}
                       >
                         <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </Button>}
+                      <RegistryAuditHistory entity="passage_vehicule" recordId={vehicle.id} />
+                      <RegistryAttachments entity="passage_vehicule" recordId={vehicle.id} siteId={vehicle.siteId} />
                     </div>
                   </td>
                 </tr>

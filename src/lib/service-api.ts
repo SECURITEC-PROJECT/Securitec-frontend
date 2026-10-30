@@ -67,6 +67,7 @@ export interface VehicleMovement {
   exited_at: string | null;
   siteId?: string | null;
   site_name?: string | null;
+  annuleLe?: string | null;
 }
 
 export interface CourrierMovement {
@@ -79,6 +80,7 @@ export interface CourrierMovement {
   heureSortie: string | null;
   siteId: string;
   siteName: string;
+  annuleLe?: string | null;
 }
 
 export interface SubcontractorMaterialMovement {
@@ -93,6 +95,7 @@ export interface SubcontractorMaterialMovement {
   heureSortie: string | null;
   siteId: string;
   createdAt?: string;
+  annuleLe?: string | null;
 }
 
 export interface StarMaterialItem {
@@ -112,6 +115,7 @@ export interface StarMaterialEntry {
   heureSortie: string | null;
   siteId: string;
   siteName: string;
+  annuleLe?: string | null;
 }
 
 export interface Provider {
@@ -248,6 +252,7 @@ export interface AlcoholCheck {
   temoin2Fonction: string | null;
   siteId: string;
   siteName: string;
+  annuleLe?: string | null;
 }
 
 export interface StarParticulierLoading {
@@ -329,6 +334,7 @@ export interface BicycleMovement {
   section: string;
   marqueVelo: string;
   siteId: string;
+  annuleLe?: string | null;
 }
 
 export interface MotorcycleMovement {
@@ -339,6 +345,7 @@ export interface MotorcycleMovement {
   observation: string;
   heureSortie: string | null;
   siteId: string;
+  annuleLe?: string | null;
 }
 
 export interface ApsPostConfiguration {
@@ -449,6 +456,15 @@ export const serviceApi = {
     const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     return { blob: await response.blob(), name: encoded ? decodeURIComponent(encoded) : "document" };
   },
+  async listRegistryAttachments(entity: string, recordId: string) {
+    return (await request<{ attachments: Array<{ id: string; documentId: string; name: string; extension: string; size: number; linkedAt: string }> }>(`/register-attachments?entity=${encodeURIComponent(entity)}&recordId=${encodeURIComponent(recordId)}`)).attachments;
+  },
+  async linkRegistryAttachment(entity: string, recordId: string, documentId: string) {
+    return request<{ linked: boolean; id: string | null }>("/register-attachments", { method: "POST", body: body({ entity, recordId, documentId }) });
+  },
+  async unlinkRegistryAttachment(id: string) {
+    return request<{ id: string; unlinked: boolean }>(`/register-attachments/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
   async listLogisticsAttachments(entryId: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
     return (await request<{ attachments: SiteDocument[] }>(`/logistics/${encodeURIComponent(entryId)}/attachments${query}`)).attachments;
@@ -483,11 +499,20 @@ export const serviceApi = {
     if (activeOnly) params.set("activeOnly", "true");
     return (await request<{ entries: any[] }>(`/consignes-journal?${params}`)).entries;
   },
+  async listNotifications() {
+    return (await request<{ notifications: any[] }>("/notifications")).notifications;
+  },
+  async markNotificationRead(id: string) {
+    return request<{ notification: any }>(`/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH", body: "{}" });
+  },
   async createJournalConsigne(data: unknown) {
     return (await request<{ entry: any }>("/consignes-journal", { method: "POST", body: body(data) })).entry;
   },
   async updateJournalConsigne(id: string, data: unknown) {
     return (await request<{ entry: any }>(`/consignes-journal/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  },
+  async acknowledgeJournalConsigne(id: string, siteId: string, posteId: string) {
+    return (await request<{ receipt: { consigneId: string; posteId: string; readAt: string } }>(`/consignes-journal/${encodeURIComponent(id)}/read`, { method: "POST", body: body({ siteId, posteId }) })).receipt;
   },
   async deleteJournalConsigne(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/consignes-journal/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
@@ -498,6 +523,9 @@ export const serviceApi = {
   async deleteVisitor(id: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
     return request<{ id: string; deleted: boolean }>(`/visitors/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
+  },
+  async setVisitorSiteBan(id: string, siteId: string, banned: boolean) {
+    return request<{ visitorId: string; siteId: string; banned: boolean }>(`/visitors/${encodeURIComponent(id)}/site-ban`, { method: "PUT", body: body({ siteId, banned }) });
   },
   async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
   async listVehicles(siteId?: string) { return (await request<{ vehicles: VehicleMovement[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },

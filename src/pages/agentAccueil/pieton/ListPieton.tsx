@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAnomalies } from "@/hooks/useAnomalies";
 import type { VisitorRecord } from "@/types/visitor";
-import { Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { Ban, Pencil, Printer, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatTime } from "./formatTime";
@@ -29,10 +29,14 @@ export default function ListPieton({
   visitors,
   onEdit,
   onDelete,
+  canManageSiteBans,
+  onToggleSiteBan,
 }: {
   visitors: VisitorRecord[];
   onEdit: (visitor: VisitorRecord) => void;
   onDelete: (visitor: VisitorRecord) => Promise<void>;
+  canManageSiteBans: boolean;
+  onToggleSiteBan: (visitor: VisitorRecord, banned: boolean) => Promise<void>;
 }) {
   const [q, setQ] = useState("");
   const anomalies = useAnomalies();
@@ -134,7 +138,7 @@ export default function ListPieton({
         <table className="w-full min-w-[950px] text-sm">
           <thead className="text-left text-xs uppercase text-muted-foreground">
             <tr>
-              {["Date", "Nom et prénom", "Établissement", "Motif", "N° badge", "Heure d’entrée", "Heure de sortie", "Actions"].map((label) => (
+              {["Date", "Nom et prénom", "Accès au site", "Établissement", "Motif", "N° badge", "Heure d’entrée", "Heure de sortie", "Actions"].map((label) => (
                 <th key={label} className="whitespace-nowrap border-b py-2 pr-3">{label}</th>
               ))}
             </tr>
@@ -144,6 +148,7 @@ export default function ListPieton({
               <tr key={visitor.id} className={enAnomalie.has(String(visitor.id)) ? "bg-red-50 font-medium text-red-700" : ""}>
                 <td className="whitespace-nowrap py-2 pr-3 font-mono text-xs">{formatDate(visitor.entered_at)}</td>
                 <td className="py-2 pr-3 font-medium">{visitor.full_name || "—"}</td>
+                <td className="py-2 pr-3"><span className={`rounded px-2 py-1 text-[10px] font-semibold ${visitor.site_banned ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{visitor.site_banned ? "INTERDIT" : "Autorisé"}</span></td>
                 <td className="py-2 pr-3">{visitor.company || "—"}</td>
                 <td className="max-w-sm whitespace-pre-wrap py-2 pr-3">{visitor.reason || "—"}</td>
                 <td className="py-2 pr-3 font-mono">{visitor.badge || "—"}</td>
@@ -151,6 +156,9 @@ export default function ListPieton({
                 <td className="whitespace-nowrap py-2 pr-3 font-mono text-xs">{formatTime(visitor.exited_at)}</td>
                 <td className="whitespace-nowrap py-2">
                   <div className="flex items-center gap-1">
+                    {canManageSiteBans && <Button type="button" size="icon" variant="ghost" className={`h-8 w-8 ${visitor.site_banned ? "text-destructive" : ""}`} aria-label={visitor.site_banned ? "Lever l’interdiction sur le site" : "Interdire l’accès au site"} title={visitor.site_banned ? "Lever l’interdiction sur le site" : "Interdire l’accès au site"} onClick={() => void onToggleSiteBan(visitor, !visitor.site_banned)}>
+                      {visitor.site_banned ? <ShieldCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                    </Button>}
                     <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le passage" title="Imprimer au format 80 × 80 mm" onClick={() => printVisitor(visitor)}>
                       <Printer className="h-4 w-4" />
                     </Button>
@@ -174,7 +182,7 @@ export default function ListPieton({
               </tr>
             ))}
             {!filtered.length && (
-              <tr><td colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+              <tr><td colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
                 {visitors.length ? "Aucun résultat pour cette recherche." : "Aucun passage enregistré."}
               </td></tr>
             )}

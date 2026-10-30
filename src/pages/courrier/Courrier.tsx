@@ -11,6 +11,9 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
+import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 
 type MovementForm = {
   date: string;
@@ -59,14 +62,16 @@ export default function Courrier() {
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const entries = registry.siteId === site?.id ? registry.entries : [];
   const error = registry.siteId === site?.id ? registry.error : "";
   const loading = Boolean(site?.id) && registry.siteId !== site?.id;
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
-  const filteredEntries = entries.filter((entry) =>
-    [entry.date, formatDate(entry.date), entry.heureEntree, entry.prenom, entry.designation, String(entry.nombre), entry.heureSortie ?? ""]
+  const filteredEntries = entries.filter((entry) => isWithinRegistryPeriod(entry.date, periodStart, periodEnd)
+    && [entry.date, formatDate(entry.date), entry.heureEntree, entry.prenom, entry.designation, String(entry.nombre), entry.heureSortie ?? ""]
       .join(" ")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -166,16 +171,16 @@ export default function Courrier() {
 
   const deleteEntry = async (entry: CourrierMovement) => {
     if (!site?.id) return;
-    if (!(await confirmDeletion(`Supprimer le mouvement de ${entry.prenom} ? Cette action est définitive.`))) return;
+    if (entry.annuleLe || !(await confirmDeletion(`Annuler le mouvement de ${entry.prenom} ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteCourrierMovement(entry.id, site.id);
       setRegistry((current) => ({
         ...current,
-        entries: current.entries.filter((row) => row.id !== entry.id),
+        entries: current.entries.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row),
       }));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Mouvement courrier supprimé.");
+      toast.success("Mouvement courrier annulé et conservé dans l’historique.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -265,7 +270,7 @@ export default function Courrier() {
 
           <section id="courrier-registry-print-area">
           <Panel title="Registre des entrées et sorties">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 courrier-registry-screen">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 courrier-registry-screen">
               <div className="relative min-w-[260px] flex-1">
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -276,6 +281,11 @@ export default function Courrier() {
                   className="min-h-11 pl-9"
                 />
               </div>
+              <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} filename="registre-courrier" columns={[
+                { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
+                { label: "Prénom", value: (row) => row.prenom }, { label: "Désignation", value: (row) => row.designation },
+                { label: "Nombre", value: (row) => row.nombre }, { label: "Heure sortie", value: (row) => row.heureSortie }, { label: "Annulé le", value: (row) => row.annuleLe },
+              ]} />
               <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrint}>
                 <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
               </Button>
@@ -298,8 +308,8 @@ export default function Courrier() {
                     </thead>
                     <tbody className="divide-y divide-border/70">
                       {filteredEntries.map((entry) => (
-                        <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
-                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}</td>
+                        <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                           <td className="px-3 py-3 font-medium">{entry.prenom}</td>
                           <td className="break-words whitespace-pre-wrap px-3 py-3">{entry.designation}</td>
@@ -310,13 +320,15 @@ export default function Courrier() {
                               <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                                 <Printer className="h-4 w-4" />
                               </Button>
-                              <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => beginEdit(entry)}>
+                              {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => beginEdit(entry)}>
                                 <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Supprimer le mouvement" title="Supprimer le mouvement" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
+                              </Button>}
+                              {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler le mouvement" title="Annuler le mouvement" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
                                 <Trash2 className="h-4 w-4" />
-                              </Button>
-                              {!entry.heureSortie && (
+                              </Button>}
+                              <RegistryAuditHistory entity="mouvement_courrier" recordId={entry.id} />
+                              <RegistryAttachments entity="mouvement_courrier" recordId={entry.id} siteId={site?.id} />
+                              {!entry.annuleLe && !entry.heureSortie && (
                                 <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}>
                                   <LogOut className="h-4 w-4" />
                                   {exitingId === entry.id ? "Sortie…" : "Sortie"}
@@ -347,7 +359,7 @@ export default function Courrier() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((entry) => (
+                  {filteredEntries.map((entry) => (
                     <tr key={entry.id}>
                       <td>{formatDate(entry.date.slice(0, 10))}</td>
                       <td>{entry.heureEntree}</td>

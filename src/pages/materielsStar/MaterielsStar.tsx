@@ -10,6 +10,9 @@ import { serviceApi, type Provider, type StarMaterialEntry, type StarMaterialIte
 import { printRecord } from "@/lib/printRecord";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
+import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
+import { RegistryAttachments } from "@/components/RegistryAttachments";
 
 type MaterialForm = {
   date: string;
@@ -64,14 +67,16 @@ export default function MaterielsStar() {
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const entries = registry.siteId === site?.id ? registry.entries : [];
   const error = registry.siteId === site?.id ? registry.error : "";
   const loading = Boolean(site?.id) && registry.siteId !== site?.id;
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
-  const filteredEntries = entries.filter((entry) =>
-    [
+  const filteredEntries = entries.filter((entry) => isWithinRegistryPeriod(entry.date, periodStart, periodEnd)
+    && [
       entry.date,
       displayDate(entry.date),
       entry.heureEntree,
@@ -192,17 +197,17 @@ export default function MaterielsStar() {
   };
 
   const deleteEntry = async (entry: StarMaterialEntry) => {
-    if (!site?.id || !entry.heureSortie) return;
-    if (!(await confirmDeletion(`Supprimer le mouvement de ${entry.prenom} (${entry.matricule}) ? Cette action est définitive.`))) return;
+    if (!site?.id || !entry.heureSortie || entry.annuleLe) return;
+    if (!(await confirmDeletion(`Annuler le mouvement de ${entry.prenom} (${entry.matricule}) ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
       await serviceApi.deleteStarMaterial(entry.id, site.id);
       setRegistry((current) => ({
         ...current,
-        entries: current.entries.filter((row) => row.id !== entry.id),
+        entries: current.entries.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row),
       }));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Mouvement supprimé.");
+      toast.success("Mouvement annulé et conservé dans l’historique.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -320,6 +325,12 @@ export default function MaterielsStar() {
                   <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input aria-label="Rechercher un mouvement de matériel Star" placeholder="Rechercher date, prénom, matricule, matériel ou heure…" value={search} onChange={(event) => setSearch(event.target.value)} className="min-h-11 pl-9" />
                 </div>
+                <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} filename="materiels-star" columns={[
+                  { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
+                  { label: "Prénom", value: (row) => row.prenom }, { label: "Matricule", value: (row) => row.matricule },
+                  { label: "Prestataire", value: (row) => row.provider }, { label: "Matériels", value: (row) => formatItems(row.items) },
+                  { label: "Heure sortie", value: (row) => row.heureSortie }, { label: "Annulé le", value: (row) => row.annuleLe },
+                ]} />
                 <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={printRegistry}>
                   <Printer className="mr-2 size-4" /> Imprimer le registre
                 </Button>
@@ -333,8 +344,8 @@ export default function MaterielsStar() {
                       </thead>
                       <tbody className="divide-y divide-border/70">
                         {filteredEntries.map((entry) => (
-                          <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
-                            <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{displayDate(entry.date)}</td>
+                          <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+                            <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{displayDate(entry.date)}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
                             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                             <td className="px-3 py-3 font-medium">{entry.prenom}</td>
                             <td className="px-3 py-3 font-mono text-xs">{entry.matricule}</td>
@@ -344,9 +355,11 @@ export default function MaterielsStar() {
                             <td className="whitespace-nowrap px-3 py-3">
                               <div className="flex items-center gap-1">
                                 <Button type="button" variant="ghost" size="icon" aria-label="Imprimer ce mouvement" title="Imprimer" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
-                                <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>
-                                <Button type="button" variant="ghost" size="icon" aria-label="Supprimer le mouvement" title={entry.heureSortie ? "Supprimer" : "Enregistrez d’abord la sortie pour supprimer"} className="text-destructive hover:text-destructive" disabled={!entry.heureSortie || deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>
-                                {!entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
+                                {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>}
+                                {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title={entry.heureSortie ? "Annuler" : "Enregistrez d’abord la sortie pour annuler"} className="text-destructive hover:text-destructive" disabled={!entry.heureSortie || deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
+                                <RegistryAuditHistory entity="materiel_star" recordId={entry.id} />
+                                <RegistryAttachments entity="materiel_star" recordId={entry.id} siteId={site?.id} />
+                                {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
                                 {entry.heureSortie && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Package className="size-3" />Sorti</span>}
                               </div>
                             </td>
@@ -364,7 +377,7 @@ export default function MaterielsStar() {
                   <p className="mb-4 text-sm">Site : {selectedSiteName || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
                   <table>
                     <thead><tr>{["Date", "Heure d’entrée", "Prénom", "Matricule", "Prestataire", "Matériels / nombre", "Heure de sortie"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
-                    <tbody>{entries.map((entry) => (
+                    <tbody>{filteredEntries.map((entry) => (
                       <tr key={entry.id}>
                         <td>{displayDate(entry.date)}</td><td>{entry.heureEntree}</td><td>{entry.prenom}</td><td>{entry.matricule}</td><td>{entry.provider}</td>
                         <td>{entry.items.map((item) => `${item.designation} — ${item.nombre}`).join("\n")}</td><td>{entry.heureSortie || "—"}</td>

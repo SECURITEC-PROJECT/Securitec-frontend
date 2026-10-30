@@ -8,7 +8,7 @@ import ListPassation from "./ListPassation";
 import { API_URL, authHeaders } from "@/lib/api";
 
 type Handover = {
-  id: number;
+  id: string;
   agent_sortant_nom: string;
   agent_sortant_prenom: string;
   incoming_nom: string;
@@ -16,6 +16,16 @@ type Handover = {
   equipment: string;
   ongoing_events: string;
   instructions: string;
+  agent_sortant_matricule?: string;
+  incoming_matricule?: string;
+  inventaire?: PassationFormData["inventaire"];
+  documents_retenus?: PassationFormData["documents_retenus"];
+  confirmation_sortant?: boolean;
+  confirmation_entrant?: boolean;
+  confirmation_sortant_le?: string | null;
+  confirmation_entrant_le?: string | null;
+  poste_nom?: string;
+  site_id?: string | null;
   created_at: string;
 };
 
@@ -24,7 +34,7 @@ export default function Passation() {
   const location = useLocation();
 
   const routeState = location.state as {
-    agentSortant?: { id?: string; nom: string; prenom: string; site: string; siteId?: string; posteId?: string | null; posteNom?: string | null; shiftType?: "JOUR" | "NUIT" | null; serviceId?: string };
+    agentSortant?: { id?: string; nom: string; prenom: string; matricule?: string; site: string; siteId?: string; posteId?: string | null; posteNom?: string | null; shiftType?: "JOUR" | "NUIT" | null; serviceId?: string };
   } | null;
 
   const agentSortantId = routeState?.agentSortant?.id;
@@ -51,6 +61,7 @@ export default function Passation() {
         body: JSON.stringify({
           agent_sortant_nom: agentSortantNom,
           agent_sortant_prenom: agentSortantPrenom,
+          agent_sortant_matricule: routeState?.agentSortant?.matricule,
           agent_sortant_id: agentSortantId,
           incoming_matricule: f.incoming_matricule,
           incoming_nom: f.incoming_nom,
@@ -58,6 +69,10 @@ export default function Passation() {
           equipment: f.equipment,
           ongoing_events: f.ongoing_events,
           instructions: f.instructions,
+          inventaire: f.inventaire,
+          documents_retenus: f.documents_retenus,
+          confirmation_sortant: f.confirmation_sortant,
+          confirmation_entrant: f.confirmation_entrant,
         }),
       });
 
@@ -131,6 +146,7 @@ export default function Passation() {
         <FormPassation
           agentSortantNom={agentSortantNom}
           agentSortantPrenom={agentSortantPrenom}
+          agentSortantMatricule={routeState?.agentSortant?.matricule || ""}
           onSubmit={handleSave}
         />
         <ListPassation handovers={handovers} />

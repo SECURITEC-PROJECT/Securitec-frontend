@@ -15,7 +15,7 @@ export default function PresentsVehicules({
 }) {
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [passengerCounts, setPassengerCounts] = useState<Record<string, string>>({});
-  const present = rows.filter((vehicle) => !vehicle.exited_at);
+  const present = rows.filter((vehicle) => !vehicle.exited_at && !vehicle.annuleLe);
 
   const handleExit = async (vehicle: VehicleMovement) => {
     const countValue = passengerCounts[vehicle.id] ?? String(vehicle.passengersEntry ?? "");

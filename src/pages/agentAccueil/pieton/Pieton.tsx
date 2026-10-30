@@ -11,7 +11,7 @@ import FormPieton from "./FormPieton";
 import ListPieton from "./ListPieton";
 import PresentsSurSite from "./PresentsSurSite";
 
-export default function Pieton() {
+export default function Pieton({ canManageSiteBans = false }: { canManageSiteBans?: boolean }) {
   const [registry, setRegistry] = useState<{ siteId: string; visitors: VisitorRecord[]; error: string }>({
     siteId: "",
     visitors: [],
@@ -71,6 +71,21 @@ export default function Pieton() {
     }
   };
 
+  const setSiteBan = async (visitor: VisitorRecord, banned: boolean) => {
+    try {
+      await serviceApi.setVisitorSiteBan(String(visitor.id), selectedSiteId, banned);
+      setRegistry((current) => ({
+        ...current,
+        visitors: current.visitors.map((entry) => entry.full_name.trim().toLocaleLowerCase() === visitor.full_name.trim().toLocaleLowerCase()
+          ? { ...entry, site_banned: banned }
+          : entry),
+      }));
+      toast.success(banned ? "Interdiction activée pour ce visiteur sur le site." : "Interdiction levée sur ce site.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Mise à jour de l’interdiction impossible.");
+    }
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader title="Contrôle des passages" subtitle="Registre des entrées et sorties visiteurs, relié au site et au journal des mouvements." />
@@ -126,7 +141,7 @@ export default function Pieton() {
             onCancelEditing={() => setEditingVisitor(null)}
           />
           <PresentsSurSite visitors={visitors} onExit={exit} />
-          <ListPieton visitors={visitors} onEdit={setEditingVisitor} onDelete={deleteVisitor} />
+          <ListPieton visitors={visitors} onEdit={setEditingVisitor} onDelete={deleteVisitor} canManageSiteBans={canManageSiteBans} onToggleSiteBan={setSiteBan} />
         </>
       )}
     </div>

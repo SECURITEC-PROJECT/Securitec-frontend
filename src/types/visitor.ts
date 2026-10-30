@@ -20,4 +20,5 @@ export interface VisitorRecord {
   entered_at?: string | Date | null;
   exited_at?: string | Date | null;
   site_name?: string;
+  site_banned?: boolean;
 }
