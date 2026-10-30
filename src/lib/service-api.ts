@@ -196,6 +196,18 @@ export interface ChauffeurRecord {
   createdAt: string;
 }
 
+export interface TransporteurRecord {
+  id: string;
+  nomTransporteur: string;
+  vehicule: string;
+  matricule: string | null;
+  telephone: string | null;
+  chauffeur: string | null;
+  observation: string | null;
+  siteId: string;
+  createdAt: string;
+}
+
 export interface VigilanceEntry {
   id: string;
   typePoint: string;
@@ -474,6 +486,18 @@ export const serviceApi = {
   },
   async deleteChauffeur(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/chauffeurs/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  },
+  async listTransporteurs(siteId: string) {
+    return (await request<{ transporteurs: TransporteurRecord[] }>(`/transporteurs?siteId=${encodeURIComponent(siteId)}`)).transporteurs;
+  },
+  async createTransporteur(data: Omit<TransporteurRecord, "id" | "siteId" | "createdAt"> & { siteId: string }) {
+    return (await request<{ transporteur: TransporteurRecord }>("/transporteurs", { method: "POST", body: body(data) })).transporteur;
+  },
+  async updateTransporteur(id: string, data: Omit<TransporteurRecord, "id" | "siteId" | "createdAt"> & { siteId: string }) {
+    return (await request<{ transporteur: TransporteurRecord }>(`/transporteurs/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).transporteur;
+  },
+  async deleteTransporteur(id: string, siteId: string) {
+    return request<{ id: string; deleted: boolean }>(`/transporteurs/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async listDocuments(siteId: string) { return (await request<{ documents: SiteDocument[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
   async uploadDocument(siteId: string, file: File, category: string) {
