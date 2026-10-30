@@ -42,6 +42,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/depotage-fuel-gasoil", label: "Dépotage fuel et gasoil", icon: Fuel },
       { to: "/dashboard/mouvements-vehicules", label: "Mouvements véhicule entrée / sortie", icon: Truck },
       { to: "/dashboard/pointage-aps", label: "Pointage APS", icon: ClipboardCheck },
+      { to: "/dashboard/main-courante", label: "Main courante", icon: FileText },
       { to: "/dashboard/enregistrements-bon-facture-bon-sortie", label: "Enregistrements Bon / facture / Bon de sortie", icon: FileText },
       { to: "/dashboard/courrier", label: "Courrier", icon: Mail },
       { to: "/dashboard/anomalie", label: "Anomalie", icon: AlertTriangle },
