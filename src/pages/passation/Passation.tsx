@@ -24,7 +24,7 @@ export default function Passation() {
   const location = useLocation();
 
   const routeState = location.state as {
-    agentSortant?: { id?: string; nom: string; prenom: string; site: string };
+    agentSortant?: { id?: string; nom: string; prenom: string; site: string; siteId?: string; posteId?: string | null; posteNom?: string | null; shiftType?: "JOUR" | "NUIT" | null; serviceId?: string };
   } | null;
 
   const agentSortantId = routeState?.agentSortant?.id;
@@ -79,6 +79,12 @@ export default function Passation() {
           prenom: f.incoming_prenom,
           prestataire: f.incoming_prestataire || "SECURITEC",
           site_de_travail: routeState?.agentSortant?.site || "Usine Antsirabe",
+          siteId: routeState?.agentSortant?.siteId,
+          posteId: routeState?.agentSortant?.posteId,
+          shiftType: routeState?.agentSortant?.shiftType,
+          chefMatricule: f.incoming_matricule,
+          agentMatricules: [],
+          replacesServiceId: routeState?.agentSortant?.serviceId,
           notes: "Prise de poste automatique suite à la passation.",
         }),
       });
@@ -87,6 +93,11 @@ export default function Passation() {
         const errData = await responseShift.json().catch(() => ({}));
         // L'agent sortant reste en service tant que l'agent montant n'est pas enregistré
         throw new Error(errData.error || "Impossible de mettre l'agent montant en service.");
+      }
+      const incomingShift = await responseShift.json();
+      if (incomingShift.serviceId && routeState?.agentSortant?.siteId) {
+        localStorage.setItem(`securitec-active-shift:${routeState.agentSortant.siteId}`, incomingShift.serviceId);
+        localStorage.setItem(`securitec-logistics-shift:${routeState.agentSortant.siteId}`, incomingShift.serviceId);
       }
 
       // 3. CLÔTURER LE SERVICE DE L'AGENT SORTANT (si son ID a été transmis)

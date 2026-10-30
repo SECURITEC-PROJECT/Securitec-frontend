@@ -9,6 +9,13 @@ export interface Shift {
   matricule?: string;
   prestataire: string;
   site_de_travail: string;
+  siteId?: string | null;
+  posteId?: string | null;
+  posteNom?: string | null;
+  shiftType?: "JOUR" | "NUIT" | null;
+  fonctionService?: "CHEF" | "AGENT" | null;
+  serviceId?: string | null;
+  agents?: Shift[];
   started_at: string;
   ended_at: string | null;
   checks?: Record<string, boolean>;
@@ -26,8 +33,19 @@ export default function ListHistoriquePriseDePoste({
   onOpenEndDialog,
   fmt,
 }: ListHistoriquePriseDePosteProps) {
-  const activeShifts = shifts.filter((s) => s.ended_at === null);
-  const finishedShifts = shifts.filter((s) => s.ended_at !== null);
+  const groups = Array.from(shifts.reduce((all, shift) => {
+    const key = shift.serviceId || shift.id;
+    const group = all.get(key) || [];
+    group.push(shift);
+    all.set(key, group);
+    return all;
+  }, new Map<string, Shift[]>()).entries()).map(([serviceId, members]) => ({
+    ...((members.find((member) => member.fonctionService === "CHEF") || members[0]) as Shift),
+    serviceId,
+    agents: members,
+  }));
+  const activeShifts = groups.filter((shift) => shift.ended_at === null);
+  const finishedShifts = groups.filter((shift) => shift.ended_at !== null);
 
   const todayStr = new Date().toLocaleDateString();
 
@@ -55,11 +73,10 @@ export default function ListHistoriquePriseDePoste({
                 className="flex items-center justify-between rounded-md border p-3 text-sm bg-background shadow-sm"
               >
                 <div>
-                  <p className="font-semibold text-base">
-                    {s.nom} {s.prenom}
-                  </p>
+                  <p className="font-semibold text-base">{s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</p>
+                  <p className="text-sm">Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
                   <p className="text-xs text-muted-foreground">
-                    {s.matricule ? `Matricule ${s.matricule} · ` : ""}{s.prestataire} · {s.site_de_travail}
+                    {s.site_de_travail} · {s.agents?.length || 1} agent(s) · {s.agents?.filter((agent) => agent.fonctionService !== "CHEF").map((agent) => `${agent.prenom} ${agent.nom}`).join(", ") || "aucun autre agent"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Début : <span className="font-mono">{fmt(s.started_at)}</span>
@@ -90,7 +107,7 @@ export default function ListHistoriquePriseDePoste({
               <li key={s.id} className="py-2.5 text-sm">
                 <div className="flex justify-between font-medium">
                   <span>
-                    {s.nom} {s.prenom} ({s.site_de_travail})
+                    {s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"} — {s.nom} {s.prenom} ({s.site_de_travail}, {s.agents?.length || 1} agent(s))
                   </span>
                   <span className="font-mono text-xs text-muted-foreground">
                     Prise : {fmtFull(s.started_at)} <br />

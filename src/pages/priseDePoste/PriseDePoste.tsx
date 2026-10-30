@@ -46,9 +46,13 @@ export default function PriseDePoste() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erreur serveur");
 
-      const newShift = result;
-      setShifts((prev) => [newShift, ...prev]);
-      toast.success(`Prise de poste enregistrée pour ${data.nom} ${data.prenom}`);
+      const newShifts: Shift[] = Array.isArray(result.shifts) ? result.shifts : [result];
+      setShifts((prev) => [...newShifts, ...prev]);
+      if (result.serviceId) {
+        localStorage.setItem(`securitec-active-shift:${data.siteId}`, result.serviceId);
+        localStorage.setItem(`securitec-logistics-shift:${data.siteId}`, result.serviceId);
+      }
+      toast.success(`Service ${data.shiftType.toLowerCase()} ouvert au ${data.posteNom} avec ${newShifts.length} agent(s).`);
       return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer la prise de poste.");
@@ -76,6 +80,11 @@ export default function PriseDePoste() {
           nom: shift.nom,
           prenom: shift.prenom,
           site: shift.site_de_travail,
+          siteId: shift.siteId,
+          posteId: shift.posteId,
+          posteNom: shift.posteNom,
+          shiftType: shift.shiftType,
+          serviceId: shift.serviceId || shift.id,
         },
       },
     });
@@ -104,7 +113,13 @@ export default function PriseDePoste() {
       });
       if (!response.ok) throw new Error("Erreur clôture");
       const updatedShift = await response.json();
-      setShifts((prev) => prev.map((s) => (s.id === shiftId ? updatedShift : s)));
+      setShifts((prev) => prev.map((s) => (s.serviceId === shiftId || s.id === shiftId ? { ...s, ended_at: updatedShift.ended_at } : s)));
+      const endedService = shifts.find((shift) => shift.serviceId === shiftId || shift.id === shiftId);
+      if (endedService?.siteId) {
+        for (const key of [`securitec-active-shift:${endedService.siteId}`, `securitec-logistics-shift:${endedService.siteId}`]) {
+          if (localStorage.getItem(key) === shiftId) localStorage.removeItem(key);
+        }
+      }
     } catch (error) {
       toast.error("Erreur lors de la clôture du service.");
     }

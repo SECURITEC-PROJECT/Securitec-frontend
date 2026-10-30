@@ -1,4 +1,4 @@
-import { ArrowUpRight, Car, ShieldCheck, TriangleAlert, Users } from "lucide-react";
+import { ArrowUpRight, BellRing, Car, ClipboardList, FileWarning, ShieldCheck, TriangleAlert, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface GridStatsProps {
@@ -6,14 +6,22 @@ interface GridStatsProps {
   vehiclesCount: number;
   shiftsCount: number;
   alertsCount: number;
+  proceduresCount: number;
+  eventsCount: number;
+  anomaliesCount: number;
+  activeInstructionsCount: number;
 }
 
-export default function GridStats({ visitorsCount, vehiclesCount, shiftsCount, alertsCount }: GridStatsProps) {
+export default function GridStats({ visitorsCount, vehiclesCount, shiftsCount, alertsCount, proceduresCount, eventsCount, anomaliesCount, activeInstructionsCount }: GridStatsProps) {
   const stats = [
-    { label: "Personnes sur site", value: visitorsCount, note: "Visiteurs enregistrés", icon: Users, to: "/dashboard/visiteurs", tone: "text-primary bg-primary/10" }, 
-    { label: "Véhicules présents", value: vehiclesCount, note: "Contrôles à jour", icon: Car, to: "/dashboard/vehicules", tone: "text-info bg-info/10" }, 
-    { label: "Agents en poste", value: shiftsCount, note: "Vacation de jour · 06 h – 18 h", icon: ShieldCheck, to: "/dashboard/prise-de-poste", tone: "text-success bg-success/10" }, 
-    { label: "Alertes à suivre", value: alertsCount, note: "Anomalie technique", icon: TriangleAlert, to: "/dashboard/main-courante", tone: "text-warning-foreground bg-warning/15" }
+    { label: "Agents en poste", value: shiftsCount, note: "Effectif filtré par poste", icon: ShieldCheck, to: "/dashboard/prise-de-poste", tone: "text-success bg-success/10" },
+    { label: "Incidents", value: alertsCount, note: "Violations de procédure", icon: TriangleAlert, to: "/dashboard/main-courante", tone: "text-warning-foreground bg-warning/15" },
+    { label: "Anomalies", value: anomaliesCount, note: "Signalements techniques", icon: FileWarning, to: "/dashboard/main-courante", tone: "text-warning-foreground bg-warning/15" },
+    { label: "Consignes actives", value: activeInstructionsCount, note: "À appliquer aux postes", icon: BellRing, to: "/dashboard/consigne", tone: "text-primary bg-primary/10" },
+    { label: "Procédures", value: proceduresCount, note: "Entrées de main courante", icon: ClipboardList, to: "/dashboard/main-courante", tone: "text-info bg-info/10" },
+    { label: "Événements", value: eventsCount, note: "Événements et divers", icon: Users, to: "/dashboard/main-courante", tone: "text-primary bg-primary/10" },
+    { label: "Personnes sur site", value: visitorsCount, note: "Visiteurs enregistrés", icon: Users, to: "/dashboard/visiteurs", tone: "text-primary bg-primary/10" },
+    { label: "Véhicules présents", value: vehiclesCount, note: "Contrôles à jour", icon: Car, to: "/dashboard/vehicules", tone: "text-info bg-info/10" },
   ] as const;
 
   return (
