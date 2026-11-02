@@ -7,6 +7,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { serviceApi, type KeyTrackingEntry, type RegisterEmployeeOption } from "@/lib/service-api";
@@ -117,7 +118,7 @@ const formaterDate = (value: string) => {
 };
 
 const heureActuelle = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
-const nouveauFormulaire = () => ({ date: dateActuelle(), employeeId: "", keyType: "", quantity: "1" });
+const nouveauFormulaire = () => ({ date: dateActuelle(), employeeId: "", keyType: "", quantity: "1", lieu: "", observations: "" });
 
 export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [form, setForm] = useState(nouveauFormulaire);
@@ -200,6 +201,8 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     try {
       await serviceApi.createKeyTracking({
         ...form,
+        lieu: form.lieu.trim(),
+        observations: form.observations.trim(),
         departureTime: heureActuelle(),
         quantity: Number(form.quantity),
         siteId,
@@ -256,6 +259,8 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       entry.lastName,
       entry.firstName,
       entry.matricule,
+      entry.lieu ?? "",
+      entry.observations ?? "",
       entry.departureTime,
       entry.keyType,
       String(entry.quantity),
@@ -328,6 +333,14 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             <span className="text-sm font-medium">Nombre de clés</span>
             <Input required type="number" min="1" max="10000" step="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} />
           </label>
+          <label className="space-y-1">
+            <span className="text-sm font-medium">Lieu</span>
+            <Input required maxLength={255} value={form.lieu} onChange={(event) => setForm({ ...form, lieu: event.target.value })} placeholder="Bureau, magasin…" />
+          </label>
+          <label className="space-y-1 sm:col-span-2 lg:col-span-3">
+            <span className="text-sm font-medium">Observation</span>
+            <Textarea maxLength={20000} rows={2} value={form.observations} onChange={(event) => setForm({ ...form, observations: event.target.value })} placeholder="Observation sur le mouvement de clé…" />
+          </label>
         </div>
         {!siteId && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
         {form.keyType && !matchingEmployees.length && employeesFor === `${siteId}:${form.keyType}` && (
@@ -361,7 +374,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
           <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-muted">
               <tr>
-                {["Date sortie", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Date retour", "Personne qui a rendu", "Heure de retour"].map((label) => (
+                {["Date sortie", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Lieu", "Observation", "Date retour", "Personne qui a rendu", "Heure de retour"].map((label) => (
                   <th key={label} className="border-b px-3 py-2 font-medium">{label}</th>
                 ))}
               </tr>
@@ -375,6 +388,8 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                   <td className="px-3 py-2">{entry.departureTime}</td>
                   <td className="px-3 py-2">{entry.keyType}</td>
                   <td className="px-3 py-2">{entry.quantity}</td>
+                  <td className="px-3 py-2">{entry.lieu || "—"}</td>
+                  <td className="whitespace-pre-wrap px-3 py-2">{entry.observations || "—"}</td>
                   <td className="px-3 py-2">{entry.returnDate ? formaterDate(entry.returnDate) : "—"}</td>
                   <td className="px-3 py-2">{entry.returnerLastName || entry.returnerFirstName
                     ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`
@@ -404,12 +419,12 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                 </tr>
               ))}
               {siteId && entriesForSite === siteId && !filteredEntries.length && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">
                   {visibleEntries.length ? "Aucun mouvement ne correspond à votre recherche." : "Aucun mouvement de clé enregistré pour ce site."}
                 </td></tr>
               )}
               {!siteId && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les mouvements.</td></tr>
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les mouvements.</td></tr>
               )}
             </tbody>
           </table>
@@ -420,7 +435,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
           <table>
             <thead>
               <tr>
-                {["Date sortie", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Date retour", "Personne qui a rendu", "Heure de retour"].map((label) => (
+                {["Date sortie", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Lieu", "Observation", "Date retour", "Personne qui a rendu", "Heure de retour"].map((label) => (
                   <th key={label}>{label}</th>
                 ))}
               </tr>
@@ -434,6 +449,8 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                   <td>{entry.departureTime}</td>
                   <td>{entry.keyType}</td>
                   <td>{entry.quantity}</td>
+                  <td>{entry.lieu || "—"}</td>
+                  <td>{entry.observations || "—"}</td>
                   <td>{entry.returnDate ? formaterDate(entry.returnDate) : "—"}</td>
                   <td>{entry.returnerLastName || entry.returnerFirstName
                     ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`

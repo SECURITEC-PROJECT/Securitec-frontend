@@ -37,6 +37,8 @@ export interface KeyTrackingEntry {
   returnerLastName: string | null;
   returnerFirstName: string | null;
   returnerMatricule: string | null;
+  lieu: string | null;
+  observations: string | null;
 }
 
 export interface EmergencyContact {
@@ -638,7 +640,7 @@ export const serviceApi = {
   async listKeyTracking(siteId: string) {
     return (await request<{ entries: KeyTrackingEntry[] }>(`/access-control/keys?siteId=${encodeURIComponent(siteId)}`)).entries;
   },
-  async createKeyTracking(data: { date: string; employeeId: string; keyType: string; quantity: number; departureTime: string; siteId: string }) {
+  async createKeyTracking(data: { date: string; employeeId: string; keyType: string; quantity: number; departureTime: string; siteId: string; lieu: string; observations: string }) {
     return (await request<{ entry: KeyTrackingEntry }>("/access-control/keys", { method: "POST", body: body(data) })).entry;
   },
   async returnKeyTracking(id: string | number, data: { returnDate: string; returnTime: string; siteId: string; returnerType: "same" | "other"; returnerEmployeeId?: string }) {
