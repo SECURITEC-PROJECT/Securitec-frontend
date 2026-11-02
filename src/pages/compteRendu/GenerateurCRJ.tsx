@@ -55,6 +55,46 @@ export interface CRJData {
 
 type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "violations" | "divers" | "vigilance" | "rondes";
 
+const AGENT_POST_ROWS: Array<{ label: string; post: string | null }> = [
+  { label: "Poste de garde I", post: "Poste de garde I" },
+  { label: "", post: "Poste de garde I" },
+  { label: "", post: "Poste de garde I" },
+  { label: "", post: "Poste de garde I" },
+  { label: "", post: "Poste de garde I" },
+  { label: "Parking extérieur", post: "Parking extérieur" },
+  { label: "Poste de garde II", post: "Poste de garde II" },
+  { label: "", post: null },
+  { label: "Expédition", post: "Expédition" },
+  { label: "Box", post: "Box" },
+  { label: "Ex-garage", post: "Ex-garage" },
+  { label: "Hangar à vélos", post: "Hangar à vélos" },
+  { label: "Pont bascule", post: "Pont bascule" },
+  { label: "TDE", post: "TDE" },
+  { label: "Terrain Bon Espoir", post: "Terrain Bon Espoir" },
+  { label: "", post: null },
+  { label: "", post: null },
+  { label: "", post: null },
+  { label: "Terrain CO2", post: "Terrain CO2" },
+  { label: "Terrain Firasana", post: "Terrain Firasana" },
+  { label: "", post: null },
+  { label: "Dépôt Tombontsoa", post: "Dépôt Tombontsoa" },
+  { label: "Dépôt MADARAIL", post: "Dépôt MADARAIL" },
+  { label: "", post: null },
+  { label: "", post: null },
+  { label: "Ex-Agence", post: "Ex-Agence" },
+  { label: "Villa DU", post: "Villa DU" },
+  { label: "Villa Responsable maintenance", post: "Villa Responsable maintenance" },
+  { label: "", post: null },
+  { label: "", post: null },
+  { label: "", post: null },
+];
+
+const normalizePost = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleUpperCase("fr")
+  .replace(/[^A-Z0-9]/g, "");
+
 function PrintSectionTitle({ id, title, onPrint }: { id: PrintSectionId; title: string; onPrint: (id: PrintSectionId) => void }) {
   return (
     <div className="mb-1 flex items-center justify-between gap-2 border-b border-black">
@@ -105,6 +145,34 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
   // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
   const decalage = data.siteType === 'Agence' ? 1 : 0;
   const agentsPostes = Array.isArray(data.agentsPostes) ? data.agentsPostes : [];
+  const knownPosts = new Set(AGENT_POST_ROWS.map((row) => row.post).filter((post): post is string => post !== null).map(normalizePost));
+  const postRowCapacity = new Map<string, number>();
+  for (const row of AGENT_POST_ROWS) {
+    if (row.post) postRowCapacity.set(normalizePost(row.post), (postRowCapacity.get(normalizePost(row.post)) || 0) + 1);
+  }
+  const agentPostRows = AGENT_POST_ROWS.map((row, rowIndex) => {
+    if (!row.post) return { ...row, jour: undefined, nuit: undefined };
+    const postName = row.post;
+    const agents = agentsPostes.find((item) => normalizePost(item.poste) === normalizePost(postName));
+    const index = AGENT_POST_ROWS.slice(0, rowIndex).filter((previous) => previous.post === postName).length;
+    return {
+      ...row,
+      jour: agents?.jour[index],
+      nuit: agents?.nuit[index],
+    };
+  });
+  const extraAgentRows = agentsPostes
+    .flatMap((poste) => {
+      const postKey = normalizePost(poste.poste);
+      const startIndex = knownPosts.has(postKey) ? postRowCapacity.get(postKey) || 0 : 0;
+      const remainingCount = Math.max(poste.jour.length, poste.nuit.length) - startIndex;
+      return Array.from({ length: Math.max(remainingCount, knownPosts.has(postKey) ? 0 : 1) }, (_, index) => ({
+        post: poste.poste,
+        label: startIndex + index === 0 && !knownPosts.has(postKey) ? poste.poste : "",
+        jour: poste.jour[startIndex + index],
+        nuit: poste.nuit[startIndex + index],
+      }));
+    });
   const cles = Array.isArray(data.cles) ? data.cles : [];
   const lignesCles = [
     ...cles,
@@ -203,32 +271,30 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
               ].filter(Boolean).join(" et ") || "jour et nuit"}. Enregistrez ce service dans le module Pointage APS pour compléter le tableau.
             </p>
           )}
-          <table className="w-full border-collapse border border-black text-center text-[10px]">
+          <table className="w-full table-fixed border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
-                <th rowSpan={2} className="border border-black p-1">POSTES</th>
+                <th rowSpan={2} className="w-[14%] border border-black p-1">POSTES</th>
                 <th colSpan={2} className="border border-black p-1">JOUR</th>
                 <th colSpan={2} className="border border-black p-1">NUIT</th>
               </tr>
               <tr className="bg-gray-50">
-                <th className="border border-black p-1">Nom & Prénom</th>
-                <th className="border border-black p-1">Matricule</th>
-                <th className="border border-black p-1">Nom & Prénom</th>
-                <th className="border border-black p-1">Matricule</th>
+                <th className="w-[34%] border border-black p-1">Nom &amp; Prénom</th>
+                <th className="w-[9%] border border-black p-1">Matricule</th>
+                <th className="w-[34%] border border-black p-1">Nom &amp; Prénom</th>
+                <th className="w-[9%] border border-black p-1">Matricule</th>
               </tr>
             </thead>
             <tbody>
-              {agentsPostes.flatMap((poste) => poste.jour.map((agent, index) => (
-                <tr key={`${poste.poste}-${index}`}>
-                  {index === 0 && (
-                    <td rowSpan={poste.jour.length} className="border border-black p-1 font-semibold">{poste.poste}</td>
-                  )}
-                  <td className="border border-black p-1">{agent.nom || ""}</td>
-                  <td className="border border-black p-1 font-mono">{agent.matricule || ""}</td>
-                  <td className="border border-black p-1">{poste.nuit[index]?.nom || ""}</td>
-                  <td className="border border-black p-1 font-mono">{poste.nuit[index]?.matricule || ""}</td>
+              {[...agentPostRows, ...extraAgentRows].map((row, index) => (
+                <tr key={`${row.post || "blank"}-${index}`}>
+                  <td className="border border-black p-1 text-left">{row.label}</td>
+                  <td className="border border-black p-1">{row.jour?.nom || ""}</td>
+                  <td className="border border-black p-1 font-mono">{row.jour?.matricule || ""}</td>
+                  <td className="border border-black p-1">{row.nuit?.nom || ""}</td>
+                  <td className="border border-black p-1 font-mono">{row.nuit?.matricule || ""}</td>
                 </tr>
-              )))}
+              ))}
             </tbody>
           </table>
         </div>
