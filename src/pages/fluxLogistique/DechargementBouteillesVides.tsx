@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
+import { useLocation } from "react-router-dom";
 
 const DESIGNATION_GROUPS = [
   { label: "Bouteilles vides", options: ["Bouteilles vides - 65 Cl", "Bouteilles vides - 50 Cl", "Bouteilles vides - 33 Cl"] },
@@ -29,6 +30,12 @@ type DeliveryForm = {
   plomb: string;
   provenance: string;
   poids: string;
+  brut: string;
+  tare: string;
+  net: string;
+  clientFournisseur: string;
+  produit: string;
+  remarque: string;
   detailsBouteilles: BottleLine[];
 };
 
@@ -51,6 +58,12 @@ const emptyForm = (): DeliveryForm => ({
   plomb: "",
   provenance: "",
   poids: "",
+  brut: "",
+  tare: "",
+  net: "",
+  clientFournisseur: "",
+  produit: "",
+  remarque: "",
   detailsBouteilles: [{ designation: "", quantite: "" }],
 });
 
@@ -67,6 +80,8 @@ const normalizeSearch = (value: string) =>
 
 export default function DechargementBouteillesVides() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
+  const location = useLocation();
+  const routeContext = location.state as { siteId?: string; posteId?: string; posteNom?: string } | null;
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
   const [entries, setEntries] = useState<EmptyBottleDelivery[]>([]);
@@ -76,10 +91,32 @@ export default function DechargementBouteillesVides() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [pondBasculPost, setPondBasculPost] = useState(false);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
+  useEffect(() => {
+    let active = true;
+    const contextMatchesSite = routeContext?.siteId === site?.id;
+    const postId = contextMatchesSite ? routeContext?.posteId : null;
+    if (!site?.id || !postId) {
+      setPondBasculPost(false);
+      return () => { active = false; };
+    }
+    const contextPostName = contextMatchesSite && routeContext?.posteId === postId ? routeContext.posteNom : "";
+    if (contextPostName) {
+      setPondBasculPost(normalizeSearch(contextPostName).trim().startsWith("pond bascul"));
+      return () => { active = false; };
+    }
+    serviceApi.listShiftPosts(site.id)
+      .then((posts) => {
+        if (active) setPondBasculPost(normalizeSearch(posts.find((post) => post.id === postId)?.nom || "").trim().startsWith("pond bascul"));
+      })
+      .catch(() => { if (active) setPondBasculPost(false); });
+    return () => { active = false; };
+  }, [routeContext?.posteId, routeContext?.posteNom, routeContext?.siteId, site?.id]);
   const normalizedSearch = normalizeSearch(search.trim());
+  const showPondBrutFields = pondBasculPost || editingEntry?.brut != null;
   const filteredEntries = entries.filter((entry) =>
     normalizeSearch([
       entry.date,
@@ -92,6 +129,9 @@ export default function DechargementBouteillesVides() {
       entry.plomb ?? "",
       entry.provenance,
       String(entry.poids),
+      entry.clientFournisseur ?? "",
+      entry.produit ?? "",
+      entry.remarque ?? "",
       ...entry.detailsBouteilles.flatMap((line) => [line.designation, String(line.quantite)]),
     ].join(" ")).includes(normalizedSearch),
   );
@@ -137,6 +177,14 @@ export default function DechargementBouteillesVides() {
       toast.error("Sélectionnez un site de travail.");
       return;
     }
+    const brut = Number(form.brut);
+    const tare = Number(form.tare);
+    const net = Number(form.net);
+    const usePondBrut = pondBasculPost || editingEntry?.brut != null;
+    if (usePondBrut && (!form.brut || !form.tare || !form.net || !Number.isFinite(brut) || !Number.isFinite(tare) || !Number.isFinite(net) || brut <= 0 || tare <= 0 || net <= 0)) {
+      toast.error("Saisissez un BRUT, une TARE et un NET positifs.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -149,7 +197,17 @@ export default function DechargementBouteillesVides() {
         numeroTitre: form.numeroTitre.trim(),
         plomb: form.plomb.trim(),
         provenance: form.provenance.trim(),
-        poids: Number(form.poids),
+        poids: usePondBrut ? net : Number(form.poids),
+        ...(usePondBrut ? {
+          pondBrut: {
+            brut,
+            tare,
+            net,
+            clientFournisseur: form.clientFournisseur.trim(),
+            produit: form.produit.trim(),
+            remarque: form.remarque.trim(),
+          },
+        } : {}),
         detailsBouteilles: form.detailsBouteilles.map((line) => ({
           designation: line.designation,
           quantite: Number(line.quantite),
@@ -187,6 +245,12 @@ export default function DechargementBouteillesVides() {
       plomb: entry.plomb || "",
       provenance: String(entry.provenance),
       poids: String(entry.poids),
+      brut: entry.brut == null ? "" : String(entry.brut),
+      tare: entry.tare == null ? "" : String(entry.tare),
+      net: entry.net == null ? "" : String(entry.net),
+      clientFournisseur: entry.clientFournisseur || "",
+      produit: entry.produit || "",
+      remarque: entry.remarque || entry.observation || "",
       detailsBouteilles: details.map((line) => ({
         designation: line.designation,
         quantite: String(line.quantite),
@@ -220,6 +284,9 @@ export default function DechargementBouteillesVides() {
   };
 
   const printEntry = (entry: EmptyBottleDelivery) => {
+    const weights: [string, string][] = entry.brut != null
+      ? [["BRUT", `${entry.brut} kg`], ["TARE", `${entry.tare ?? "—"} kg`], ["NET", `${entry.net ?? entry.poids} kg`], ["Client / Fournisseur", entry.clientFournisseur || "—"], ["Produit", entry.produit || "—"], ["Remarque", entry.remarque || entry.observation || "—"]]
+      : [["Poids", `${entry.poids} kg`]];
     printRecord("Réception de bouteilles vides", selectedSiteName, [
       ["Date", displayDate(entry.date)],
       ["Heure de début (HD)", entry.heureArrivee || "—"],
@@ -230,7 +297,7 @@ export default function DechargementBouteillesVides() {
       ["N° plomb", entry.plomb || "—"],
       ["Comptage", entry.detailsBouteilles.map((line) => `${line.designation} : ${line.quantite}`).join("\n")],
       ["Provenance", entry.provenance],
-      ["Poids", `${entry.poids} kg`],
+      ...weights,
     ]);
   };
 
@@ -314,10 +381,39 @@ export default function DechargementBouteillesVides() {
                 <Label htmlFor="empty-bottles-origin">Provenance (chiffre)</Label>
                 <Input id="empty-bottles-origin" type="text" inputMode="numeric" pattern="[0-9]+" maxLength={100} required value={form.provenance} onChange={(event) => setForm({ ...form, provenance: event.target.value })} />
               </div>
-              <div className="space-y-1.5 sm:max-w-[calc(50%-0.5rem)] lg:max-w-none">
-                <Label htmlFor="empty-bottles-weight">Poids</Label>
-                <Input id="empty-bottles-weight" type="number" min="1" max="9999999999.99" step="1" required value={form.poids} onChange={(event) => setForm({ ...form, poids: event.target.value })} />
-              </div>
+              {showPondBrutFields ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="empty-bottles-brut">BRUT (poids total du véhicule chargé)</Label>
+                    <Input id="empty-bottles-brut" type="number" min="1" max="9999999999.99" step="1" required value={form.brut} onChange={(event) => setForm({ ...form, brut: event.target.value })} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="empty-bottles-tare">TARE</Label>
+                    <Input id="empty-bottles-tare" type="number" min="1" max="9999999999.99" step="1" required value={form.tare} onChange={(event) => setForm({ ...form, tare: event.target.value })} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="empty-bottles-net">NET</Label>
+                    <Input id="empty-bottles-net" type="number" min="1" max="9999999999.99" step="1" required value={form.net} onChange={(event) => setForm({ ...form, net: event.target.value })} />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <Label htmlFor="empty-bottles-client">Client / Fournisseur</Label>
+                    <Input id="empty-bottles-client" maxLength={255} autoComplete="off" placeholder="Saisir le client ou fournisseur (facultatif)" value={form.clientFournisseur} onChange={(event) => setForm({ ...form, clientFournisseur: event.target.value })} />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <Label htmlFor="empty-bottles-product">Produit</Label>
+                    <Input id="empty-bottles-product" maxLength={255} autoComplete="off" placeholder="Ex. bouteille vide (facultatif)" value={form.produit} onChange={(event) => setForm({ ...form, produit: event.target.value })} />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <Label htmlFor="empty-bottles-remark">Remarque</Label>
+                    <textarea id="empty-bottles-remark" rows={3} maxLength={2000} placeholder="Ajouter une remarque (facultatif)" value={form.remarque} onChange={(event) => setForm({ ...form, remarque: event.target.value })} className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-1.5 sm:max-w-[calc(50%-0.5rem)] lg:max-w-none">
+                  <Label htmlFor="empty-bottles-weight">Poids</Label>
+                  <Input id="empty-bottles-weight" type="number" min="1" max="9999999999.99" step="1" required value={form.poids} onChange={(event) => setForm({ ...form, poids: event.target.value })} />
+                </div>
+              )}
             </div>
           </section>
 

@@ -95,7 +95,29 @@ export interface EmptyBottleDelivery {
   plomb: string | null;
   provenance: string;
   poids: string | number;
+  brut?: string | number | null;
+  tare?: string | number | null;
+  net?: string | number | null;
+  observation?: string | null;
+  clientFournisseur?: string | null;
+  produit?: string | null;
+  remarque?: string | null;
   detailsBouteilles: { designation: string; quantite: number }[];
+  siteName: string;
+}
+
+export interface PondBrutEntry {
+  id: string;
+  fluxId: string;
+  date: string;
+  vehicule: string;
+  brut: string | number;
+  tare: string | number;
+  net: string | number;
+  observation?: string;
+  clientFournisseur: string;
+  produit: string;
+  remarque: string;
   siteName: string;
 }
 
@@ -677,6 +699,10 @@ export const serviceApi = {
       if (!cached.length && !pending.length) throw error;
       return [...pending.map(pendingLogisticsEntry), ...cached];
     }
+  },
+  async listPondBrut(siteId: string) {
+    const params = new URLSearchParams({ siteId });
+    return (await request<{ entries: PondBrutEntry[] }>(`/pond-brut?${params}`)).entries;
   },
   async getTruckChecklist(siteId: string, date: string) {
     const params = new URLSearchParams({ siteId, date });

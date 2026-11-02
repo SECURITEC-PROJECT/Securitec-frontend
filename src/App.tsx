@@ -31,6 +31,7 @@ import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
 import OrduresFerrailles from '@/pages/fluxLogistique/OrduresFerrailles';
 import MouvementsDeuxRoues from '@/pages/fluxLogistique/MouvementsDeuxRoues';
 import DechargementBouteillesVides from '@/pages/fluxLogistique/DechargementBouteillesVides';
+import PondBrut from '@/pages/fluxLogistique/PondBrut';
 import DechargementMatierePremiere from '@/pages/fluxLogistique/DechargementMatierePremiere';
 import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
 import CheckListCamion from '@/pages/fluxLogistique/CheckListCamion';
@@ -142,6 +143,7 @@ export default function App() {
           <Route path="dechets-levee" element={<DechetsLevee />} />
           <Route path="mouvements-aps" element={<MouvementsAPS canManagePassations={user?.role === 2} />} />
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
+          <Route path="pond-brut" element={<PondBrut />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
           <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
           <Route path="mouvements-vehicules" element={<Vehicule />} />
