@@ -95,6 +95,32 @@ const normalizePost = (value: string) => value
   .toLocaleUpperCase("fr")
   .replace(/[^A-Z0-9]/g, "");
 
+const AGENT_POST_ALIASES: Record<string, string> = {
+  PG1: "POSTEDEGARDEI",
+  PGI: "POSTEDEGARDEI",
+  POSTEGARDEI: "POSTEDEGARDEI",
+  PG2: "POSTEDEGARDEII",
+  PGII: "POSTEDEGARDEII",
+  PGIT: "POSTEDEGARDEII",
+  POSTEGARDEII: "POSTEDEGARDEII",
+  FITAA: "TERRAINFIRASANA",
+  FITAVA: "TERRAINFIRASANA",
+  EXTERIEUR: "PARKINGEXTERIEUR",
+  PARKING: "PARKINGEXTERIEUR",
+  GARAGE: "EXGARAGE",
+  EXGARAGE: "EXGARAGE",
+  HANGARVELO: "HANGARAVELOS",
+  HANGARAVELO: "HANGARAVELOS",
+  DEPOTTOMBONTSOA: "DEPOTTOMBONTSOA",
+  DEPOTMADARAIL: "DEPOTMADARAIL",
+  VILLARESPONSABLEMAINTENANCE: "VILLARESPONSABLEMAINTENANCE",
+};
+
+const canonicalPost = (value: string) => {
+  const normalized = normalizePost(value);
+  return AGENT_POST_ALIASES[normalized] || normalized;
+};
+
 function PrintSectionTitle({ id, title, onPrint }: { id: PrintSectionId; title: string; onPrint: (id: PrintSectionId) => void }) {
   return (
     <div className="mb-1 flex items-center justify-between gap-2 border-b border-black">
@@ -145,16 +171,20 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
   // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
   const decalage = data.siteType === 'Agence' ? 1 : 0;
   const agentsPostes = Array.isArray(data.agentsPostes) ? data.agentsPostes : [];
-  const knownPosts = new Set(AGENT_POST_ROWS.map((row) => row.post).filter((post): post is string => post !== null).map(normalizePost));
+  const knownPosts = new Set(AGENT_POST_ROWS.map((row) => row.post).filter((post): post is string => post !== null).map(canonicalPost));
   const postRowCapacity = new Map<string, number>();
   for (const row of AGENT_POST_ROWS) {
-    if (row.post) postRowCapacity.set(normalizePost(row.post), (postRowCapacity.get(normalizePost(row.post)) || 0) + 1);
+    if (row.post) {
+      const postKey = canonicalPost(row.post);
+      postRowCapacity.set(postKey, (postRowCapacity.get(postKey) || 0) + 1);
+    }
   }
   const agentPostRows = AGENT_POST_ROWS.map((row, rowIndex) => {
     if (!row.post) return { ...row, jour: undefined, nuit: undefined };
     const postName = row.post;
-    const agents = agentsPostes.find((item) => normalizePost(item.poste) === normalizePost(postName));
-    const index = AGENT_POST_ROWS.slice(0, rowIndex).filter((previous) => previous.post === postName).length;
+    const postKey = canonicalPost(postName);
+    const agents = agentsPostes.find((item) => canonicalPost(item.poste) === postKey);
+    const index = AGENT_POST_ROWS.slice(0, rowIndex).filter((previous) => previous.post && canonicalPost(previous.post) === postKey).length;
     return {
       ...row,
       jour: agents?.jour[index],
@@ -163,7 +193,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
   });
   const extraAgentRows = agentsPostes
     .flatMap((poste) => {
-      const postKey = normalizePost(poste.poste);
+      const postKey = canonicalPost(poste.poste);
       const startIndex = knownPosts.has(postKey) ? postRowCapacity.get(postKey) || 0 : 0;
       const remainingCount = Math.max(poste.jour.length, poste.nuit.length) - startIndex;
       return Array.from({ length: Math.max(remainingCount, knownPosts.has(postKey) ? 0 : 1) }, (_, index) => ({
