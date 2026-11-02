@@ -27,7 +27,6 @@ import {
   Wrench,
   Bike,
   CarFront,
-  Contact,
   type LucideIcon,
 } from "lucide-react";
 
@@ -60,7 +59,6 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/mouvement-moto", label: "Mouvement Moto", icon: CarFront },
       { to: "/dashboard/visiteurs", label: "Visiteurs", icon: Users },
       { to: "/dashboard/materiels-star", label: "Matériels Star", icon: Package },
-      { to: "/dashboard/chauffeurs", label: "Chauffeurs", icon: Contact },
       { to: "/dashboard/transporteurs", label: "Transporteurs", icon: Truck },
     ]
   },

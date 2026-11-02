@@ -62,7 +62,6 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
     .filter((item) => item.to !== "/dashboard/main-courante");
   const providerItems = [
     { to: "/dashboard/prestataires", label: "Fiches prestataires", icon: ContactRound },
-    { to: "/dashboard/chauffeurs", label: "Chauffeurs", icon: Users },
     { to: "/dashboard/visiteurs", label: "Visiteurs et accès", icon: ShieldCheck },
     { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitants", icon: ContactRound },
   ];

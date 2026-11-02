@@ -275,6 +275,11 @@ export default function DechargementBouteillesVides() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-driver">Nom du chauffeur</Label>
+                <Input id="empty-bottles-driver" required maxLength={255} autoComplete="off" placeholder="Saisir le nom du chauffeur" value={form.nomChauffeur} onChange={(event) => setForm({ ...form, nomChauffeur: event.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="empty-bottles-registration">Immatriculation du véhicule</Label>
+                <Input id="empty-bottles-registration" required maxLength={100} autoComplete="off" placeholder="Saisir l'immatriculation" value={form.immatriculationVehicule} onChange={(event) => setForm({ ...form, immatriculationVehicule: event.target.value })} />
                 <Input
                   id="empty-bottles-driver"
                   required
@@ -311,7 +316,7 @@ export default function DechargementBouteillesVides() {
               </div>
               <div className="space-y-1.5 sm:max-w-[calc(50%-0.5rem)] lg:max-w-none">
                 <Label htmlFor="empty-bottles-weight">Poids</Label>
-                <Input id="empty-bottles-weight" type="number" min="0.01" max="9999999999.99" step="0.01" required value={form.poids} onChange={(event) => setForm({ ...form, poids: event.target.value })} />
+                <Input id="empty-bottles-weight" type="number" min="1" max="9999999999.99" step="1" required value={form.poids} onChange={(event) => setForm({ ...form, poids: event.target.value })} />
               </div>
             </div>
           </section>
