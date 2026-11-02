@@ -11,7 +11,7 @@ import {
   type RegisterEmployeeOption,
 } from "@/lib/service-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarDays, Plus, Printer, RotateCcw, Save, Trash2 } from "lucide-react";
+import { CalendarDays, Printer, RotateCcw, Save } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -34,8 +34,9 @@ function normalizeData(
       ]));
 
   for (const [name, rows] of Object.entries(data ?? {})) {
-    if (!Array.isArray(rows) || !normalized[name]) continue;
-    normalized[name] = normalized[name].map((agent, index) => ({
+    const targetName = Object.keys(normalized).find((candidate) => candidate.toLocaleUpperCase("fr") === name.toLocaleUpperCase("fr"));
+    if (!Array.isArray(rows) || !targetName) continue;
+    normalized[targetName] = normalized[targetName].map((agent, index) => ({
       ...agent,
       ...(rows[index] ?? {}),
     }));
@@ -43,7 +44,7 @@ function normalizeData(
   return normalized;
 }
 
-export default function MouvementsAPS({ canManagePassations = false, canConfigurePosts = false }: { canManagePassations?: boolean; canConfigurePosts?: boolean }) {
+export default function MouvementsAPS({ canManagePassations = false }: { canManagePassations?: boolean }) {
   const { sites, siteError } = useSites();
   const [employeesBySite, setEmployeesBySite] = useState<Record<string, RegisterEmployeeOption[]>>({});
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
@@ -53,8 +54,6 @@ export default function MouvementsAPS({ canManagePassations = false, canConfigur
   const [loadingKeys, setLoadingKeys] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [savingConfiguration, setSavingConfiguration] = useState(false);
-  const [newPostName, setNewPostName] = useState("");
-  const [newPostCount, setNewPostCount] = useState(1);
   const activeSiteId = siteId || sites[0]?.id || "";
   const employees = employeesBySite[activeSiteId] ?? [];
   const contextKey = `${activeSiteId}:${service}:${date}`;
@@ -181,33 +180,6 @@ export default function MouvementsAPS({ canManagePassations = false, canConfigur
     void persistConfiguration(next);
   };
 
-  const addPost = () => {
-    const name = newPostName.trim().replace(/\s+/g, " ").toLocaleUpperCase("fr");
-    if (!name) {
-      toast.error("Saisissez le nom du poste à ajouter.");
-      return;
-    }
-    if (Object.keys(agents).some((poste) => poste.toLocaleUpperCase("fr") === name)) {
-      toast.error("Ce poste existe déjà pour ce service.");
-      return;
-    }
-    const next = { ...agents, [name]: Array.from({ length: newPostCount }, blankAgent) };
-    void persistConfiguration(next).then((saved) => {
-      if (saved) {
-        setNewPostName("");
-        setNewPostCount(1);
-        toast.success(`Poste ${name} enregistré dans le module Mouvements APS.`);
-      }
-    });
-  };
-
-  const removePost = async (poste: string) => {
-    if (!(await confirmDeletion(`Supprimer le poste « ${poste} » et ses lignes des Mouvements APS ${service} ? Cette action est définitive.`))) return;
-    const next = { ...agents };
-    delete next[poste];
-    void persistConfiguration(next);
-  };
-
   return (
     <div className="space-y-5">
       <PageHeader title="Mouvements APS" subtitle="Module 1 — Pointage APS (Jour et Nuit) : nom et matricule par poste." />
@@ -269,22 +241,8 @@ export default function MouvementsAPS({ canManagePassations = false, canConfigur
             </button>
           </div>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">Ce registre est indépendant du Pointage APS. Les données enregistrées ici contiennent uniquement le nom et le matricule.</p>
-        {canConfigurePosts && <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4 print:hidden">
-          <div className="min-w-52 flex-1">
-            <label htmlFor="new-aps-movement-post" className="mb-1.5 block text-sm font-medium">Ajouter un poste</label>
-            <input id="new-aps-movement-post" value={newPostName} onChange={(event) => setNewPostName(event.target.value)} placeholder="Nom du nouveau poste" className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
-          </div>
-          <div>
-            <label htmlFor="new-aps-movement-count" className="mb-1.5 block text-sm font-medium">Nombre de personnes</label>
-            <select id="new-aps-movement-count" value={newPostCount} onChange={(event) => setNewPostCount(Number(event.target.value))} className="h-10 rounded-md border bg-background px-3 text-sm">
-              {Array.from({ length: 30 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}
-            </select>
-          </div>
-          <button type="button" onClick={addPost} disabled={loading || saving || savingConfiguration || !activeSiteId} className="inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50">
-            <Plus className="size-4" />Ajouter le poste
-          </button>
-        </div>}
+        <p className="mt-3 text-xs text-muted-foreground">Ce registre est indépendant du Pointage APS. Les postes proviennent de l’administration et les données enregistrées ici contiennent uniquement le nom et le matricule.</p>
+        <p className="mt-4 border-t pt-4 text-xs text-muted-foreground print:hidden">Ajustez l’effectif de chaque poste dans le tableau ci-dessous.</p>
       </section>
 
       {loading && <p className="text-sm text-muted-foreground">Chargement des mouvements APS…</p>}
@@ -301,17 +259,12 @@ export default function MouvementsAPS({ canManagePassations = false, canConfigur
             {displayedPostes.map((poste) => agents[poste.name].map((agent, index) => (
               <tr key={`${poste.name}-${index}`} className="group hover:bg-muted/30">
                 {index === 0 && <th rowSpan={poste.count} className="border-b bg-muted/20 px-4 py-3 align-top font-semibold">
-                  <div className="flex items-start justify-between gap-2">
-                    <span>{poste.name}</span>
-                    {canConfigurePosts && <button type="button" onClick={() => void removePost(poste.name)} disabled={savingConfiguration || saving} aria-label={`Supprimer le poste ${poste.name}`} title="Supprimer le poste" className="rounded p-1 text-destructive hover:bg-destructive/10 disabled:opacity-50 print:hidden">
-                      <Trash2 className="size-4" />
-                    </button>}
-                  </div>
+                  <span>{poste.name}</span>
                   <label className="mt-2 block text-xs font-normal text-muted-foreground">
                     Effectif
-                    {canConfigurePosts && <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => void setPostCount(poste.name, Number(event.target.value))} className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
+                    <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => void setPostCount(poste.name, Number(event.target.value))} className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
                       {Array.from({ length: 30 }, (_, countIndex) => countIndex + 1).map((count) => <option key={count} value={count}>{count}</option>)}
-                    </select>}
+                    </select>
                     <span className="hidden print:inline">{poste.count} personne(s)</span>
                   </label>
                 </th>}
@@ -336,7 +289,7 @@ export default function MouvementsAPS({ canManagePassations = false, canConfigur
                 </td>
               </tr>
             )))}
-            {!loading && !displayedPostes.length && <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste configuré pour ce service.</td></tr>}
+            {!loading && !displayedPostes.length && <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste actif n’est configuré pour ce site dans l’administration.</td></tr>}
           </tbody>
         </table>
       </div>
