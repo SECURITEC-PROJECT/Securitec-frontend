@@ -280,6 +280,27 @@ export default function DechargementBouteillesVides() {
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-registration">Immatriculation du véhicule</Label>
                 <Input id="empty-bottles-registration" required maxLength={100} autoComplete="off" placeholder="Saisir l'immatriculation" value={form.immatriculationVehicule} onChange={(event) => setForm({ ...form, immatriculationVehicule: event.target.value })} />
+                <Input
+                  id="empty-bottles-driver"
+                  required
+                  maxLength={255}
+                  autoComplete="name"
+                  placeholder="Saisir le nom du chauffeur"
+                  value={form.nomChauffeur}
+                  onChange={(event) => setForm({ ...form, nomChauffeur: event.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="empty-bottles-registration">Immatriculation du véhicule</Label>
+                <Input
+                  id="empty-bottles-registration"
+                  required
+                  maxLength={100}
+                  autoComplete="off"
+                  placeholder="Saisir l'immatriculation"
+                  value={form.immatriculationVehicule}
+                  onChange={(event) => setForm({ ...form, immatriculationVehicule: event.target.value })}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="empty-bottles-title">N° de titre</Label>

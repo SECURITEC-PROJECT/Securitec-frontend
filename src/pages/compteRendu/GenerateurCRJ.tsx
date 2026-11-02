@@ -1,17 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { VIGILANCE_SCHEMA } from "@/pages/agentControle/ronde/vigilanceSchema";
 
 interface CleLigne {
   lieu: string;
-  date: string;
-  personne: string;
-  matricule: string;
-  heureSortie: string;
-  typeCle: string;
-  nombreCles: number;
-  heureRetour: string;
+  perceptionMatin: string;
+  responsablePerceptionMatin: string;
+  reintegrationMatin: string;
+  responsableReintegrationMatin: string;
+  perceptionApresMidi: string;
+  responsablePerceptionApresMidi: string;
+  reintegrationApresMidi: string;
+  responsableReintegrationApresMidi: string;
+  observations: string;
 }
 
 export interface CRJData {
@@ -36,14 +38,22 @@ export interface CRJData {
   alcootests: Array<{ heure: string; nomPrenom: string; isStar: boolean; demandeur?: string; resultat: string }>;
   rondes: Array<{ debut: string; fin: string; obs: string }>;
   pointsVigilance: Array<{ heure: string; typePoint: string; element: string; statut: string; agent: string; obs: string }>;
-  anomalies: Array<{ date: string; heure: string; poste: string; nature: string; anomalie: string; mesures: string }>;
+  anomalies: Array<{
+    heure: string;
+    camion: string;
+    transporteur: string;
+    titre: string;
+    casse: string;
+    manquant: string;
+    vides: string;
+    phn: string;
+    description: string;
+  }>;
   violations: Array<{ heure: string; nomPrenom: string; obs: string; mesures: string }>;
   divers: Array<{ dateHeure: string; faits: string; mesures: string }>;
 }
 
-const dash = (v?: string) => (v && v.trim() ? v : '-');
-
-type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "vigilance" | "rondes";
+type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "violations" | "divers" | "vigilance" | "rondes";
 
 function PrintSectionTitle({ id, title, onPrint }: { id: PrintSectionId; title: string; onPrint: (id: PrintSectionId) => void }) {
   return (
@@ -95,15 +105,64 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
   // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
   const decalage = data.siteType === 'Agence' ? 1 : 0;
   const agentsPostes = Array.isArray(data.agentsPostes) ? data.agentsPostes : [];
+  const cles = Array.isArray(data.cles) ? data.cles : [];
+  const lignesCles = [
+    ...cles,
+    ...Array.from({ length: Math.max(8 - cles.length, 0) }, () => ({
+      lieu: "",
+      perceptionMatin: "",
+      responsablePerceptionMatin: "",
+      reintegrationMatin: "",
+      responsableReintegrationMatin: "",
+      perceptionApresMidi: "",
+      responsablePerceptionApresMidi: "",
+      reintegrationApresMidi: "",
+      responsableReintegrationApresMidi: "",
+      observations: "",
+    })),
+  ];
   const vigilanceRows = VIGILANCE_SCHEMA.flatMap((group) => group.elements.map((element) => ({
     typePoint: group.type,
     element,
-    obs: data.pointsVigilance
-      .filter((point) => point.typePoint === group.type && point.element === element)
-      .map((point) => point.obs.trim())
-      .filter((observation) => observation && observation !== "-")
-      .join(" / "),
+    obs: (() => {
+      const points = data.pointsVigilance.filter((point) => point.typePoint === group.type && point.element === element);
+      const observations = points.map((point) => point.obs.trim()).filter((observation) => observation && observation !== "-");
+      if (observations.length) return observations.join(" / ");
+      const nonConforme = points.some((point) => point.statut.toLocaleLowerCase("fr") === "non conforme");
+      return nonConforme ? "Non conforme" : "RAS";
+    })(),
   })));
+  const lignesAnomalies = [
+    ...data.anomalies,
+    ...Array.from({ length: Math.max(3 - data.anomalies.length, 0) }, () => ({
+      heure: "",
+      camion: "",
+      transporteur: "",
+      titre: "",
+      casse: "",
+      manquant: "",
+      vides: "",
+      phn: "",
+      description: "",
+    })),
+  ];
+  const lignesViolations = [
+    ...data.violations,
+    ...Array.from({ length: Math.max(3 - data.violations.length, 0) }, () => ({
+      heure: "",
+      nomPrenom: "",
+      obs: "",
+      mesures: "",
+    })),
+  ];
+  const lignesDivers = [
+    ...data.divers,
+    ...Array.from({ length: Math.max(3 - data.divers.length, 0) }, () => ({
+      dateHeure: "",
+      faits: "",
+      mesures: "",
+    })),
+  ];
 
   return (
     <div className="crj-print-root space-y-4" data-printing-section={printSection || undefined}>
@@ -174,40 +233,44 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           </table>
         </div>
 
-        {/* 2 - MOUVEMENTS DES CLÉS */}
+        {/* 2 - HORAIRES DE PERCEPTION ET RÉINTÉGRATION DES CLÉS */}
         <div data-print-section="keys" data-print-selected={printSection === "keys" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="keys" title="2 - MOUVEMENTS DES CLES (PERCEPTION ET REINTEGRATION)" onPrint={handlePrintSection} />
-          <table className="w-full border-collapse border border-black text-center text-[9px]">
+          <PrintSectionTitle id="keys" title="2 - HORAIRES DE PERCEPTION ET REINTEGRATION CLES BUREAUX & MAGASINS & AUTRES" onPrint={handlePrintSection} />
+          <table className="w-full border-collapse border border-black text-center text-[8px]">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-black p-1">DATE</th>
-                <th className="border border-black p-1">NOM ET PRÉNOM</th>
-                <th className="border border-black p-1">MATRICULE</th>
-                <th className="border border-black p-1">HEURE DE SORTIE</th>
-                <th className="border border-black p-1">TYPE DE CLÉ</th>
-                <th className="border border-black p-1">NOMBRE DE CLÉS</th>
-                <th className="border border-black p-1">HEURE DE RETOUR</th>
-                <th className="border border-black p-1">LIEU</th>
+                <th rowSpan={2} className="border border-black p-1">LIEU</th>
+                <th colSpan={2} className="border border-black p-1">PERCEPTION MATIN</th>
+                <th colSpan={2} className="border border-black p-1">REINTEGRATION MATIN</th>
+                <th colSpan={2} className="border border-black p-1">PERCEPTION APRES MIDI</th>
+                <th colSpan={2} className="border border-black p-1">REINTEGRATION APRES MIDI</th>
+                <th rowSpan={2} className="border border-black p-1">OBS</th>
+              </tr>
+              <tr className="bg-gray-50">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <Fragment key={index}>
+                    <th className="border border-black p-1">Heure</th>
+                    <th className="border border-black p-1">Responsable</th>
+                  </Fragment>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {data.cles.length > 0 ? data.cles.map((c, i) => (
+              {lignesCles.map((c, i) => (
                 <tr key={i}>
-                  <td className="border border-black p-1">{c.date ? new Date(c.date).toLocaleDateString("fr-FR", { timeZone: "UTC" }) : "—"}</td>
-                  <td className="border border-black p-1">{dash(c.personne)}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.matricule)}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.heureSortie)}</td>
-                  <td className="border border-black p-1">{dash(c.typeCle)}</td>
-                  <td className="border border-black p-1">{c.nombreCles}</td>
-                  <td className="border border-black p-1 font-mono">{dash(c.heureRetour)}</td>
-                  <td className="border border-black p-1">{dash(c.lieu)}</td>
+                  <td className="border border-black p-1">{c.lieu}</td>
+                  <td className="border border-black p-1 font-mono">{c.perceptionMatin}</td>
+                  <td className="border border-black p-1">{c.responsablePerceptionMatin}</td>
+                  <td className="border border-black p-1 font-mono">{c.reintegrationMatin}</td>
+                  <td className="border border-black p-1">{c.responsableReintegrationMatin}</td>
+                  <td className="border border-black p-1 font-mono">{c.perceptionApresMidi}</td>
+                  <td className="border border-black p-1">{c.responsablePerceptionApresMidi}</td>
+                  <td className="border border-black p-1 font-mono">{c.reintegrationApresMidi}</td>
+                  <td className="border border-black p-1">{c.responsableReintegrationApresMidi}</td>
+                  <td className="border border-black p-1">{c.observations}</td>
                 </tr>
-              )) : (
-                <tr>
-                  <td colSpan={8} className="border border-black p-1 text-gray-500 italic">Aucun mouvement de clé enregistré ce jour.</td>
-                </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
@@ -224,10 +287,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <th className="border border-black p-1">TRANSPORTEUR</th>
                   <th className="border border-black p-1">N° TITRE / FACTURE</th>
                   <th className="border border-black p-1">PLOMB</th>
-                  <th className="border border-black p-1">HD</th>
-                  <th className="border border-black p-1">HF</th>
-                  <th className="border border-black p-1">COMPTAGE</th>
-                  <th className="border border-black p-1">PROVENANCE</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,14 +296,10 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1">{d.transporteur}</td>
                     <td className="border border-black p-1 font-mono">{d.titre}</td>
                     <td className="border border-black p-1 font-mono">{d.plomb}</td>
-                    <td className="border border-black p-1 font-mono">{d.heureDebut}</td>
-                    <td className="border border-black p-1 font-mono">{d.heureFin}</td>
-                    <td className="border border-black p-1">{d.comptage}</td>
-                    <td className="border border-black p-1">{d.provenance}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={8} className="border border-black p-1 text-gray-500 italic">Aucun déchargement ce jour.</td>
+                    <td colSpan={4} className="border border-black p-1 text-gray-500 italic">Aucun déchargement ce jour.</td>
                   </tr>
                 )}
               </tbody>
@@ -261,10 +316,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <th className="border border-black p-1">TRANSPORTEUR</th>
                   <th className="border border-black p-1">N° TITRE / FACTURE</th>
                   <th className="border border-black p-1">PLOMB</th>
-                  <th className="border border-black p-1">HD</th>
-                  <th className="border border-black p-1">HF</th>
-                  <th className="border border-black p-1">COMPTAGE</th>
-                  <th className="border border-black p-1">PROVENANCE</th>
                   <th className="border border-black p-1">DESTINATION</th>
                 </tr>
               </thead>
@@ -275,15 +326,11 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1">{c.transporteur}</td>
                     <td className="border border-black p-1 font-mono">{c.titre}</td>
                     <td className="border border-black p-1 font-mono">{c.plomb}</td>
-                    <td className="border border-black p-1 font-mono">{c.heureDebut}</td>
-                    <td className="border border-black p-1 font-mono">{c.heureFin}</td>
-                    <td className="border border-black p-1">{c.comptage}</td>
-                    <td className="border border-black p-1">{c.provenance}</td>
                     <td className="border border-black p-1">{c.destination}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={9} className="border border-black p-1 text-gray-500 italic">Aucun chargement ce jour.</td>
+                    <td colSpan={5} className="border border-black p-1 text-gray-500 italic">Aucun chargement ce jour.</td>
                   </tr>
                 )}
               </tbody>
@@ -351,53 +398,16 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           </table>
         </div>
 
-        {/* ANOMALIES */}
-        <div data-print-section="anomalies" data-print-selected={printSection === "anomalies" ? "true" : undefined}>
-          <PrintMeta data={data} />
-          <PrintSectionTitle id="anomalies" title={`${6 + decalage} - ANOMALIES`} onPrint={handlePrintSection} />
-          <table className="w-full border-collapse border border-black text-center text-[9px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-black p-1">DATE</th>
-                <th className="border border-black p-1">HEURE</th>
-                <th className="border border-black p-1">POSTE</th>
-                <th className="border border-black p-1">NATURE</th>
-                <th className="border border-black p-1">ANOMALIE</th>
-                <th className="border border-black p-1">MESURES PRISES</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.anomalies.length > 0 ? data.anomalies.map((anomalie, index) => (
-                <tr key={`${anomalie.date}-${anomalie.heure}-${index}`}>
-                  <td className="border border-black p-1">{anomalie.date}</td>
-                  <td className="border border-black p-1 font-mono">{anomalie.heure}</td>
-                  <td className="border border-black p-1 text-left">{anomalie.poste}</td>
-                  <td className="border border-black p-1 text-left">{anomalie.nature}</td>
-                  <td className="border border-black p-1 text-left">{anomalie.anomalie}</td>
-                  <td className="border border-black p-1 text-left">{anomalie.mesures}</td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={6} className="border border-black p-1 text-gray-500 italic">Aucune anomalie enregistrée ce jour.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
         {/* POINTS DE VIGILANCE */}
         <div data-print-section="vigilance" data-print-selected={printSection === "vigilance" ? "true" : undefined}>
           <PrintMeta data={data} />
+          <PrintSectionTitle id="vigilance" title={`${7 + decalage} - POINTS DE VIGILANCE`} onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-[10px]">
             <thead>
               <tr className="bg-gray-100">
-                <th className="w-[25%] border border-black p-1 text-left">
-                  <span>{8 + decalage} - POINTS DE VIGILANCE</span>
-                  <Button type="button" size="sm" variant="outline" className="ml-2 h-7 gap-1 px-2 text-xs print:hidden" onClick={() => handlePrintSection("vigilance")}>
-                    <Printer className="h-3 w-3" /> A4
-                  </Button>
-                </th>
-                <th colSpan={2} className="border border-black p-1 text-center">OBSERVATIONS</th>
+                <th className="w-[14%] border border-black p-1" />
+                <th className="w-[18%] border border-black p-1" />
+                <th className="border border-black p-1 text-center">OBSERVATIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -405,9 +415,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                 const row = vigilanceRows.find((item) => item.typePoint === group.type && item.element === element);
                 return (
                   <tr key={`${group.type}-${element}`}>
-                    {index === 0 && <td rowSpan={group.elements.length} className="w-[25%] border border-black p-1 align-middle font-medium">{group.type}</td>}
+                    {index === 0 && <td rowSpan={group.elements.length} className="w-[14%] border border-black p-1 align-middle text-center font-medium">{group.type}</td>}
                     <td className="w-[18%] border border-black p-1">{element}</td>
-                    <td className="w-[57%] border border-black p-1 text-left">{row?.obs}</td>
+                    <td className="border border-black p-1 text-center">{row?.obs || "RAS"}</td>
                   </tr>
                 );
               }))}
@@ -415,10 +425,96 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
           </table>
         </div>
 
+        {/* ANOMALIES */}
+        <div data-print-section="anomalies" data-print-selected={printSection === "anomalies" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="anomalies" title={`${8 + decalage} - ANOMALIES`} onPrint={handlePrintSection} />
+          <table className="w-full table-fixed border-collapse border border-black text-center text-[9px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="w-[10%] border border-black p-1">HEURE</th>
+                <th className="w-[9%] border border-black p-1">N° CAMION</th>
+                <th className="w-[11%] border border-black p-1">TRANSPORTEUR</th>
+                <th className="w-[9%] border border-black p-1">TITRE</th>
+                <th className="w-[9%] border border-black p-1">CASSE</th>
+                <th className="w-[9%] border border-black p-1">MANQUANT</th>
+                <th className="w-[9%] border border-black p-1">VIDES</th>
+                <th className="w-[8%] border border-black p-1">PHN</th>
+                <th className="w-[26%] border border-black p-1">DESCRIPTION DES FAITS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignesAnomalies.map((anomalie, index) => (
+                <tr key={`${anomalie.heure}-${index}`}>
+                  <td className="h-5 border border-black p-1 font-mono">{anomalie.heure}</td>
+                  <td className="border border-black p-1">{anomalie.camion}</td>
+                  <td className="border border-black p-1">{anomalie.transporteur}</td>
+                  <td className="border border-black p-1">{anomalie.titre}</td>
+                  <td className="border border-black p-1">{anomalie.casse}</td>
+                  <td className="border border-black p-1">{anomalie.manquant}</td>
+                  <td className="border border-black p-1">{anomalie.vides}</td>
+                  <td className="border border-black p-1">{anomalie.phn}</td>
+                  <td className="border border-black p-1 text-left">{anomalie.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* VIOLATIONS DE PROCEDURE */}
+        <div data-print-section="violations" data-print-selected={printSection === "violations" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="violations" title={`${9 + decalage} - VIOLATION DE PROCEDURE`} onPrint={handlePrintSection} />
+          <table className="w-full border-collapse border border-black text-center text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="w-[15%] border border-black p-1">HEURE</th>
+                <th className="w-[26%] border border-black p-1">NOM &amp; PRENOM</th>
+                <th className="w-[34%] border border-black p-1">OBSERVATIONS</th>
+                <th className="w-[25%] border border-black p-1">MESURES PRISES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignesViolations.map((violation, index) => (
+                <tr key={`${violation.heure}-${index}`}>
+                  <td className="h-5 border border-black p-1 font-mono">{violation.heure}</td>
+                  <td className="border border-black p-1">{violation.nomPrenom}</td>
+                  <td className="border border-black p-1 text-left">{violation.obs}</td>
+                  <td className="border border-black p-1 text-left">{violation.mesures}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* DIVERS */}
+        <div data-print-section="divers" data-print-selected={printSection === "divers" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="divers" title={`${10 + decalage} - DIVERS`} onPrint={handlePrintSection} />
+          <table className="w-full border-collapse border border-black text-center text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="w-[15%] border border-black p-1">DATE ET HEURE</th>
+                <th className="w-[45%] border border-black p-1">FAITS</th>
+                <th className="w-[40%] border border-black p-1">MESURES PRISES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignesDivers.map((item, index) => (
+                <tr key={`${item.dateHeure}-${index}`}>
+                  <td className="h-5 border border-black p-1">{item.dateHeure}</td>
+                  <td className="border border-black p-1 text-left">{item.faits}</td>
+                  <td className="border border-black p-1 text-left">{item.mesures}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         {/* RONDES */}
         <div data-print-section="rondes" data-print-selected={printSection === "rondes" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="rondes" title={`${9 + decalage} - RONDES`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="rondes" title={`${11 + decalage} - RONDES`} onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
