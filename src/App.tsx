@@ -151,6 +151,7 @@ export default function App() {
           <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
           <Route path="courrier" element={<Courrier />} />
           <Route path="anomalie" element={<Anomalie/>} />
+          <Route path="violations-procedure" element={<Anomalie initialType="VIOLATION_PROCEDURE" />} />
           <Route path="alcootest" element={<Alcootest />} />
           <Route path="test-alcool" element={<Navigate to="/dashboard/alcootest" replace />} />
           <Route path="consigne" element={<Consignes />} />

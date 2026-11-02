@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ContactRound, FileText, Handshake, LogOut, PhoneCall, Search, ShieldCheck, Users } from "lucide-react";
+import { ChevronDown, ContactRound, Handshake, LogOut, PhoneCall, Search, ShieldCheck, Users } from "lucide-react";
 import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
@@ -53,7 +53,6 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
 
   const circuitItems = [
     { to: "/dashboard/prise-de-poste", label: "Prise de service", icon: Users },
-    { to: "/dashboard/main-courante", label: "Main courante", icon: FileText },
     { to: activePostId ? `/dashboard/postes/${activePostId}#urgences` : "/dashboard/postes", label: "Urgences", icon: PhoneCall },
     { to: "/dashboard/passation", label: "Passation", icon: Handshake },
   ];
@@ -72,7 +71,6 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
       const sections = [
         { title: "POSTE", items: circuitItems.filter((item) => item.label === "Prise de service") },
         { title: "URGENCES", items: circuitItems.filter((item) => item.label === "Urgences") },
-        { title: "MAIN COURANTE", items: circuitItems.filter((item) => item.label === "Main courante") },
         { title: "CAHIERS D’ENREGISTREMENT", items: registerItems },
         { title: "PRESTATAIRES & SOUS-TRAITANTS", items: providerItems },
         { title: "PASSATION", items: circuitItems.filter((item) => item.label === "Passation") },
