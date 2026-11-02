@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { CalendarDays, Plus, Printer, RotateCcw, Save, Trash2 } from "lucide-react";
+import { CalendarDays, Printer, RotateCcw, Save } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
@@ -54,8 +54,6 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
   const [agentsByKey, setAgentsByKey] = useState<Record<string, Record<string, Agent[]>>>({});
   const [saving, setSaving] = useState(false);
   const [savingConfiguration, setSavingConfiguration] = useState(false);
-  const [newPostName, setNewPostName] = useState("");
-  const [newPostCount, setNewPostCount] = useState(1);
   const activeSiteId = siteId || sites[0]?.id || "";
   const employees = employeesBySite[activeSiteId] ?? [];
   const contextKey = `${activeSiteId}:${service}:${date}`;
@@ -176,33 +174,6 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
     void persistConfiguration(next);
   };
 
-  const addPost = () => {
-    const name = newPostName.trim().replace(/\s+/g, " ").toLocaleUpperCase("fr");
-    if (!name) {
-      toast.error("Saisissez le nom du poste à ajouter.");
-      return;
-    }
-    if (Object.keys(agents).some((poste) => poste.toLocaleUpperCase("fr") === name)) {
-      toast.error("Ce poste existe déjà pour ce service.");
-      return;
-    }
-    const next = { ...agents, [name]: Array.from({ length: newPostCount }, blankAgent) };
-    void persistConfiguration(next).then((saved) => {
-      if (saved) {
-        setNewPostName("");
-        setNewPostCount(1);
-        toast.success(`Poste ${name} enregistré dans la base de données.`);
-      }
-    });
-  };
-
-  const removePost = (poste: string) => {
-    if (!window.confirm(`Supprimer le poste « ${poste} » et ses lignes du pointage ${service} ?`)) return;
-    const next = { ...agents };
-    delete next[poste];
-    void persistConfiguration(next);
-  };
-
   return <div className="space-y-5">
     {showHeader && <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />}
     <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service de pointage">
@@ -228,22 +199,10 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
           <button onClick={() => window.print()} className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90"><Printer className="size-4" /> Imprimer</button>
         </div>
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">Les postes et les effectifs sont enregistrés immédiatement en base. Cliquez sur Enregistrer pour sauvegarder les agents du pointage.</p>
-      <div className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4 print:hidden">
-        <div className="min-w-52 flex-1">
-          <label htmlFor="new-aps-post" className="mb-1.5 block text-sm font-medium">Ajouter un poste</label>
-          <input id="new-aps-post" value={newPostName} onChange={(event) => setNewPostName(event.target.value)} placeholder="Nom du nouveau poste" className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
-        </div>
-        <div>
-          <label htmlFor="new-aps-count" className="mb-1.5 block text-sm font-medium">Nombre de personnes</label>
-          <select id="new-aps-count" value={newPostCount} onChange={(event) => setNewPostCount(Number(event.target.value))} className="h-10 rounded-md border bg-background px-3 text-sm">
-            {Array.from({ length: 30 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}
-          </select>
-        </div>
-        <button type="button" onClick={addPost} disabled={loading || saving || savingConfiguration || !activeSiteId} className="inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-50">
-          <Plus className="size-4" /> Ajouter le poste
-        </button>
-      </div>
+      <p className="mt-3 text-xs text-muted-foreground">Les postes proviennent de l’administration. Les effectifs sont enregistrés immédiatement ; cliquez sur Enregistrer pour sauvegarder les agents du pointage.</p>
+      <p className="mt-4 border-t pt-4 text-xs text-muted-foreground print:hidden">
+        Les postes affichés sont gérés par l’administration. Ajustez l’effectif de chaque poste dans le tableau ci-dessous.
+      </p>
     </section>
     {loading && <p className="text-sm text-muted-foreground">Chargement du pointage enregistre...</p>}
     <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
@@ -251,12 +210,9 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
         <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>
           <th className="w-36 border-b px-4 py-3">Poste</th><th className="w-48 border-b px-4 py-3">Nom</th><th className="w-48 border-b px-4 py-3">Pr&#233;nom</th><th className="w-36 border-b px-4 py-3">Matricule</th><th className="w-36 border-b px-4 py-3">Heure d&#8217;entr&#233;e</th><th className="w-36 border-b px-4 py-3">Heure de sortie</th><th className="border-b px-4 py-3">Observation</th>
         </tr></thead>
-        <tbody>{displayedPostes.map((poste) => agents[poste.name].map((agent, index) => <tr key={`${poste.name}-${index}`} className="group hover:bg-muted/30">
+        <tbody>{displayedPostes.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste actif n’est configuré pour ce site dans l’administration.</td></tr> : displayedPostes.map((poste) => agents[poste.name].map((agent, index) => <tr key={`${poste.name}-${index}`} className="group hover:bg-muted/30">
           {index === 0 && <th rowSpan={poste.count} className="border-b bg-muted/20 px-4 py-3 align-top font-semibold">
-            <div className="flex items-start justify-between gap-2">
-              <span>{poste.name}</span>
-              <button type="button" onClick={() => removePost(poste.name)} disabled={savingConfiguration || saving} aria-label={`Supprimer le poste ${poste.name}`} title="Supprimer le poste" className="rounded p-1 text-destructive hover:bg-destructive/10 disabled:opacity-50 print:hidden"><Trash2 className="size-4" /></button>
-            </div>
+            <span>{poste.name}</span>
             <label className="mt-2 block text-xs font-normal text-muted-foreground">
               Effectif
               <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => setPostCount(poste.name, Number(event.target.value))} className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
