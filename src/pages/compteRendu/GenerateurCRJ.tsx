@@ -152,8 +152,9 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
   }
   const agentPostRows = AGENT_POST_ROWS.map((row, rowIndex) => {
     if (!row.post) return { ...row, jour: undefined, nuit: undefined };
-    const agents = agentsPostes.find((item) => normalizePost(item.poste) === normalizePost(row.post));
-    const index = AGENT_POST_ROWS.slice(0, rowIndex).filter((previous) => previous.post === row.post).length;
+    const postName = row.post;
+    const agents = agentsPostes.find((item) => normalizePost(item.poste) === normalizePost(postName));
+    const index = AGENT_POST_ROWS.slice(0, rowIndex).filter((previous) => previous.post === postName).length;
     return {
       ...row,
       jour: agents?.jour[index],
