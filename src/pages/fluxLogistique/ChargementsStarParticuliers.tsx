@@ -349,11 +349,11 @@ export default function ChargementsStarParticuliers() {
           </Tabs>
           <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="loading-start-time">Heure de début (HD)</Label>
+              <Label htmlFor="loading-start-time">Heure d'entrée (HE)</Label>
               <Input id="loading-start-time" type="time" required value={form.heureDebut ?? ""} onChange={(event) => setForm({ ...form, heureDebut: event.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="loading-exit-time">Heure de fin (HF)</Label>
+              <Label htmlFor="loading-exit-time">Heure de sortie (HS)</Label>
               <Input id="loading-exit-time" type="time" required value={form.heureSortie} onChange={(event) => setForm({ ...form, heureSortie: event.target.value })} />
             </div>
             <div className="space-y-1.5">
@@ -536,7 +536,7 @@ export default function ChargementsStarParticuliers() {
             <div className="max-h-[560px] overflow-auto">
               <table className="w-full min-w-[1450px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
-                  <tr>{["HD", "HF", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
+                  <tr>{["HE", "HS", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (

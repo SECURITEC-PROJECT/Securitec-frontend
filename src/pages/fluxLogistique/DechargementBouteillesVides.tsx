@@ -344,11 +344,11 @@ export default function DechargementBouteillesVides() {
                 <Input id="empty-bottles-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="empty-bottles-arrival">Heure de début (HD)</Label>
+                <Label htmlFor="empty-bottles-arrival">Heure d'entréet (HE)</Label>
                 <Input id="empty-bottles-arrival" type="time" readOnly value={editingEntry?.heureArrivee || time} className="bg-muted/50 text-muted-foreground" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="empty-bottles-end">Heure de fin (HF)</Label>
+                <Label htmlFor="empty-bottles-end">Heure de Sortie (HS)</Label>
                 <Input id="empty-bottles-end" type="time" value={form.heureFin} onChange={(event) => setForm({ ...form, heureFin: event.target.value })} />
               </div>
               <div className="space-y-1.5">
@@ -530,7 +530,7 @@ export default function DechargementBouteillesVides() {
           <table className="w-full min-w-[1400px] border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-muted">
               <tr>
-                {["Date", "HD", "HF", "Immatriculation", "Nom du chauffeur", "N° titre", "N° plomb", "Comptage", "Provenance", "Poids", "Actions"].map((heading) => (
+                {["Date", "HE", "HS", "Immatriculation", "Nom du chauffeur", "N° titre", "N° plomb", "Comptage", "Provenance", "Poids", "Actions"].map((heading) => (
                   <th key={heading} className="border-b px-3 py-2 font-medium">{heading}</th>
                 ))}
               </tr>
