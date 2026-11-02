@@ -107,28 +107,37 @@ export default function PriseDePoste() {
   // Option 2 : Terminer simplement (clôture immédiate)
   const handleChoiceTerminateOnly = async () => {
     if (!selectedShiftForEnd) return;
-    await executeEndService(selectedShiftForEnd.id);
+    const serviceId = selectedShiftForEnd.serviceId || selectedShiftForEnd.id;
+    const ended = await executeEndService(serviceId);
+    if (!ended) return;
     setIsModalOpen(false);
+    setSelectedShiftForEnd(null);
     toast.success(`Service terminé pour ${selectedShiftForEnd.nom} ${selectedShiftForEnd.prenom}`);
   };
 
-  const executeEndService = async (shiftId: string) => {
+  const executeEndService = async (serviceId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_URL}/shifts/${shiftId}/end`, {
+      const response = await fetch(`${API_URL}/shifts/${serviceId}/end`, {
         method: "PUT",
         headers: authHeaders(),
       });
-      if (!response.ok) throw new Error("Erreur clôture");
-      const updatedShift = await response.json();
-      setShifts((prev) => prev.map((s) => (s.serviceId === shiftId || s.id === shiftId ? { ...s, ended_at: updatedShift.ended_at } : s)));
-      const endedService = shifts.find((shift) => shift.serviceId === shiftId || shift.id === shiftId);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erreur lors de la clôture du service.");
+      setShifts((prev) => prev.map((shift) => (
+        shift.serviceId === serviceId || shift.id === serviceId
+          ? { ...shift, ended_at: result.ended_at }
+          : shift
+      )));
+      const endedService = shifts.find((shift) => shift.serviceId === serviceId || shift.id === serviceId);
       if (endedService?.siteId && endedService.posteId) {
         for (const key of [`securitec-active-shift:${endedService.siteId}:${endedService.posteId}`, `securitec-logistics-shift:${endedService.siteId}:${endedService.posteId}`]) {
-          if (localStorage.getItem(key) === shiftId) localStorage.removeItem(key);
+          if (localStorage.getItem(key) === serviceId) localStorage.removeItem(key);
         }
       }
+      return true;
     } catch (error) {
-      toast.error("Erreur lors de la clôture du service.");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la clôture du service.");
+      return false;
     }
   };
 
