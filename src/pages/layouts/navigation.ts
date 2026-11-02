@@ -54,7 +54,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/chargements-star-particuliers", label: "Chargements Star et particuliers", icon: Truck },
       { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitant", icon: Wrench },
       { to: "/dashboard/enregistrements-ordures", label: "Enregistrements Ordures", icon: Trash2 },
-      { to: "/dashboard/ordures", label: "Ordures", icon: Trash2 },
+      { to: "/dashboard/ordures", label: "Déchets", icon: Trash2 },
       { to: "/dashboard/ferrailles", label: "Ferrailles", icon: Wrench },
       { to: "/dashboard/mouvement-velos", label: "Mouvement Vélos", icon: Bike },
       { to: "/dashboard/mouvement-moto", label: "Mouvement Moto", icon: CarFront },
