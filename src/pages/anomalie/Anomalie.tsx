@@ -13,10 +13,14 @@ import { confirmDeletion } from "@/lib/deletion-toast";
 type AnomalieForm = {
   date: string;
   heure: string;
-  poste: string;
-  nature: string;
-  anomalie: string;
-  mesures: string;
+  camion: string;
+  transporteur: string;
+  titre: string;
+  casse: string;
+  manquant: string;
+  vides: string;
+  phn: string;
+  description: string;
   posteIds: string[];
 };
 
@@ -24,10 +28,14 @@ type AnomalieEntry = {
   id: string;
   date: string;
   time: string;
-  person: string | null;
-  observations: string | null;
+  camion: string | null;
+  transporteur: string | null;
+  document: string | null;
+  broken: string | null;
+  missing: string | null;
+  empty: string | null;
+  phn: string | null;
   facts: string | null;
-  measures: string | null;
   siteName?: string;
 };
 
@@ -35,7 +43,19 @@ type AnomalieType = "ANOMALIE" | "DIVERS";
 
 const today = () => new Date().toLocaleDateString("en-CA");
 const currentTime = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const blankForm = (): AnomalieForm => ({ date: today(), heure: currentTime(), poste: "", nature: "", anomalie: "", mesures: "", posteIds: [] });
+const blankForm = (): AnomalieForm => ({
+  date: today(),
+  heure: currentTime(),
+  camion: "",
+  transporteur: "",
+  titre: "",
+  casse: "",
+  manquant: "",
+  vides: "",
+  phn: "",
+  description: "",
+  posteIds: [],
+});
 
 export default function Anomalie() {
   const { sites, siteError } = useSites();
@@ -55,7 +75,7 @@ export default function Anomalie() {
 
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
   const filteredEntries = visibleEntries.filter((entry) =>
-    [entry.date, entry.time, entry.person, entry.observations, entry.facts, entry.measures]
+    [entry.date, entry.time, entry.camion, entry.transporteur, entry.document, entry.broken, entry.missing, entry.empty, entry.phn, entry.facts]
       .filter(Boolean)
       .join(" ")
       .normalize("NFD")
@@ -102,10 +122,14 @@ export default function Anomalie() {
         type: activeType,
         date: form.date,
         time: form.heure,
-        person: form.poste,
-        observations: form.nature,
-        facts: form.anomalie,
-        measures: form.mesures,
+        camion: form.camion,
+        transporteur: form.transporteur,
+        document: form.titre,
+        broken: form.casse,
+        missing: form.manquant,
+        empty: form.vides,
+        phn: form.phn,
+        facts: form.description,
         siteId,
         posteIds: form.posteIds,
       };
@@ -130,10 +154,14 @@ export default function Anomalie() {
     setForm({
       date: String(entry.date).slice(0, 10),
       heure: entry.time || "",
-      poste: entry.person || "",
-      nature: entry.observations || "",
-      anomalie: entry.facts || "",
-      mesures: entry.measures || "",
+      camion: entry.camion || "",
+      transporteur: entry.transporteur || "",
+      titre: entry.document || "",
+      casse: entry.broken || "",
+      manquant: entry.missing || "",
+      vides: entry.empty || "",
+      phn: entry.phn || "",
+      description: entry.facts || "",
       posteIds: [],
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -200,18 +228,26 @@ export default function Anomalie() {
         <div><h2 className="font-semibold">{editingId ? `Modifier ${sectionName.toLocaleLowerCase("fr")}` : `Nouveau signalement : ${sectionName.toLocaleLowerCase("fr")}`}</h2><p className="text-sm text-muted-foreground">Renseignez les informations du signalement.</p></div>
       </div>
       <form onSubmit={(event) => void submit(event)} className="space-y-4 p-4 sm:p-6">
-        <div className="space-y-1.5"><label htmlFor="anomalie-date" className="text-sm font-medium">Date</label><input id="anomalie-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
-        <div className="space-y-1.5"><label htmlFor="anomalie-heure" className="text-sm font-medium">Heure</label><input id="anomalie-heure" type="time" required value={form.heure} onChange={(event) => setForm({ ...form, heure: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
-        <div className="space-y-1.5"><label htmlFor="anomalie-poste" className="text-sm font-medium">Poste</label><textarea id="anomalie-poste" required maxLength={255} rows={2} value={form.poste} onChange={(event) => setForm({ ...form, poste: event.target.value })} placeholder="Poste concerne" className="min-h-[72px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5"><label htmlFor="anomalie-date" className="text-sm font-medium">Date</label><input id="anomalie-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
+          <div className="space-y-1.5"><label htmlFor="anomalie-heure" className="text-sm font-medium">Heure</label><input id="anomalie-heure" type="time" required value={form.heure} onChange={(event) => setForm({ ...form, heure: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5"><label htmlFor="anomalie-camion" className="text-sm font-medium">N° CAMION</label><Input id="anomalie-camion" maxLength={160} value={form.camion} onChange={(event) => setForm({ ...form, camion: event.target.value })} placeholder="Immatriculation du camion" className="h-11" /></div>
+          <div className="space-y-1.5"><label htmlFor="anomalie-transporteur" className="text-sm font-medium">TRANSPORTEUR</label><Input id="anomalie-transporteur" maxLength={255} value={form.transporteur} onChange={(event) => setForm({ ...form, transporteur: event.target.value })} placeholder="Nom du transporteur" className="h-11" /></div>
+          <div className="space-y-1.5"><label htmlFor="anomalie-titre" className="text-sm font-medium">TITRE</label><Input id="anomalie-titre" maxLength={160} value={form.titre} onChange={(event) => setForm({ ...form, titre: event.target.value })} placeholder="N° titre / document" className="h-11" /></div>
+          <div className="space-y-1.5"><label htmlFor="anomalie-casse" className="text-sm font-medium">CASSE</label><Input id="anomalie-casse" maxLength={2000} value={form.casse} onChange={(event) => setForm({ ...form, casse: event.target.value })} placeholder="Produit et quantité" className="h-11" /></div>
+          <div className="space-y-1.5"><label htmlFor="anomalie-manquant" className="text-sm font-medium">MANQUANT</label><Input id="anomalie-manquant" maxLength={2000} value={form.manquant} onChange={(event) => setForm({ ...form, manquant: event.target.value })} placeholder="Produit et quantité manquante" className="h-11" /></div>
+          <div className="space-y-1.5"><label htmlFor="anomalie-vides" className="text-sm font-medium">VIDES</label><Input id="anomalie-vides" maxLength={2000} value={form.vides} onChange={(event) => setForm({ ...form, vides: event.target.value })} placeholder="Type et quantité de vides" className="h-11" /></div>
+          <div className="space-y-1.5 sm:col-span-2"><label htmlFor="anomalie-phn" className="text-sm font-medium">PHN</label><Input id="anomalie-phn" maxLength={2000} value={form.phn} onChange={(event) => setForm({ ...form, phn: event.target.value })} placeholder="Produit hors normes et quantité" className="h-11" /></div>
+        </div>
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-sm font-medium">Diffuser la consigne générée aux postes</p>
           <p className="text-xs text-muted-foreground">Sans sélection, elle sera visible à tous les postes du site.</p>
           {posts.length ? <div className="grid gap-2 sm:grid-cols-2">{posts.map((post) => <label key={post.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.posteIds.includes(post.id)} onChange={(event) => setForm((current) => ({ ...current, posteIds: event.target.checked ? [...current.posteIds, post.id] : current.posteIds.filter((id) => id !== post.id) }))} />{post.nom}</label>)}</div> : <p className="text-xs text-muted-foreground">Aucun poste configuré; la diffusion se fera à l’échelle du site.</p>}
         </div>
         <div className="col-span-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning-foreground lg:col-span-4"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><p>À l’enregistrement, les responsables du site recevront une notification dans l’application et une consigne active sera créée automatiquement.</p></div>
-        <div className="space-y-1.5"><label htmlFor="anomalie-nature" className="text-sm font-medium">Nature</label><textarea id="anomalie-nature" required maxLength={20000} rows={3} value={form.nature} onChange={(event) => setForm({ ...form, nature: event.target.value })} placeholder="Nature de l'anomalie" className="min-h-[96px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
-        <div className="space-y-1.5"><label htmlFor="anomalie-faits" className="text-sm font-medium">Description des faits</label><textarea id="anomalie-faits" required maxLength={20000} rows={4} value={form.anomalie} onChange={(event) => setForm({ ...form, anomalie: event.target.value })} placeholder="Décrire les faits constatés" className="min-h-[120px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
-        <div className="space-y-1.5"><label htmlFor="anomalie-ecart" className="text-sm font-medium">Ecart</label><textarea id="anomalie-ecart" maxLength={20000} rows={3} value={form.mesures} onChange={(event) => setForm({ ...form, mesures: event.target.value })} placeholder="Décrire l'écart constaté" className="min-h-[96px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
+        <div className="space-y-1.5"><label htmlFor="anomalie-faits" className="text-sm font-medium">DESCRIPTION DES FAITS</label><textarea id="anomalie-faits" required maxLength={20000} rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Décrire les faits constatés" className="min-h-[120px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
           {editingId && <Button type="button" variant="outline" disabled={saving} onClick={cancelEdit} className="h-11 w-full gap-2 sm:w-auto"><X className="size-4" />Annuler</Button>}
           <Button type="submit" disabled={saving || !siteId} className="h-11 w-full gap-2 sm:w-auto sm:min-w-40">{editingId ? <Pencil className="size-4" /> : <Plus className="size-4" />}{saving ? "Enregistrement..." : editingId ? "Enregistrer les modifications" : "Enregistrer"}</Button>
@@ -231,33 +267,36 @@ export default function Anomalie() {
         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           aria-label="Rechercher une anomalie"
-          placeholder="Rechercher par date, poste, nature, anomalie ou écart…"
+          placeholder="Rechercher par date, heure, camion, transporteur, titre ou faits…"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="min-h-11 pl-9"
         />
       </div>
       <div className="overflow-x-auto rounded-xl border bg-card print:hidden">
-        <table className="w-full min-w-[1250px] table-fixed border-collapse text-left text-sm">
+        <table className="w-full min-w-[1400px] table-fixed border-collapse text-left text-sm">
           <thead className="bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
-            {(["Date", "Heure", "Poste", "Nature", "Anomalie", "Ecart"] as const).map((heading, index) => <th key={heading} className={`border-b px-4 py-3 ${[0, 1].includes(index) ? "w-24" : index === 2 ? "w-40" : index === 3 ? "w-48" : "w-[360px]"}`}>{heading}</th>)}
+            {(["HEURE", "N° CAMION", "TRANSPORTEUR", "TITRE", "CASSE", "MANQUANT", "VIDES", "PHN", "DESCRIPTION DES FAITS"] as const).map((heading, index) => <th key={heading} className={`border-b px-3 py-3 ${index === 0 ? "w-24" : index === 8 ? "w-[360px]" : "w-36"}`}>{heading}</th>)}
             <th className="w-28 border-b px-4 py-3 text-right">Actions</th>
           </tr></thead>
           <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
-            <td className="whitespace-nowrap border-b px-4 py-3">{String(entry.date).slice(0, 10)}</td>
-            <td className="whitespace-nowrap border-b px-4 py-3">{entry.time}</td>
-            <td className="whitespace-pre-wrap break-words border-b px-4 py-3">{entry.person || "-"}</td>
-            <td className="whitespace-pre-wrap break-words border-b px-4 py-3">{entry.observations || "-"}</td>
-            <td className="whitespace-pre-wrap break-words border-b px-4 py-3">{entry.facts || "-"}</td>
-            <td className="whitespace-pre-wrap break-words border-b px-4 py-3">{entry.measures || "-"}</td>
+            <td className="whitespace-nowrap border-b px-3 py-3">{entry.time || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.camion || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.transporteur || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.document || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.broken || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.missing || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.empty || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.phn || "-"}</td>
+            <td className="whitespace-pre-wrap break-words border-b px-3 py-3">{entry.facts || "-"}</td>
             <td className="border-b px-2 py-3"><div className="flex justify-end gap-1">
               <Button type="button" variant="ghost" size="icon" aria-label="Modifier l'anomalie" title="Modifier" onClick={() => editEntry(entry)}><Pencil className="size-4" /></Button>
               <Button type="button" variant="ghost" size="icon" aria-label="Supprimer l'anomalie" title="Supprimer" onClick={() => void deleteEntry(entry)} className="text-destructive hover:text-destructive"><Trash2 className="size-4" /></Button>
             </div></td>
           </tr>)}
-          {!loading && visibleEntries.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Aucun signalement enregistré pour cette section.</td></tr>}
-          {!loading && visibleEntries.length > 0 && filteredEntries.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Aucun signalement ne correspond à votre recherche.</td></tr>}
-          {loading && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Chargement...</td></tr>}</tbody>
+          {!loading && visibleEntries.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">Aucun signalement enregistré pour cette section.</td></tr>}
+          {!loading && visibleEntries.length > 0 && filteredEntries.length === 0 && <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">Aucun signalement ne correspond à votre recherche.</td></tr>}
+          {loading && <tr><td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">Chargement...</td></tr>}</tbody>
         </table>
       </div>
       <div className="anomalies-print hidden">
@@ -265,17 +304,20 @@ export default function Anomalie() {
         <p className="mb-4 text-sm">Site : {sites.find((site) => site.id === siteId)?.name || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
         <table>
           <thead>
-            <tr>{["Date", "Heure", "Poste", "Nature", "Anomalie", "Ecart"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+            <tr>{["HEURE", "N° CAMION", "TRANSPORTEUR", "TITRE", "CASSE", "MANQUANT", "VIDES", "PHN", "DESCRIPTION DES FAITS"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
           </thead>
           <tbody>
             {visibleEntries.map((entry) => (
               <tr key={entry.id}>
-                <td>{String(entry.date).slice(0, 10)}</td>
                 <td>{entry.time || "—"}</td>
-                <td>{entry.person || "—"}</td>
-                <td>{entry.observations || "—"}</td>
+                <td>{entry.camion || "—"}</td>
+                <td>{entry.transporteur || "—"}</td>
+                <td>{entry.document || "—"}</td>
+                <td>{entry.broken || "—"}</td>
+                <td>{entry.missing || "—"}</td>
+                <td>{entry.empty || "—"}</td>
+                <td>{entry.phn || "—"}</td>
                 <td>{entry.facts || "—"}</td>
-                <td>{entry.measures || "—"}</td>
               </tr>
             ))}
           </tbody>

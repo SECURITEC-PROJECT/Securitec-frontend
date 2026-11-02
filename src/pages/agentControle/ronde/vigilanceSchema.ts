@@ -10,4 +10,14 @@ export const VIGILANCE_SCHEMA = [
       "Locaux techniques",
     ],
   },
+  {
+    type: "INTEGRITE DES VEHICULES STAR",
+    elements: [
+      "Roue de secours & batterie",
+      "Feux & rétroviseurs",
+      "Fermeture réservoir",
+      "État général de la carrosserie",
+      "Fermeture top case pour moto",
+    ],
+  },
 ] as const;

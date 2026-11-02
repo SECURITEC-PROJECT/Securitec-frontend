@@ -14,7 +14,7 @@ export interface QueuedLogisticsWrite {
 }
 
 const databaseName = "securitec-offline";
-const databaseVersion = 1;
+const databaseVersion = 2;
 const entryStore = "logistics-cache";
 const queueStore = "logistics-queue";
 
