@@ -47,7 +47,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/main-courante", label: "Main courante", icon: FileText },
       { to: "/dashboard/enregistrements-bon-facture-bon-sortie", label: "Enregistrements Bon / facture / Bon de sortie", icon: FileText },
       { to: "/dashboard/courrier", label: "Courrier", icon: Mail },
-      { to: "/dashboard/anomalie", label: "Anomalie", icon: AlertTriangle },
+      { to: "/dashboard/anomalie", label: "Anomalie & Divers", icon: AlertTriangle },
       { to: "/dashboard/rondes", label: "Patrouille ou ronde", icon: RouteIcon },
       { to: "/dashboard/points-vigilance", label: "Points de vigilance", icon: ShieldAlert },
       { to: "/dashboard/consigne", label: "Consignes", icon: FileWarning },

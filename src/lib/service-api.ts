@@ -856,7 +856,7 @@ export const serviceApi = {
   async deleteMotorcycleMovement(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/motorcycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
-  async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "VIOLATION_PROCEDURE") {
+  async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "DIVERS" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();
     if (siteId) params.set("siteId", siteId);
     if (type) params.set("type", type);
