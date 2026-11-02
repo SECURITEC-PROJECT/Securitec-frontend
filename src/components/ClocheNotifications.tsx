@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import ListeAnomalies from "@/pages/agentAccueil/anomalie/ListeAnomalies";
+import { useAnomalies } from "@/hooks/useAnomalies";
 import { serviceApi, type AppNotification } from "@/lib/service-api";
 import { Bell, Check } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -9,6 +11,7 @@ export default function ClocheNotifications() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const anomalies = useAnomalies();
   const navigate = useNavigate();
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -29,6 +32,7 @@ export default function ClocheNotifications() {
   }, [refresh]);
 
   const unread = items.filter((item) => !item.readAt).length;
+  const total = unread + anomalies.length;
   const openNotification = async (item: AppNotification) => {
     if (!item.readAt) {
       try {
@@ -41,12 +45,12 @@ export default function ClocheNotifications() {
   };
 
   return <div className="relative">
-    <Button type="button" variant="ghost" size="icon" aria-label={`Notifications${unread ? `, ${unread} non lue(s)` : ""}`} aria-expanded={open} aria-controls="notifications-panel" title="Notifications" onClick={() => setOpen((value) => !value)}>
+    <Button type="button" variant="ghost" size="icon" aria-label={`Notifications${total ? `, ${total} élément(s)` : ""}`} aria-expanded={open} aria-controls="notifications-panel" title="Notifications" onClick={() => setOpen((value) => !value)}>
       <Bell />
-      {unread > 0 && <span className="absolute right-0.5 top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold leading-none text-destructive-foreground">{unread > 9 ? "9+" : unread}</span>}
+      {total > 0 && <span className="absolute right-0.5 top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold leading-none text-destructive-foreground">{total > 9 ? "9+" : total}</span>}
     </Button>
     {open && <section id="notifications-panel" className="absolute right-0 top-12 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border bg-card shadow-xl" aria-label="Notifications récentes">
-      <div className="flex items-center justify-between border-b px-4 py-3"><h2 className="text-sm font-semibold">Notifications</h2><span className="text-xs text-muted-foreground">{unread} non lue(s)</span></div>
+      <div className="flex items-center justify-between border-b px-4 py-3"><h2 className="text-sm font-semibold">Notifications</h2><span className="text-xs text-muted-foreground">{unread} non lue(s) · {anomalies.length} anomalie(s)</span></div>
       <div className="max-h-80 divide-y overflow-y-auto">
         {loadFailed && <div className="px-4 py-5 text-center">
           <p className="text-xs text-destructive">Impossible de charger les notifications.</p>
@@ -56,7 +60,8 @@ export default function ClocheNotifications() {
         {items.slice(0, 20).map((item) => <button key={item.id} type="button" onClick={() => void openNotification(item)} className={`block w-full px-4 py-3 text-left hover:bg-muted/60 ${item.readAt ? "" : "bg-primary/5"}`}>
           <span className="flex items-start gap-2"><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{item.title}</span><span className="mt-1 block text-xs text-muted-foreground">{item.message}</span><span className="mt-1 block text-[10px] text-muted-foreground">{new Date(item.createdAt).toLocaleString("fr-FR")}</span></span>{item.readAt && <Check className="mt-0.5 size-3 text-success" />}</span>
         </button>)}
-        {!loading && !loadFailed && !items.length && <p className="px-4 py-6 text-center text-xs text-muted-foreground">Aucune notification.</p>}
+        {anomalies.length > 0 && <div className="p-3"><h3 className="mb-2 text-xs font-semibold">Anomalies de sortie ({anomalies.length})</h3><ListeAnomalies /></div>}
+        {!loading && !loadFailed && !items.length && !anomalies.length && <p className="px-4 py-6 text-center text-xs text-muted-foreground">Aucune notification.</p>}
       </div>
     </section>}
   </div>;
