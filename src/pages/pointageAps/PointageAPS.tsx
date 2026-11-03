@@ -21,7 +21,13 @@ const normalizeAgents = (
   const aliases = new Map<string, string>();
   if (service === "jour") {
     aliases.set("GARAGE", "EX GARAGE");
+    aliases.set("PG2", "PG2");
+    aliases.set("PGII", "PG2");
     aliases.set("PGIT", "PG2");
+    aliases.set("POSTEGARDEII", "PG2");
+    aliases.set("POSTEDEGARDEII", "PG2");
+    aliases.set("POSTEGARDE2", "PG2");
+    aliases.set("POSTEDEGARDE2", "PG2");
     aliases.set("FITAA", "FITAVA");
     aliases.set("EXTERIEUR", "PARKING EXTERIEUR");
   }
