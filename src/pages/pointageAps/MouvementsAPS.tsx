@@ -11,11 +11,15 @@ import {
   type RegisterEmployeeOption,
 } from "@/lib/service-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarDays, Printer, RotateCcw, Save } from "lucide-react";
+import { CalendarDays, Printer, RotateCcw, Save, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const blankAgent = (): ApsMovementAgent => ({ nom: "", matricule: "" });
+const normalizePostSearch = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase("fr");
 
 function normalizeData(
   data: ApsMovementData | null,
@@ -50,6 +54,7 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [siteId, setSiteId] = useState("");
   const [service, setService] = useState<"jour" | "nuit">("jour");
+  const [postSearch, setPostSearch] = useState("");
   const [dataByKey, setDataByKey] = useState<Record<string, ApsMovementData>>({});
   const [loadingKeys, setLoadingKeys] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -59,7 +64,9 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
   const contextKey = `${activeSiteId}:${service}:${date}`;
   const agents = dataByKey[contextKey] ?? {};
   const loading = Boolean(activeSiteId) && (loadingKeys[contextKey] ?? !Object.hasOwn(dataByKey, contextKey));
-  const displayedPostes = Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length }));
+  const allPostes = Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length }));
+  const normalizedPostSearch = normalizePostSearch(postSearch.trim());
+  const displayedPostes = allPostes.filter((poste) => normalizePostSearch(poste.name).includes(normalizedPostSearch));
 
   useEffect(() => {
     if (!activeSiteId || employeesBySite[activeSiteId]) return;
@@ -246,6 +253,17 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
       </section>
 
       {loading && <p className="text-sm text-muted-foreground">Chargement des mouvements APS…</p>}
+      <div className="relative w-full max-w-sm print:hidden">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <input
+          type="search"
+          aria-label="Rechercher un poste"
+          placeholder="Rechercher un poste..."
+          value={postSearch}
+          onChange={(event) => setPostSearch(event.target.value)}
+          className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
+        />
+      </div>
       <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full min-w-[700px] border-collapse text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
@@ -289,7 +307,7 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
                 </td>
               </tr>
             )))}
-            {!loading && !displayedPostes.length && <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste actif n’est configuré pour ce site dans l’administration.</td></tr>}
+            {!loading && !displayedPostes.length && <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">{allPostes.length && normalizedPostSearch ? "Aucun poste ne correspond à la recherche." : "Aucun poste actif n’est configuré pour ce site dans l’administration."}</td></tr>}
           </tbody>
         </table>
       </div>
