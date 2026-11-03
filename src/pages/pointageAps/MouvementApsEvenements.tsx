@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
 import { serviceApi, type ApsMovementEvent } from "@/lib/service-api";
-import { Pencil, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -27,6 +27,11 @@ const blankForm = () => ({
   heureSortie: "",
 });
 
+const normalizeSearch = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase("fr");
+
 export default function MouvementApsEvenements({
   activeSiteId,
   activeSiteName,
@@ -39,6 +44,7 @@ export default function MouvementApsEvenements({
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<ApsMovementEvent | null>(null);
   const [form, setForm] = useState(blankForm);
+  const [search, setSearch] = useState("");
   const registryKey = `${activeSiteId}:${date}`;
   const entries = entriesByKey[registryKey] ?? EMPTY_ENTRIES;
   const loading = Boolean(activeSiteId) && !Object.hasOwn(entriesByKey, registryKey);
@@ -61,6 +67,14 @@ export default function MouvementApsEvenements({
   const orderedEntries = useMemo(
     () => [...entries].sort((a, b) => a.heureEntree.localeCompare(b.heureEntree)),
     [entries],
+  );
+  const normalizedSearch = normalizeSearch(search.trim());
+  const filteredEntries = useMemo(
+    () => orderedEntries.filter((entry) => !normalizedSearch || [
+      entry.mouvement,
+      entry.observation,
+    ].some((value) => normalizeSearch(value).includes(normalizedSearch))),
+    [normalizedSearch, orderedEntries],
   );
 
   const resetForm = () => {
@@ -196,6 +210,17 @@ export default function MouvementApsEvenements({
           <Printer className="mr-2 size-4" />Imprimer tout le registre
         </Button>
       </div>
+      <div className="relative w-full max-w-sm print:hidden">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Input
+          type="search"
+          aria-label="Rechercher dans les mouvements APS"
+          placeholder="Rechercher un mouvement ou une observation..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="pl-9"
+        />
+      </div>
       <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full min-w-[850px] border-collapse text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
@@ -208,7 +233,7 @@ export default function MouvementApsEvenements({
             </tr>
           </thead>
           <tbody>
-            {orderedEntries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <tr key={entry.id} className="hover:bg-muted/30">
                 <td className="border-b px-4 py-3">{entry.heureEntree}</td>
                 <td className="border-b px-4 py-3 whitespace-pre-wrap">{entry.mouvement}</td>
@@ -223,7 +248,7 @@ export default function MouvementApsEvenements({
                 </td>
               </tr>
             ))}
-            {!loading && !orderedEntries.length && <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">Aucun mouvement enregistré pour cette date.</td></tr>}
+            {!loading && !filteredEntries.length && <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">{orderedEntries.length ? "Aucun mouvement ne correspond à la recherche." : "Aucun mouvement enregistré pour cette date."}</td></tr>}
           </tbody>
         </table>
         {loading && <p className="p-4 text-sm text-muted-foreground">Chargement des mouvements…</p>}

@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { CalendarDays, Printer, RotateCcw, Save } from "lucide-react";
+import { CalendarDays, Printer, RotateCcw, Save, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
@@ -9,6 +9,10 @@ import { serviceApi, type ApsPostConfiguration, type RegisterEmployeeOption } fr
 type Agent = { nom: string; prenom: string; matricule: string; heureEntree: string; heureSortie: string; observation: string };
 
 const blankAgent = (): Agent => ({ nom: "", prenom: "", matricule: "", heureEntree: "", heureSortie: "", observation: "" });
+const normalizePostSearch = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase("fr");
 const normalizeAgents = (
   data: Record<string, Agent[]>,
   service: "jour" | "nuit",
@@ -17,7 +21,13 @@ const normalizeAgents = (
   const aliases = new Map<string, string>();
   if (service === "jour") {
     aliases.set("GARAGE", "EX GARAGE");
+    aliases.set("PG2", "PG2");
+    aliases.set("PGII", "PG2");
     aliases.set("PGIT", "PG2");
+    aliases.set("POSTEGARDEII", "PG2");
+    aliases.set("POSTEDEGARDEII", "PG2");
+    aliases.set("POSTEGARDE2", "PG2");
+    aliases.set("POSTEDEGARDE2", "PG2");
     aliases.set("FITAA", "FITAVA");
     aliases.set("EXTERIEUR", "PARKING EXTERIEUR");
   }
@@ -51,6 +61,7 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [siteId, setSiteId] = useState("");
   const [service, setService] = useState<"jour" | "nuit">("jour");
+  const [postSearch, setPostSearch] = useState("");
   const [agentsByKey, setAgentsByKey] = useState<Record<string, Record<string, Agent[]>>>({});
   const [saving, setSaving] = useState(false);
   const [savingConfiguration, setSavingConfiguration] = useState(false);
@@ -59,7 +70,9 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
   const contextKey = `${activeSiteId}:${service}:${date}`;
   const agents = agentsByKey[contextKey] ?? {};
   const loading = Boolean(activeSiteId) && !Object.hasOwn(agentsByKey, contextKey);
-  const displayedPostes = Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length }));
+  const allPostes = Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length }));
+  const normalizedPostSearch = normalizePostSearch(postSearch.trim());
+  const displayedPostes = allPostes.filter((poste) => normalizePostSearch(poste.name).includes(normalizedPostSearch));
 
   useEffect(() => {
     if (!activeSiteId || employeesBySite[activeSiteId]) return;
@@ -205,12 +218,23 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
       </p>
     </section>
     {loading && <p className="text-sm text-muted-foreground">Chargement du pointage enregistre...</p>}
+    <div className="relative w-full max-w-sm print:hidden">
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+      <input
+        type="search"
+        aria-label="Rechercher un poste"
+        placeholder="Rechercher un poste..."
+        value={postSearch}
+        onChange={(event) => setPostSearch(event.target.value)}
+        className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
+      />
+    </div>
     <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
       <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
         <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>
           <th className="w-36 border-b px-4 py-3">Poste</th><th className="w-48 border-b px-4 py-3">Nom</th><th className="w-48 border-b px-4 py-3">Pr&#233;nom</th><th className="w-36 border-b px-4 py-3">Matricule</th><th className="w-36 border-b px-4 py-3">Heure d&#8217;entr&#233;e</th><th className="w-36 border-b px-4 py-3">Heure de sortie</th><th className="border-b px-4 py-3">Observation</th>
         </tr></thead>
-        <tbody>{displayedPostes.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste actif n’est configuré pour ce site dans l’administration.</td></tr> : displayedPostes.map((poste) => agents[poste.name].map((agent, index) => <tr key={`${poste.name}-${index}`} className="group hover:bg-muted/30">
+        <tbody>{displayedPostes.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">{allPostes.length && normalizedPostSearch ? "Aucun poste ne correspond à la recherche." : "Aucun poste actif n’est configuré pour ce site dans l’administration."}</td></tr> : displayedPostes.map((poste) => agents[poste.name].map((agent, index) => <tr key={`${poste.name}-${index}`} className="group hover:bg-muted/30">
           {index === 0 && <th rowSpan={poste.count} className="border-b bg-muted/20 px-4 py-3 align-top font-semibold">
             <span>{poste.name}</span>
             <label className="mt-2 block text-xs font-normal text-muted-foreground">

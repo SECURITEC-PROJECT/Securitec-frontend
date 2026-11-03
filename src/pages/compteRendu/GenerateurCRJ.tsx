@@ -51,9 +51,10 @@ export interface CRJData {
   }>;
   violations: Array<{ heure: string; nomPrenom: string; obs: string; mesures: string }>;
   divers: Array<{ dateHeure: string; faits: string; mesures: string }>;
+  mouvementsAps: Array<{ heureEntree: string; mouvement: string; observation: string; heureSortie: string }>;
 }
 
-type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "violations" | "divers" | "vigilance" | "rondes";
+type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "violations" | "divers" | "vigilance" | "rondes" | "apsMovements";
 
 const AGENT_POST_ROWS: Array<{ label: string; post: string | null }> = [
   { label: "Poste de garde I", post: "Poste de garde I" },
@@ -102,7 +103,10 @@ const AGENT_POST_ALIASES: Record<string, string> = {
   PG2: "POSTEDEGARDEII",
   PGII: "POSTEDEGARDEII",
   PGIT: "POSTEDEGARDEII",
+  POSTEGARDE2: "POSTEDEGARDEII",
+  POSTEDEGARDE2: "POSTEDEGARDEII",
   POSTEGARDEII: "POSTEDEGARDEII",
+  POSTEDEGARDEII: "POSTEDEGARDEII",
   FITAA: "TERRAINFIRASANA",
   FITAVA: "TERRAINFIRASANA",
   EXTERIEUR: "PARKINGEXTERIEUR",
@@ -179,30 +183,44 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
       postRowCapacity.set(postKey, (postRowCapacity.get(postKey) || 0) + 1);
     }
   }
-  const agentPostRows = AGENT_POST_ROWS.map((row, rowIndex) => {
-    if (!row.post) return { ...row, jour: undefined, nuit: undefined };
-    const postName = row.post;
-    const postKey = canonicalPost(postName);
+  const postAgentIndexes = new Map<string, number>();
+  const agentPostRows = AGENT_POST_ROWS.flatMap((row) => {
+    if (!row.post) return [{ ...row, jour: undefined, nuit: undefined }];
+
+    const postKey = canonicalPost(row.post);
     const agents = agentsPostes.find((item) => canonicalPost(item.poste) === postKey);
-    const index = AGENT_POST_ROWS.slice(0, rowIndex).filter((previous) => previous.post && canonicalPost(previous.post) === postKey).length;
-    return {
+    const index = postAgentIndexes.get(postKey) || 0;
+    postAgentIndexes.set(postKey, index + 1);
+    const rows = [{
       ...row,
       jour: agents?.jour[index],
       nuit: agents?.nuit[index],
-    };
+    }];
+    const rowCapacity = postRowCapacity.get(postKey) || 0;
+    if (index + 1 === rowCapacity && agents) {
+      const additionalCount = Math.max(agents.jour.length, agents.nuit.length) - rowCapacity;
+      for (let extraIndex = 0; extraIndex < additionalCount; extraIndex += 1) {
+        rows.push({
+          post: row.post,
+          label: "",
+          jour: agents.jour[rowCapacity + extraIndex],
+          nuit: agents.nuit[rowCapacity + extraIndex],
+        });
+      }
+    }
+    return rows;
   });
   const extraAgentRows = agentsPostes
-    .flatMap((poste) => {
-      const postKey = canonicalPost(poste.poste);
-      const startIndex = knownPosts.has(postKey) ? postRowCapacity.get(postKey) || 0 : 0;
-      const remainingCount = Math.max(poste.jour.length, poste.nuit.length) - startIndex;
-      return Array.from({ length: Math.max(remainingCount, knownPosts.has(postKey) ? 0 : 1) }, (_, index) => ({
+    .filter((poste) => !knownPosts.has(canonicalPost(poste.poste)))
+    .flatMap((poste) => Array.from(
+      { length: Math.max(poste.jour.length, poste.nuit.length, 1) },
+      (_, index) => ({
         post: poste.poste,
-        label: startIndex + index === 0 && !knownPosts.has(postKey) ? poste.poste : "",
-        jour: poste.jour[startIndex + index],
-        nuit: poste.nuit[startIndex + index],
-      }));
-    });
+        label: index === 0 ? poste.poste : "",
+        jour: poste.jour[index],
+        nuit: poste.nuit[index],
+      }),
+    ));
   const cles = Array.isArray(data.cles) ? data.cles : [];
   const lignesCles = [
     ...cles,
@@ -629,6 +647,36 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
               )) : (
                 <tr>
                   <td colSpan={3} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* MOUVEMENTS APS */}
+        <div data-print-section="apsMovements" data-print-selected={printSection === "apsMovements" ? "true" : undefined}>
+          <PrintMeta data={data} />
+          <PrintSectionTitle id="apsMovements" title={`${12 + decalage} - MOUVEMENTS APS`} onPrint={handlePrintSection} />
+          <table className="w-full border-collapse border border-black text-center text-[10px]">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="w-[15%] border border-black p-1">HEURE D'ENTRÉE</th>
+                <th className="w-[40%] border border-black p-1">MOUVEMENT / ÉVÉNEMENT</th>
+                <th className="w-[30%] border border-black p-1">OBSERVATION</th>
+                <th className="w-[15%] border border-black p-1">HEURE DE SORTIE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.mouvementsAps.length > 0 ? data.mouvementsAps.map((movement, index) => (
+                <tr key={`${movement.heureEntree}-${index}`}>
+                  <td className="border border-black p-1 font-mono">{movement.heureEntree}</td>
+                  <td className="border border-black p-1 text-left">{movement.mouvement}</td>
+                  <td className="border border-black p-1 text-left">{movement.observation || "—"}</td>
+                  <td className="border border-black p-1 font-mono">{movement.heureSortie || "—"}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={4} className="border border-black p-1 text-gray-500 italic">Aucun mouvement APS enregistré ce jour.</td>
                 </tr>
               )}
             </tbody>
