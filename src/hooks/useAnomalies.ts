@@ -1,4 +1,4 @@
-import { API_URL, authHeaders } from "@/lib/api";
+import { requestCachedApi } from "@/lib/service-api";
 import { useEffect, useState } from "react";
 
 // Visiteur ou véhicule encore présent après la fermeture du site
@@ -26,9 +26,7 @@ let minuteur: ReturnType<typeof setInterval> | null = null;
 
 async function charger() {
   try {
-    const res = await fetch(`${API_URL}/anomalies/sorties`, { headers: authHeaders() });
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await requestCachedApi<{ anomalies?: Anomalie[] }>("/anomalies/sorties");
     cache = Array.isArray(data.anomalies) ? data.anomalies : [];
     abonnes.forEach((notifier) => notifier(cache));
   } catch {

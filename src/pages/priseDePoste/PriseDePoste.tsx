@@ -7,6 +7,7 @@ import FormPriseDePoste, { type ShiftFormData } from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
 import { API_URL, authHeaders } from "@/lib/api";
+import { requestCachedApi } from "@/lib/service-api";
 
 const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
 
@@ -21,12 +22,7 @@ export default function PriseDePoste() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${API_URL}/shifts`, { headers: authHeaders(), signal: controller.signal })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Chargement des prises de poste impossible.");
-        return data;
-      })
+    requestCachedApi<Shift[]>("/shifts", { signal: controller.signal })
       .then((data) => {
         if (Array.isArray(data)) setShifts(data);
       })

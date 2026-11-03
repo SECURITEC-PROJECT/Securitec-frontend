@@ -23,7 +23,10 @@ export default function ListVigilance({ data }: ListVigilanceProps) {
             <tbody className="divide-y">
               {data.map((item) => (
                 <tr key={item.id}>
-                  <td className="py-2 pr-2 font-mono text-muted-foreground">{item.heure || "—"}</td>
+                  <td className="py-2 pr-2 font-mono text-muted-foreground">
+                    {item.heure || "—"}
+                    {item.pendingSync && <span className="mt-1 block font-sans text-amber-700">{item.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : item.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}
+                  </td>
                   <td className="py-2 pr-2 font-medium">
                     <span className="block text-[10px] text-muted-foreground uppercase">{item.typePoint}</span>
                     {item.elementVerifie}

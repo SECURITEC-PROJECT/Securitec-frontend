@@ -34,6 +34,8 @@ type TruckEntry = TruckForm & {
   createdBy?: string;
   attachmentCount?: number;
   pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 };
 
 const wasteDesignations = ["Verres cassées", "Ordures", "Gravat"] as const;
@@ -852,7 +854,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                       <td className="max-w-xs whitespace-pre-wrap px-3 py-3">{entry.verification || "—"}</td>
                       <td className="px-3 py-3">{entry.visaAgent || "—"}</td>
                     </>}
-                    <td className="px-3 py-3 text-xs">{entry.createdBy || "—"}<span className="block text-muted-foreground">{entry.createdAt ? new Date(entry.createdAt).toLocaleString("fr-FR") : "—"}</span>{entry.pendingSync && <span className="text-amber-700">En attente réseau</span>}</td>
+                    <td className="px-3 py-3 text-xs">{entry.createdBy || "—"}<span className="block text-muted-foreground">{entry.createdAt ? new Date(entry.createdAt).toLocaleString("fr-FR") : "—"}</span>{entry.pendingSync && <span className="text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                     <td className="px-3 py-3">{entry.pendingSync ? "À joindre après synchronisation" : <LogisticsAttachments entryId={entry.id} siteId={site?.id || ""} count={Number(entry.attachmentCount || 0)} />}</td>
                     <td className="px-3 py-3">{entry.pendingSync ? "—" : <LogisticsAudit entryId={entry.id} siteId={site?.id || ""} />}</td>
                     <td className="whitespace-nowrap px-3 py-3">

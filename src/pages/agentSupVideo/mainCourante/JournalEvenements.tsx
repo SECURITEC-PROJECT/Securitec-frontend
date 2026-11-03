@@ -36,6 +36,7 @@ export default function JournalEvenements({ data }: JournalEvenementsProps) {
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-primary">{l.category}</span>
+                  {l.pendingSync && <span className="rounded bg-warning px-1.5 py-0.5 text-[10px] font-medium text-warning-foreground" title={l.pendingSyncError || undefined}>{l.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : l.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}
                   {l.typeEntree && (
                     <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded uppercase font-mono">
                       {l.typeEntree}

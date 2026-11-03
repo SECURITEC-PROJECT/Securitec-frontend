@@ -212,7 +212,7 @@ export default function DeclarationObjets() {
   useEffect(() => {
     if (!siteId) return;
     let active = true;
-    serviceApi.listObjectDeclarations(siteId)
+    const refreshEntries = () => serviceApi.listObjectDeclarations(siteId)
       .then((entries) => {
         if (active) {
           setRecords(entries);
@@ -229,7 +229,15 @@ export default function DeclarationObjets() {
           toast.error(error instanceof Error ? error.message : "Chargement de l’historique impossible.");
         }
       });
-    return () => { active = false; };
+    const refreshOnQueueChange = () => { void refreshEntries(); };
+    void refreshEntries();
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [siteId, editingId]);
 
   useEffect(() => {
@@ -261,14 +269,17 @@ export default function DeclarationObjets() {
     setSaving(true);
     try {
       const payload = { data, siteId };
+      let saved: ObjectDeclarationRecord;
       if (editingId) {
-        await serviceApi.updateObjectDeclaration(editingId, payload);
+        saved = await serviceApi.updateObjectDeclaration(editingId, payload, records.find((record) => record.id === editingId)?.updatedAt);
       } else {
-        await serviceApi.createObjectDeclaration(payload);
+        saved = await serviceApi.createObjectDeclaration(payload);
       }
       const refreshedRecords = await refreshHistory(siteId);
       setData(emptyData(String(nextReferenceNumber(refreshedRecords))));
-      toast.success(editingId ? "Déclaration mise à jour dans l’historique." : "Déclaration enregistrée dans l’historique.");
+      toast.success(saved.pendingSync
+        ? "Déclaration enregistrée localement. Synchronisation au retour du réseau."
+        : editingId ? "Déclaration mise à jour dans l’historique." : "Déclaration enregistrée dans l’historique.");
       setEditingId(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement ou actualisation impossible.");
@@ -287,7 +298,7 @@ export default function DeclarationObjets() {
     if (!siteId || !(await confirmDeletion(`Supprimer la déclaration de ${record.data.firstName} ? Cette action est définitive.`))) return;
     setDeletingId(record.id);
     try {
-      await serviceApi.deleteObjectDeclaration(record.id, siteId);
+      const result = await serviceApi.deleteObjectDeclaration(record.id, siteId, record.updatedAt);
       const refreshedRecords = await refreshHistory(siteId);
       if (editingId === record.id) {
         setEditingId(null);
@@ -295,7 +306,9 @@ export default function DeclarationObjets() {
       } else {
         setData((current) => ({ ...current, referenceNumber: String(nextReferenceNumber(refreshedRecords)) }));
       }
-      toast.success("Déclaration supprimée de l’historique.");
+      toast.success(result.pendingSync
+        ? "Suppression enregistrée localement. Synchronisation au retour du réseau."
+        : "Déclaration supprimée de l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression ou actualisation impossible.");
     } finally {
@@ -407,11 +420,11 @@ export default function DeclarationObjets() {
                         <td className="px-3 py-3">{record.data.company || "—"}</td>
                         <td className="px-3 py-3">{record.data.vehicleNumber || "—"}</td>
                         <td className="max-w-xs truncate px-3 py-3">{record.data.objects}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-xs">{formatCreatedAt(record.updatedAt || record.createdAt)}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-xs">{formatCreatedAt(record.updatedAt || record.createdAt)}{record.pendingSync && <span className="mt-1 block text-amber-700" title={record.pendingSyncError || undefined}>{record.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : record.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <div className="flex gap-1">
-                            <Button type="button" variant="ghost" size="icon" aria-label="Modifier la déclaration" title="Modifier" onClick={() => editRecord(record)}><Pencil className="size-4" /></Button>
-                            <Button type="button" variant="ghost" size="icon" aria-label="Supprimer la déclaration" title="Supprimer" className="text-destructive hover:text-destructive" disabled={deletingId === record.id} onClick={() => void deleteRecord(record)}><Trash2 className="size-4" /></Button>
+                            <Button type="button" variant="ghost" size="icon" aria-label="Modifier la déclaration" title={record.pendingSync ? "Disponible après synchronisation" : "Modifier"} disabled={Boolean(record.pendingSync)} onClick={() => editRecord(record)}><Pencil className="size-4" /></Button>
+                            <Button type="button" variant="ghost" size="icon" aria-label="Supprimer la déclaration" title={record.pendingSync ? "Disponible après synchronisation" : "Supprimer"} className="text-destructive hover:text-destructive" disabled={Boolean(record.pendingSync) || deletingId === record.id} onClick={() => void deleteRecord(record)}><Trash2 className="size-4" /></Button>
                           </div>
                         </td>
                       </tr>

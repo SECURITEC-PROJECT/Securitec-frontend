@@ -1,4 +1,4 @@
-import { API_URL, authHeaders } from "@/lib/api";
+import { requestCachedApi } from "@/lib/service-api";
 import { useState } from "react";
 
 type AuditEntry = {
@@ -23,9 +23,7 @@ export function RegistryAuditHistory({ entity, recordId }: { entity: string; rec
     if (!nextOpen || loaded || loading) return;
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/register-audit/${encodeURIComponent(entity)}/${encodeURIComponent(recordId)}`, { headers: authHeaders() });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Chargement de l’historique impossible.");
+      const data = await requestCachedApi<{ entries?: AuditEntry[] }>(`/register-audit/${encodeURIComponent(entity)}/${encodeURIComponent(recordId)}`);
       setEntries(Array.isArray(data.entries) ? data.entries : []);
       setLoaded(true);
     } catch (reason) {

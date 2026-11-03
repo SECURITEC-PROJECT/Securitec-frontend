@@ -102,7 +102,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   useEffect(() => {
     if (!siteId) return;
     let active = true;
-    const load = isBicycle
+    const load = () => isBicycle
       ? Promise.all([serviceApi.listRegisterEmployees(siteId), serviceApi.listBicycleMovements(siteId)])
         .then(([employeeRows, movementRows]) => {
           if (!active) return;
@@ -118,14 +118,21 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           setRegistry({ key: currentKey, entries: movementRows, error: "" });
         });
 
-    load.catch((error) => {
+    const refreshOnQueueChange = () => { void load().catch((error) => toast.error(error instanceof Error ? error.message : "Chargement du registre impossible.")); };
+    void load().catch((error) => {
       if (!active) return;
       const message = error instanceof Error ? error.message : "Chargement du registre impossible.";
       setRegistry({ key: currentKey, entries: [], error: message });
       setEmployeeError(message);
       toast.error(message);
     });
-    return () => { active = false; };
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [siteId, currentKey, isBicycle]);
 
   const visibleEmployees = useMemo(() => {
@@ -201,10 +208,12 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           heureEntree: form.heureEntree,
           matricule: employee.matricule,
           marqueVelo: form.marqueVelo.trim(),
+          prenom: employee.firstName,
+          section: employee.section,
           siteId,
         };
         entry = editingEntry
-          ? await serviceApi.updateBicycleMovement(editingEntry.id, payload)
+          ? await serviceApi.updateBicycleMovement(editingEntry.id, payload, editingEntry.updatedAt)
           : await serviceApi.createBicycleMovement(payload);
       } else if (!isBicycle) {
         const payload = {
@@ -215,7 +224,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           siteId,
         };
         entry = editingEntry
-          ? await serviceApi.updateMotorcycleMovement(editingEntry.id, payload)
+          ? await serviceApi.updateMotorcycleMovement(editingEntry.id, payload, editingEntry.updatedAt)
           : await serviceApi.createMotorcycleMovement(payload);
       } else {
         return;
@@ -231,7 +240,9 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           : [entry],
       }));
       resetForm();
-      toast.success(wasEditing ? "Mouvement modifié." : "Mouvement enregistré.");
+      toast.success(entry.pendingSync
+        ? "Mouvement enregistré localement. Synchronisation au retour du réseau."
+        : wasEditing ? "Mouvement modifié." : "Mouvement enregistré.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -275,12 +286,13 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     if (!siteId || entry.annuleLe || !(await confirmDeletion("Annuler ce mouvement ? Il restera dans l’historique."))) return;
     setDeletingId(entry.id);
     try {
-      if (isBicycle) await serviceApi.deleteBicycleMovement(entry.id, siteId);
-      else await serviceApi.deleteMotorcycleMovement(entry.id, siteId);
+      const result = isBicycle
+        ? await serviceApi.deleteBicycleMovement(entry.id, siteId, entry.updatedAt)
+        : await serviceApi.deleteMotorcycleMovement(entry.id, siteId, entry.updatedAt);
       const cancelledAt = new Date().toISOString();
-      setRegistry((current) => ({ ...current, entries: current.entries.map((item) => item.id === entry.id ? { ...item, annuleLe: cancelledAt } : item) }));
+      setRegistry((current) => ({ ...current, entries: current.entries.map((item) => item.id === entry.id ? { ...item, annuleLe: cancelledAt, pendingSync: result.pendingSync } : item) }));
       if (editingEntry?.id === entry.id) resetForm();
-      toast.success("Mouvement annulé et conservé dans l’historique.");
+      toast.success(result.pendingSync ? "Annulation enregistrée localement. Synchronisation au retour du réseau." : "Mouvement annulé et conservé dans l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
@@ -292,12 +304,12 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     if (!siteId || entry.heureSortie) return;
     setExitingId(entry.id);
     try {
-      const updated = await serviceApi.recordMotorcycleExit(entry.id, siteId);
+      const updated = await serviceApi.recordMotorcycleExit(entry.id, siteId, entry.updatedAt);
       setRegistry((current) => ({
         ...current,
         entries: current.entries.map((item) => item.id === updated.id ? updated : item),
       }));
-      toast.success(`Sortie enregistrée à ${updated.heureSortie || "l’heure actuelle"}.`);
+      toast.success(updated.pendingSync ? "Sortie enregistrée localement. Synchronisation au retour du réseau." : `Sortie enregistrée à ${updated.heureSortie || "l’heure actuelle"}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de la sortie impossible.");
     } finally {
@@ -309,12 +321,12 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     if (!siteId || entry.heureSortie) return;
     setExitingId(entry.id);
     try {
-      const updated = await serviceApi.recordBicycleExit(entry.id, siteId);
+      const updated = await serviceApi.recordBicycleExit(entry.id, siteId, entry.updatedAt);
       setRegistry((current) => ({
         ...current,
         entries: current.entries.map((item) => item.id === updated.id ? updated : item),
       }));
-      toast.success(`Sortie enregistrée à ${updated.heureSortie || "l’heure actuelle"}.`);
+      toast.success(updated.pendingSync ? "Sortie enregistrée localement. Synchronisation au retour du réseau." : `Sortie enregistrée à ${updated.heureSortie || "l’heure actuelle"}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de la sortie impossible.");
     } finally {
@@ -541,7 +553,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
                     </thead>
                     <tbody className="divide-y">
                       {filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
-                        <td className={`whitespace-nowrap px-3 py-3 ${entry.annuleLe ? "text-muted-foreground line-through" : ""}`}>{formatDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive no-underline">(annulé)</span>}</td>
+                        <td className={`whitespace-nowrap px-3 py-3 ${entry.annuleLe ? "text-muted-foreground line-through" : ""}`}>{formatDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive no-underline">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                         <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                         {isBicycle ? <>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{(entry as BicycleMovement).matricule}</td>
@@ -559,16 +571,16 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
                             <Button type="button" size="icon" variant="ghost" aria-label="Imprimer le mouvement" title="Imprimer le mouvement" onClick={() => printEntry(entry)}>
                               <Printer className="size-4" />
                             </Button>
-                            {!entry.annuleLe && isBicycle && !(entry as BicycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordBicycleExit(entry as BicycleMovement)}>
+                            {!entry.annuleLe && !entry.pendingSync && isBicycle && !(entry as BicycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordBicycleExit(entry as BicycleMovement)}>
                               <LogOut className="mr-1 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortir"}
                             </Button>}
-                            {!entry.annuleLe && !isBicycle && !(entry as MotorcycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordExit(entry as MotorcycleMovement)}>
+                            {!entry.annuleLe && !entry.pendingSync && !isBicycle && !(entry as MotorcycleMovement).heureSortie && <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void recordExit(entry as MotorcycleMovement)}>
                               <LogOut className="mr-1 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortir"}
                             </Button>}
-                            {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" aria-label="Modifier le mouvement" title="Modifier" onClick={() => editEntry(entry)}><Pencil className="size-4" /></Button>}
-                            {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" aria-label="Annuler le mouvement" title="Annuler" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4 text-destructive" /></Button>}
-                            <RegistryAuditHistory entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} />
-                            <RegistryAttachments entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} siteId={siteId} />
+                            {!entry.annuleLe && !entry.pendingSync && <Button type="button" size="icon" variant="ghost" aria-label="Modifier le mouvement" title="Modifier" onClick={() => editEntry(entry)}><Pencil className="size-4" /></Button>}
+                            {!entry.annuleLe && !entry.pendingSync && <Button type="button" size="icon" variant="ghost" aria-label="Annuler le mouvement" title="Annuler" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4 text-destructive" /></Button>}
+                            {!entry.pendingSync && <RegistryAuditHistory entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} />}
+                            {!entry.pendingSync && <RegistryAttachments entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} siteId={siteId} />}
                           </div>
                         </td>
                       </tr>)}
