@@ -39,7 +39,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/dechets-levee", label: "Drèche et levure", icon: Trash2 },
       { to: "/dashboard/mouvements-aps", label: "Mouvements APS", icon: Repeat },
       { to: "/dashboard/dechargements-bennes-vides", label: "Déchargement bouteilles vides", icon: Truck },
-      { to: "/dashboard/pond-brut", label: "Pond Bascul", icon: Truck },
+      { to: "/dashboard/pond-brut", label: "Pont Bascule", icon: Truck },
       { to: "/dashboard/dechargements-matiere-premiere", label: "Déchargements matière première", icon: Boxes },
       { to: "/dashboard/depotage-fuel-gasoil", label: "Dépotage fuel et gasoil", icon: Fuel },
       { to: "/dashboard/mouvements-vehicules", label: "Mouvements véhicule entrée / sortie", icon: Truck },

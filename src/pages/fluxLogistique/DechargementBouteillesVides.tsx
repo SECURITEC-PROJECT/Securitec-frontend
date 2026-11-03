@@ -91,7 +91,7 @@ export default function DechargementBouteillesVides() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [pondBasculPost, setPondBasculPost] = useState(false);
+  const [pontBasculePost, setPontBasculePost] = useState(false);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
@@ -100,23 +100,23 @@ export default function DechargementBouteillesVides() {
     const contextMatchesSite = routeContext?.siteId === site?.id;
     const postId = contextMatchesSite ? routeContext?.posteId : null;
     if (!site?.id || !postId) {
-      setPondBasculPost(false);
+      setPontBasculePost(false);
       return () => { active = false; };
     }
     const contextPostName = contextMatchesSite && routeContext?.posteId === postId ? routeContext.posteNom : "";
     if (contextPostName) {
-      setPondBasculPost(normalizeSearch(contextPostName).trim().startsWith("pond bascul"));
+      setPontBasculePost(normalizeSearch(contextPostName).trim().startsWith("pont bascule"));
       return () => { active = false; };
     }
     serviceApi.listShiftPosts(site.id)
       .then((posts) => {
-        if (active) setPondBasculPost(normalizeSearch(posts.find((post) => post.id === postId)?.nom || "").trim().startsWith("pond bascul"));
+        if (active) setPontBasculePost(normalizeSearch(posts.find((post) => post.id === postId)?.nom || "").trim().startsWith("pont bascule"));
       })
-      .catch(() => { if (active) setPondBasculPost(false); });
+      .catch(() => { if (active) setPontBasculePost(false); });
     return () => { active = false; };
   }, [routeContext?.posteId, routeContext?.posteNom, routeContext?.siteId, site?.id]);
   const normalizedSearch = normalizeSearch(search.trim());
-  const showPondBrutFields = pondBasculPost || editingEntry?.brut != null;
+  const showPondBrutFields = pontBasculePost || editingEntry?.brut != null;
   const filteredEntries = entries.filter((entry) =>
     normalizeSearch([
       entry.date,
@@ -180,7 +180,7 @@ export default function DechargementBouteillesVides() {
     const brut = Number(form.brut);
     const tare = Number(form.tare);
     const net = Number(form.net);
-    const usePondBrut = pondBasculPost || editingEntry?.brut != null;
+    const usePondBrut = pontBasculePost || editingEntry?.brut != null;
     if (usePondBrut && (!form.brut || !form.tare || !form.net || !Number.isFinite(brut) || !Number.isFinite(tare) || !Number.isFinite(net) || brut <= 0 || tare <= 0 || net <= 0)) {
       toast.error("Saisissez un BRUT, une TARE et un NET positifs.");
       return;

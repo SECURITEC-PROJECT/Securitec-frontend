@@ -30,7 +30,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
   const siteId = routeContext?.siteId || savedContext?.siteId || user?.siteId || "";
   const activePostId = postMatch?.[1] || routeContext?.posteId || (!isGeneralNavigation ? savedContext?.posteId : "") || "";
   const [activePostName, setActivePostName] = useState(routeContext?.posteNom || savedContext?.posteNom || "");
-  const isPondBasculPost = activePostName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase().startsWith("pond bascul");
+  const isPontBasculePost = activePostName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase().startsWith("pont bascule");
   useEffect(() => {
     if (activePostId && siteId) {
       const nextContext = { siteId, posteId: activePostId, posteNom: routeContext?.posteNom || savedContext?.posteNom || activePostName };
@@ -78,7 +78,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
       return sections.map((section) => ({
         ...section,
         items: section.items.filter((item) => canAccessRoute(user?.role ?? 0, item.to)
-          && (item.to !== "/dashboard/pond-brut" || isPondBasculPost)
+          && (item.to !== "/dashboard/pond-brut" || isPontBasculePost)
           && (!query || `${section.title} ${item.label}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().includes(query))),
       })).filter((section) => section.items.length > 0);
     }
@@ -88,12 +88,12 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
         ...group,
         items: group.items.filter((item) => {
           const canAccess = Boolean(user && canAccessRoute(user.role, item.to));
-          const isVisibleForPost = item.to !== "/dashboard/pond-brut" || isPondBasculPost;
+          const isVisibleForPost = item.to !== "/dashboard/pond-brut" || isPontBasculePost;
           const searchableText = `${group.title} ${item.label}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
           return canAccess && isVisibleForPost && (!query || searchableText.includes(query));
         }),
       })).filter((group) => group.items.length > 0);
-  }, [search, user, activePostId, circuitItems, registerItems, providerItems, isPondBasculPost]);
+  }, [search, user, activePostId, circuitItems, registerItems, providerItems, isPontBasculePost]);
 
   return (
     <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
