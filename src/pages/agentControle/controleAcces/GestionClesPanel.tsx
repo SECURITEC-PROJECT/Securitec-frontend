@@ -15,14 +15,6 @@ import { Check, CheckCircle2, ChevronsUpDown, KeyRound, Printer, Search } from "
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-interface KeyEmployee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  matricule: string;
-  role: string;
-}
-
 interface SearchOption {
   value: string;
   label: string;
@@ -118,14 +110,12 @@ const formaterDate = (value: string) => {
 };
 
 const heureActuelle = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
-const nouveauFormulaire = () => ({ date: dateActuelle(), employeeId: "", keyType: "", quantity: "1", lieu: "", observations: "" });
+const nouveauFormulaire = () => ({ date: dateActuelle(), employeeId: "", keyType: "", quantity: "1", lieu: "" });
 
 export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [form, setForm] = useState(nouveauFormulaire);
   const [currentTime, setCurrentTime] = useState(heureActuelle);
   const [keyTypes, setKeyTypes] = useState<string[]>([]);
-  const [employees, setEmployees] = useState<KeyEmployee[]>([]);
-  const [employeesFor, setEmployeesFor] = useState("");
   const [siteEmployees, setSiteEmployees] = useState<RegisterEmployeeOption[]>([]);
   const [siteEmployeesFor, setSiteEmployeesFor] = useState("");
   const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
@@ -134,8 +124,10 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [saving, setSaving] = useState(false);
   const [returningEntryId, setReturningEntryId] = useState<string | number | null>(null);
   const [returnDialogEntry, setReturnDialogEntry] = useState<KeyTrackingEntry | null>(null);
-  const [returnerChoice, setReturnerChoice] = useState<"" | "other">("");
+  const [returnerChoice, setReturnerChoice] = useState<"" | "other" | "not-returned">("");
   const [returnerEmployeeId, setReturnerEmployeeId] = useState("");
+  const [notReturnedObservation, setNotReturnedObservation] = useState("");
+  const [savingObservation, setSavingObservation] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(heureActuelle()), 15_000);
@@ -180,21 +172,6 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     return () => { active = false; };
   }, [siteId]);
 
-  useEffect(() => {
-    if (!siteId || !form.keyType) return;
-    let active = true;
-    const requestKey = `${siteId}:${form.keyType}`;
-    serviceApi.listKeyEmployees(form.keyType, siteId)
-      .then((rows) => {
-        if (active) {
-          setEmployees(rows);
-          setEmployeesFor(requestKey);
-        }
-      })
-      .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement des employés habilités impossible."));
-    return () => { active = false; };
-  }, [form.keyType, siteId]);
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -202,7 +179,6 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       await serviceApi.createKeyTracking({
         ...form,
         lieu: form.lieu.trim(),
-        observations: form.observations.trim(),
         departureTime: heureActuelle(),
         quantity: Number(form.quantity),
         siteId,
@@ -240,6 +216,26 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     }
   };
 
+  const handleNotReturned = async (entry: KeyTrackingEntry) => {
+    setSavingObservation(true);
+    try {
+      await serviceApi.markKeyTrackingNotReturned(entry.id, {
+        observations: notReturnedObservation.trim() || "Clés non rendu", siteId,
+      });
+      toast.success("Statut « Non rendu » enregistré.");
+      setReturnDialogEntry(null);
+      setReturnerChoice("");
+      setNotReturnedObservation("");
+      const rows = await serviceApi.listKeyTracking(siteId);
+      setEntries(rows);
+      setEntriesForSite(siteId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Enregistrement de l’observation impossible.");
+    } finally {
+      setSavingObservation(false);
+    }
+  };
+
   const handlePrint = () => {
     const originalTitle = document.title;
     document.title = "Historique des mouvements de clés";
@@ -249,7 +245,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     window.print();
   };
 
-  const matchingEmployees = employeesFor === `${siteId}:${form.keyType}` ? employees : [];
+  const availableEmployees = siteEmployeesFor === siteId ? siteEmployees : [];
   const visibleEntries = entriesForSite === siteId ? entries : [];
   const normalizedSearch = normaliserRecherche(search.trim());
   const filteredEntries = visibleEntries.filter((entry) =>
@@ -271,21 +267,17 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       entry.returnerMatricule ?? "",
     ].join(" ")).includes(normalizedSearch),
   );
-  const employeeOptions = matchingEmployees.map((employee) => ({
+  const employeeOptions = availableEmployees.map((employee) => ({
     value: employee.id,
     label: `${employee.lastName} ${employee.firstName}`,
-    searchTerms: [employee.lastName, employee.firstName],
+    searchTerms: [employee.lastName, employee.firstName, employee.matricule],
   }));
   const keyTypeOptions = keyTypes.map((keyType) => ({
     value: keyType,
     label: keyType,
     searchTerms: [keyType],
   }));
-  const siteEmployeeOptions = (siteEmployeesFor === siteId ? siteEmployees : []).map((employee) => ({
-    value: employee.id,
-    label: `${employee.lastName} ${employee.firstName}`,
-    searchTerms: [employee.lastName, employee.firstName, employee.matricule],
-  }));
+  const siteEmployeeOptions = employeeOptions;
   const selectedReturner = siteEmployees.find((employee) => employee.id === returnerEmployeeId);
 
   return (
@@ -302,16 +294,16 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             <SearchableSelect
               value={form.employeeId}
               options={employeeOptions}
-              placeholder={form.keyType ? "Sélectionner un employé habilité" : "Sélectionnez d’abord un type de clé"}
+              placeholder={siteEmployeesFor === siteId ? "Sélectionner un employé" : "Chargement des employés…"}
               searchPlaceholder="Rechercher un employé..."
               emptyMessage="Aucun employé correspondant."
-              disabled={!matchingEmployees.length}
+              disabled={siteEmployeesFor !== siteId || !employeeOptions.length}
               onChange={(employeeId) => setForm({ ...form, employeeId })}
             />
           </label>
           <label className="space-y-1">
             <span className="text-sm font-medium">Matricule</span>
-            <Input readOnly value={matchingEmployees.find((employee) => employee.id === form.employeeId)?.matricule ?? ""} placeholder="Automatique" />
+            <Input readOnly value={availableEmployees.find((employee) => employee.id === form.employeeId)?.matricule ?? ""} placeholder="Automatique" />
           </label>
           <div className="space-y-1">
             <span className="text-sm font-medium">Heure de sortie</span>
@@ -326,7 +318,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
               placeholder="Sélectionner un type de clé"
               searchPlaceholder="Rechercher un type de clé..."
               emptyMessage="Aucun type de clé correspondant."
-              onChange={(keyType) => setForm({ ...form, keyType, employeeId: "" })}
+              onChange={(keyType) => setForm({ ...form, keyType })}
             />
           </label>
           <label className="space-y-1">
@@ -337,17 +329,13 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             <span className="text-sm font-medium">Lieu</span>
             <Input required maxLength={255} value={form.lieu} onChange={(event) => setForm({ ...form, lieu: event.target.value })} placeholder="Bureau, magasin…" />
           </label>
-          <label className="space-y-1 sm:col-span-2 lg:col-span-3">
-            <span className="text-sm font-medium">Observation</span>
-            <Textarea maxLength={20000} rows={2} value={form.observations} onChange={(event) => setForm({ ...form, observations: event.target.value })} placeholder="Observation sur le mouvement de clé…" />
-          </label>
         </div>
         {!siteId && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
-        {form.keyType && !matchingEmployees.length && employeesFor === `${siteId}:${form.keyType}` && (
-          <p className="text-sm text-muted-foreground">Aucun employé actif n’est habilité à prendre ce type de clé sur ce site.</p>
+        {siteId && siteEmployeesFor === siteId && !availableEmployees.length && (
+          <p className="text-sm text-muted-foreground">Aucun employé actif disponible sur ce site.</p>
         )}
         <div className="flex justify-end">
-          <Button type="submit" disabled={saving || !siteId || !form.keyType || !matchingEmployees.some((employee) => employee.id === form.employeeId)}>
+          <Button type="submit" disabled={saving || !siteId || !form.keyType || !availableEmployees.some((employee) => employee.id === form.employeeId)}>
             <KeyRound className="mr-2 h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}
           </Button>
         </div>
@@ -395,7 +383,9 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                     ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`
                     : "—"}</td>
                   <td className="px-3 py-2">
-                    {entry.returnTime ? (
+                    {entry.notReturned ? (
+                      <span className="font-medium text-destructive">Non rendu</span>
+                    ) : entry.returnTime ? (
                       <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
                         <CheckCircle2 className="h-4 w-4" /> {entry.returnTime}
                       </span>
@@ -455,7 +445,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                   <td>{entry.returnerLastName || entry.returnerFirstName
                     ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`
                     : "—"}</td>
-                  <td>{entry.returnTime || "En attente"}</td>
+                  <td>{entry.returnTime || (entry.notReturned ? "Non rendu" : "En attente")}</td>
                 </tr>
               ))}
             </tbody>
@@ -473,7 +463,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
           <DialogHeader>
             <DialogTitle>Enregistrer le retour de la clé</DialogTitle>
             <DialogDescription>
-              Choisissez qui rend la clé. La date et l’heure du retour seront enregistrées maintenant.
+              Choisissez qui rend la clé ou indiquez qu’elle n’est pas rendue.
             </DialogDescription>
           </DialogHeader>
           {returnDialogEntry && <div className="space-y-4">
@@ -481,16 +471,32 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
               {returnDialogEntry.keyType} · {returnDialogEntry.quantity} clé(s), prise par {returnDialogEntry.lastName} {returnDialogEntry.firstName}
             </p>
             {!returnerChoice && <div className="grid gap-2 sm:grid-cols-2">
-              <Button type="button" variant="outline" disabled={returningEntryId === returnDialogEntry.id} onClick={() => void handleReturn(returnDialogEntry, "same")}>
+              <Button type="button" variant="outline" disabled={returningEntryId === returnDialogEntry.id || savingObservation} onClick={() => void handleReturn(returnDialogEntry, "same")}>
                 La personne qui a pris la clé
               </Button>
-              <Button type="button" variant="outline" disabled={returningEntryId === returnDialogEntry.id} onClick={() => {
+              <Button type="button" variant="outline" disabled={returningEntryId === returnDialogEntry.id || savingObservation} onClick={() => {
                 setReturnerChoice("other");
                 setReturnerEmployeeId("");
               }}>
                 Une autre personne
               </Button>
+              <Button type="button" variant="destructive" disabled={returningEntryId === returnDialogEntry.id || savingObservation} onClick={() => {
+                setReturnerChoice("not-returned");
+                setNotReturnedObservation("");
+              }}>
+                Non rendu
+              </Button>
             </div>}
+            {returnerChoice === "not-returned" && <label className="block space-y-1">
+              <span className="text-sm font-medium">Observation (facultative)</span>
+              <Textarea
+                maxLength={20000}
+                rows={3}
+                value={notReturnedObservation}
+                onChange={(event) => setNotReturnedObservation(event.target.value)}
+                placeholder="Clés non rendu"
+              />
+            </label>}
             {returnerChoice === "other" && <div className="space-y-3 rounded-md border p-3">
               <p className="text-sm font-medium">Une autre personne rendra la clé</p>
               <label className="block space-y-1">
@@ -519,7 +525,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             </div>}
           </div>}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={Boolean(returningEntryId)} onClick={() => {
+              <Button type="button" variant="outline" disabled={Boolean(returningEntryId) || savingObservation} onClick={() => {
               setReturnDialogEntry(null);
               setReturnerChoice("");
               setReturnerEmployeeId("");
@@ -529,6 +535,12 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
               disabled={!selectedReturner || siteEmployeesFor !== siteId || returningEntryId === returnDialogEntry.id}
               onClick={() => void handleReturn(returnDialogEntry, "other", returnerEmployeeId)}
             >{returningEntryId === returnDialogEntry.id ? "Enregistrement…" : "Enregistrer le retour"}</Button>}
+            {returnerChoice === "not-returned" && returnDialogEntry && <Button
+              type="button"
+              variant="destructive"
+              disabled={savingObservation || returningEntryId === returnDialogEntry.id}
+              onClick={() => void handleNotReturned(returnDialogEntry)}
+            >{savingObservation ? "Enregistrement…" : "Confirmer non rendu"}</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
