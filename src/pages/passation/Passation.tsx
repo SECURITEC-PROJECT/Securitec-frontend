@@ -7,6 +7,7 @@ import ListPassation from "./ListPassation";
 import { useSites } from "@/hooks/useSites";
 
 import { API_URL, authHeaders } from "@/lib/api";
+import { requestCachedApi } from "@/lib/service-api";
 
 type Handover = {
   id: string;
@@ -48,8 +49,7 @@ export default function Passation() {
   const [handovers, setHandovers] = useState<Handover[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/handovers`, { headers: authHeaders() })
-      .then((res) => res.json())
+    requestCachedApi<Handover[]>("/handovers")
       .then((data) => {
         if (Array.isArray(data)) setHandovers(data);
       })

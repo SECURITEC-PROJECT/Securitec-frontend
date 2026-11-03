@@ -20,7 +20,14 @@ export default function PointsVigilance() {
       .catch((error) => {
         if (active) toast.error(error instanceof Error ? error.message : "Chargement des points de vigilance impossible.");
       });
-    return () => { active = false; };
+    const refreshOnQueueChange = () => setRefreshKey((key) => key + 1);
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [refreshKey, selectedSiteId]);
 
   return <div className="space-y-6">

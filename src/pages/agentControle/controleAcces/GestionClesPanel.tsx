@@ -145,7 +145,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   useEffect(() => {
     if (!siteId) return;
     let active = true;
-    serviceApi.listKeyTracking(siteId)
+    const refreshEntries = () => serviceApi.listKeyTracking(siteId)
       .then((rows) => {
         if (active) {
           setEntries(rows);
@@ -153,7 +153,15 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         }
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement du suivi des clés impossible."));
-    return () => { active = false; };
+    const refreshOnQueueChange = () => { void refreshEntries(); };
+    void refreshEntries();
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [siteId]);
 
   useEffect(() => {
@@ -176,8 +184,13 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     event.preventDefault();
     setSaving(true);
     try {
+      const employee = availableEmployees.find((item) => item.id === form.employeeId);
+      if (!employee) throw new Error("Sélectionnez un employé actif.");
       await serviceApi.createKeyTracking({
         ...form,
+        lastName: employee.lastName,
+        firstName: employee.firstName,
+        matricule: employee.matricule,
         lieu: form.lieu.trim(),
         departureTime: heureActuelle(),
         quantity: Number(form.quantity),
@@ -383,7 +396,11 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                     ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`
                     : "—"}</td>
                   <td className="px-3 py-2">
-                    {entry.notReturned ? (
+                    {entry.pendingSync ? (
+                      <span className="font-medium text-amber-700" title={entry.pendingSyncError || undefined}>
+                        {entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}
+                      </span>
+                    ) : entry.notReturned ? (
                       <span className="font-medium text-destructive">Non rendu</span>
                     ) : entry.returnTime ? (
                       <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
@@ -445,7 +462,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                   <td>{entry.returnerLastName || entry.returnerFirstName
                     ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`
                     : "—"}</td>
-                  <td>{entry.returnTime || (entry.notReturned ? "Non rendu" : "En attente")}</td>
+                  <td>{entry.pendingSync ? "En attente de synchronisation" : entry.returnTime || (entry.notReturned ? "Non rendu" : "En attente")}</td>
                 </tr>
               ))}
             </tbody>

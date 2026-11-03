@@ -180,7 +180,7 @@ export default function Alcootest() {
   useEffect(() => {
     if (!siteId) return;
     let active = true;
-    serviceApi.listAlcoholChecks(siteId)
+    const refreshEntries = () => serviceApi.listAlcoholChecks(siteId)
       .then((rows) => {
         if (active) {
           setEntries(rows);
@@ -195,7 +195,15 @@ export default function Alcootest() {
           setLoadError(reason instanceof Error ? reason.message : "Chargement des alcootests impossible.");
         }
       });
-    return () => { active = false; };
+    const refreshOnQueueChange = () => { void refreshEntries(); };
+    void refreshEntries();
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [siteId]);
 
   const resetForm = () => {
@@ -228,14 +236,16 @@ export default function Alcootest() {
         siteId,
       };
       const entry = editing
-        ? await serviceApi.updateAlcoholCheck(editing.id, payload)
+        ? await serviceApi.updateAlcoholCheck(editing.id, payload, editing.updatedAt)
         : await serviceApi.createAlcoholCheck(payload);
       setEntries((current) => editing
         ? current.map((row) => row.id === entry.id ? entry : row)
         : [entry, ...current]);
       setEntriesSiteId(siteId);
       resetForm();
-      toast.success(editing ? "Alcootest modifié." : "Alcootest enregistré.");
+      toast.success(entry.pendingSync
+        ? "Modification enregistrée localement. Synchronisation au retour du réseau."
+        : editing ? "Alcootest modifié." : "Alcootest enregistré.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Enregistrement impossible.");
     } finally {
@@ -253,10 +263,14 @@ export default function Alcootest() {
     if (entry.annuleLe || !(await confirmDeletion(`Annuler le contrôle de ${entry.personne} (${entry.matricule}) ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteAlcoholCheck(entry.id, siteId);
-      setEntries((current) => current.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row));
+      const result = await serviceApi.deleteAlcoholCheck(entry.id, siteId, entry.updatedAt);
+      setEntries((current) => current.map((row) => row.id === entry.id
+        ? { ...row, annuleLe: result.annuleLe || new Date().toISOString(), pendingSync: result.pendingSync }
+        : row));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Contrôle annulé et conservé dans l’historique.");
+      toast.success(result.pendingSync
+        ? "Annulation enregistrée localement. Synchronisation au retour du réseau."
+        : "Contrôle annulé et conservé dans l’historique.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -437,7 +451,7 @@ export default function Alcootest() {
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
                     <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
-                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block font-sans text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heure}</td>
                       <td className="break-words px-3 py-3 font-mono text-xs">{entry.matricule || "—"}</td>
                       <td className="break-words px-3 py-3 font-medium">{entry.personne}</td>
@@ -451,17 +465,17 @@ export default function Alcootest() {
                       <td className="break-words px-3 py-3">{entry.demandeur || "—"}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
-                          {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le test" title="Modifier le test" onClick={() => editEntry(entry)}>
+                          {!entry.annuleLe && !entry.pendingSync && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le test" title="Modifier le test" onClick={() => editEntry(entry)}>
                             <Pencil className="h-4 w-4" />
                           </Button>}
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le procès-verbal" title="Imprimer le procès-verbal" onClick={() => printEntry(entry)}>
                             <Printer className="h-4 w-4" />
                           </Button>
-                          {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler le test" title="Annuler le test" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
+                          {!entry.annuleLe && !entry.pendingSync && <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler le test" title="Annuler le test" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>}
-                          <RegistryAuditHistory entity="controle_alcoolemie" recordId={entry.id} />
-                          <RegistryAttachments entity="controle_alcoolemie" recordId={entry.id} siteId={entry.siteId} />
+                          {!entry.pendingSync && <RegistryAuditHistory entity="controle_alcoolemie" recordId={entry.id} />}
+                          {!entry.pendingSync && <RegistryAttachments entity="controle_alcoolemie" recordId={entry.id} siteId={entry.siteId} />}
                         </div>
                       </td>
                     </tr>

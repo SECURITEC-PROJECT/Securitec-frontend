@@ -1,17 +1,31 @@
-import { API_URL, authHeaders } from "@/lib/api";
+import { API_URL } from "@/lib/api";
 import type { VisitorRecord } from "@/types/visitor";
 import {
   cacheLogisticsEntries,
   getCachedLogisticsEntries,
+  getCachedApiResponse,
   getQueuedLogisticsWrites,
+  cacheApiResponse,
   queueLogisticsWrite,
+  updateQueuedLogisticsWrite,
   removeQueuedLogisticsWrite,
 } from "@/lib/offline-logistics";
 
 const apiBaseUrl = API_URL;
 const tokenKey = "securitec-access-token";
+const logisticsSyncs = new Map<string, Promise<{ synced: number; pending: number }>>();
 
-function pendingLogisticsEntry(item: { requestId: string; siteId: string; payload: Record<string, unknown>; createdAt: string }): any {
+class ApiResponseError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiResponseError";
+    this.status = status;
+  }
+}
+
+function pendingLogisticsEntry(item: { requestId: string; siteId: string; payload: Record<string, unknown>; createdAt: string; status?: "pending" | "conflict" | "rejected"; lastError?: string }): any {
   return {
     ...item.payload,
     id: `pending-${item.requestId}`,
@@ -20,6 +34,8 @@ function pendingLogisticsEntry(item: { requestId: string; siteId: string; payloa
     date: item.payload.date || item.payload.dateOperation || item.createdAt.slice(0, 10),
     createdAt: item.createdAt,
     pendingSync: true,
+    pendingSyncStatus: item.status || "pending",
+    pendingSyncError: item.lastError,
   };
 }
 
@@ -40,6 +56,9 @@ export interface KeyTrackingEntry {
   returnerMatricule: string | null;
   lieu: string | null;
   observations: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface EmergencyContact {
@@ -105,6 +124,9 @@ export interface EmptyBottleDelivery {
   remarque?: string | null;
   detailsBouteilles: { designation: string; quantite: number }[];
   siteName: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface PondBrutEntry {
@@ -120,6 +142,9 @@ export interface PondBrutEntry {
   produit: string;
   remarque: string;
   siteName: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface VehicleMovement {
@@ -152,6 +177,10 @@ export interface CourrierMovement {
   siteId: string;
   siteName: string;
   annuleLe?: string | null;
+  updatedAt?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface SubcontractorMaterialMovement {
@@ -258,6 +287,9 @@ export interface VigilanceEntry {
   createdAt: string;
   siteId: string;
   siteName: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export type VisitorQuestionnaireAnswer = "ENY" | "TSIA" | "";
@@ -291,6 +323,10 @@ export interface VisitorQuestionnaireRecord {
   siteName: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface ObjectDeclarationData {
@@ -313,6 +349,10 @@ export interface ObjectDeclarationRecord {
   siteName: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface AlcoholCheck {
@@ -339,6 +379,10 @@ export interface AlcoholCheck {
   siteId: string;
   siteName: string;
   annuleLe?: string | null;
+  updatedAt?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface StarParticulierLoading {
@@ -425,6 +469,10 @@ export interface BicycleMovement {
   marqueVelo: string;
   siteId: string;
   annuleLe?: string | null;
+  updatedAt?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface MotorcycleMovement {
@@ -436,6 +484,10 @@ export interface MotorcycleMovement {
   heureSortie: string | null;
   siteId: string;
   annuleLe?: string | null;
+  updatedAt?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface ApsPostConfiguration {
@@ -482,16 +534,37 @@ export type ApsMovementData = Record<string, ApsMovementAgent[]>;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(tokenKey);
+  const userId = sessionStorage.getItem("securitec-session-user-id");
+  const method = (init.method || "GET").toUpperCase();
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers,
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
-  return result as T;
+  try {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      headers,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new ApiResponseError(result.error || `Erreur API (${response.status})`, response.status);
+    if (method === "GET" && userId) {
+      try {
+        await cacheApiResponse(userId, path, result);
+      } catch {
+        // A failed local cache must not turn a successful server response into a failed request.
+      }
+    }
+    return result as T;
+  } catch (error) {
+    if (method === "GET" && userId && (!navigator.onLine || error instanceof TypeError)) {
+      const cached = await getCachedApiResponse<T>(userId, path).catch(() => null);
+      if (cached !== null) return cached;
+    }
+    throw error;
+  }
+}
+
+export function requestCachedApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return request<T>(path, init);
 }
 
 const body = (data: unknown): string => {
@@ -661,31 +734,188 @@ export const serviceApi = {
     return (await request<{ employees: { id: string; firstName: string; lastName: string; matricule: string; role: string }[] }>(`/access-control/key-employees?${params}`)).employees;
   },
   async listKeyTracking(siteId: string) {
-    return (await request<{ entries: KeyTrackingEntry[] }>(`/access-control/keys?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const entries = (await request<{ entries: KeyTrackingEntry[] }>(`/access-control/keys?siteId=${encodeURIComponent(siteId)}`)).entries;
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const pending = queued
+      .filter((entry) => entry.path === "/access-control/keys")
+      .map((item) => ({
+        ...item.payload,
+        id: `pending-${item.requestId}`,
+        date: String(item.payload.date || item.createdAt.slice(0, 10)),
+        lastName: String(item.payload.lastName || ""),
+        firstName: String(item.payload.firstName || ""),
+        matricule: String(item.payload.matricule || ""),
+        keyType: String(item.payload.keyType || ""),
+        quantity: Number(item.payload.quantity || 0),
+        departureTime: String(item.payload.departureTime || ""),
+        returnTime: null,
+        notReturned: false,
+        returnDate: null,
+        returnerLastName: null,
+        returnerFirstName: null,
+        returnerMatricule: null,
+        lieu: String(item.payload.lieu || ""),
+        observations: null,
+        pendingSync: true,
+        pendingSyncStatus: item.status || "pending",
+        pendingSyncError: item.lastError,
+      })) as KeyTrackingEntry[];
+    const pendingActions = entries.map((entry) => {
+      const queuedAction = queued.find((item) => item.path === `/access-control/keys/${entry.id}/return` ||
+        item.path === `/access-control/keys/${entry.id}/not-returned`);
+      if (!queuedAction) return entry;
+      const notReturnedAction = queuedAction.path?.endsWith("/not-returned");
+      return {
+        ...entry,
+        ...(notReturnedAction ? {
+          notReturned: true,
+          observations: String(queuedAction.payload.observations || "Clés non rendu"),
+        } : {
+          returnDate: String(queuedAction.payload.returnDate || entry.returnDate || ""),
+          returnTime: String(queuedAction.payload.returnTime || entry.returnTime || ""),
+        }),
+        pendingSync: true,
+        pendingSyncStatus: queuedAction.status || "pending",
+        pendingSyncError: queuedAction.lastError,
+      };
+    });
+    return [...pending, ...pendingActions];
   },
-  async createKeyTracking(data: { date: string; employeeId: string; keyType: string; quantity: number; departureTime: string; siteId: string; lieu: string }) {
-    return (await request<{ entry: KeyTrackingEntry }>("/access-control/keys", { method: "POST", body: body(data) })).entry;
+  async createKeyTracking(data: { date: string; employeeId: string; lastName: string; firstName: string; matricule: string; keyType: string; quantity: number; departureTime: string; siteId: string; lieu: string }) {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: KeyTrackingEntry }>("/access-control/keys", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/access-control/keys");
+      return {
+        ...data,
+        id: `pending-${requestId}`,
+        returnTime: null,
+        notReturned: false,
+        returnDate: null,
+        returnerLastName: null,
+        returnerFirstName: null,
+        returnerMatricule: null,
+        observations: null,
+        pendingSync: true,
+      };
+    }
   },
   async returnKeyTracking(id: string | number, data: { returnDate: string; returnTime: string; siteId: string; returnerType: "same" | "other"; returnerEmployeeId?: string }) {
-    return (await request<{ entry: Pick<KeyTrackingEntry, "id" | "returnDate" | "returnTime" | "returnerLastName" | "returnerFirstName" | "returnerMatricule"> }>(`/access-control/keys/${encodeURIComponent(String(id))}/return`, { method: "PATCH", body: body(data) })).entry;
+    if (String(id).startsWith("pending-")) throw new Error("Attendez la synchronisation de la sortie avant d’enregistrer le retour.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    const path = `/access-control/keys/${encodeURIComponent(String(id))}/return`;
+    try {
+      return (await request<{ entry: Pick<KeyTrackingEntry, "id" | "returnDate" | "returnTime" | "returnerLastName" | "returnerFirstName" | "returnerMatricule"> }>(path, { method: "PATCH", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PATCH");
+      return {
+        id,
+        returnDate: data.returnDate,
+        returnTime: data.returnTime,
+        returnerLastName: null,
+        returnerFirstName: null,
+        returnerMatricule: null,
+      };
+    }
   },
   async markKeyTrackingNotReturned(id: string | number, data: { observations: string; siteId: string }) {
-    return (await request<{ entry: Pick<KeyTrackingEntry, "id" | "observations" | "notReturned"> }>(`/access-control/keys/${encodeURIComponent(String(id))}/not-returned`, { method: "PATCH", body: body(data) })).entry;
+    if (String(id).startsWith("pending-")) throw new Error("Attendez la synchronisation de la sortie avant de signaler la clé non rendue.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    const path = `/access-control/keys/${encodeURIComponent(String(id))}/not-returned`;
+    try {
+      return (await request<{ entry: Pick<KeyTrackingEntry, "id" | "observations" | "notReturned"> }>(path, { method: "PATCH", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PATCH");
+      return { id, observations: data.observations || "Clés non rendu", notReturned: true };
+    }
   },
   async listBreathTests(siteId?: string) { return (await request<{ entries: any[] }>(`/access-control/breath-tests${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
   async createBreathTest(data: unknown) { return (await request<{ entry: any }>("/access-control/breath-tests", { method: "POST", body: body(data) })).entry; },
   async listAlcoholChecks(siteId: string) {
-    return (await request<{ entries: AlcoholCheck[] }>(`/access-control/alcohol-checks?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const entries = (await request<{ entries: AlcoholCheck[] }>(`/access-control/alcohol-checks?siteId=${encodeURIComponent(siteId)}`)).entries;
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const pending = queued
+      .filter((item) => item.path === "/access-control/alcohol-checks")
+      .map((item) => {
+        const payload = item.payload as unknown as Omit<AlcoholCheck, "id" | "siteName">;
+        return {
+          ...payload,
+          id: `pending-${item.requestId}`,
+          siteId,
+          siteName: String(item.payload.siteName || ""),
+          annuleLe: null,
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        };
+      });
+    const pendingMutations = entries.map((entry) => {
+      const path = `/access-control/alcohol-checks/${encodeURIComponent(entry.id)}`;
+      const operation = queued.filter((item) => item.path?.split("?")[0] === path).slice(-1)[0];
+      if (!operation) return entry;
+      const deleted = operation.method === "DELETE";
+      return {
+        ...entry,
+        ...(deleted ? { annuleLe: operation.createdAt } : operation.payload),
+        pendingSync: true,
+        pendingSyncStatus: operation.status || "pending",
+        pendingSyncError: operation.lastError,
+      };
+    });
+    return [...pending, ...pendingMutations];
   },
   async createAlcoholCheck(data: Omit<AlcoholCheck, "id" | "siteName">) {
-    return (await request<{ entry: AlcoholCheck }>("/access-control/alcohol-checks", { method: "POST", body: body(data) })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: AlcoholCheck }>("/access-control/alcohol-checks", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/access-control/alcohol-checks");
+      return {
+        ...data,
+        id: `pending-${requestId}`,
+        siteName: "",
+        annuleLe: null,
+        pendingSync: true,
+      };
+    }
   },
-  async updateAlcoholCheck(id: string, data: Omit<AlcoholCheck, "id" | "siteName">) {
-    return (await request<{ entry: AlcoholCheck }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateAlcoholCheck(id: string, data: Omit<AlcoholCheck, "id" | "siteName">, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du contrôle avant de le modifier.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    const path = `/access-control/alcohol-checks/${encodeURIComponent(id)}`;
+    try {
+      return (await request<{ entry: AlcoholCheck }>(path, { method: "PUT", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { ...data, id, siteName: "", updatedAt: expectedUpdatedAt || null, pendingSync: true };
+    }
   },
-  async deleteAlcoholCheck(id: string, siteId: string) {
+  async deleteAlcoholCheck(id: string, siteId: string, expectedUpdatedAt?: string | null): Promise<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du contrôle avant de l’annuler.");
+    const requestId = crypto.randomUUID();
     const params = new URLSearchParams({ siteId });
-    return request<{ id: string; deleted: boolean }>(`/access-control/alcohol-checks/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+    if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+    const path = `/access-control/alcohol-checks/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId, expectedUpdatedAt: expectedUpdatedAt || null }, [], path, "DELETE");
+      return { id, deleted: false, cancelled: true, annuleLe: new Date().toISOString(), pendingSync: true };
+    }
   },
   async listLogistics(siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
@@ -693,7 +923,7 @@ export const serviceApi = {
       if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
       const entries = (await request<{ entries: any[] }>(`/logistics${query}`)).entries;
       if (siteId) await cacheLogisticsEntries(siteId, entries);
-      const pending = await getQueuedLogisticsWrites(siteId);
+      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => !entry.path || entry.path === "/logistics");
       return [...pending.map(pendingLogisticsEntry), ...entries];
     } catch (error) {
       if (!siteId) throw error;
@@ -701,12 +931,41 @@ export const serviceApi = {
         getCachedLogisticsEntries(siteId), getQueuedLogisticsWrites(siteId),
       ]);
       if (!cached.length && !pending.length) throw error;
-      return [...pending.map(pendingLogisticsEntry), ...cached];
+      return [...pending.filter((entry) => !entry.path || entry.path === "/logistics").map(pendingLogisticsEntry), ...cached];
     }
   },
   async listPondBrut(siteId: string) {
     const params = new URLSearchParams({ siteId });
-    return (await request<{ entries: PondBrutEntry[] }>(`/pond-brut?${params}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: PondBrutEntry[] = [];
+    try {
+      entries = (await request<{ entries: PondBrutEntry[] }>(`/pond-brut?${params}`)).entries;
+    } catch (error) {
+      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+    }
+    const pending = (await getQueuedLogisticsWrites(siteId))
+      .filter((item) => (!item.path || item.path === "/logistics") && item.payload.type === "BOUTEILLES_VIDES" && item.payload.pondBrut)
+      .map((item) => {
+        const pondBrut = item.payload.pondBrut as Record<string, unknown>;
+        return {
+          id: `pending-${item.requestId}`,
+          fluxId: `pending-${item.requestId}`,
+          date: String(item.payload.date || item.createdAt.slice(0, 10)),
+          vehicule: String(item.payload.immatriculationVehicule || ""),
+          brut: String(pondBrut.brut || ""),
+          tare: String(pondBrut.tare || ""),
+          net: String(pondBrut.net || ""),
+          observation: String(pondBrut.remarque || ""),
+          clientFournisseur: String(pondBrut.clientFournisseur || ""),
+          produit: String(pondBrut.produit || ""),
+          remarque: String(pondBrut.remarque || ""),
+          siteName: String(item.payload.siteName || ""),
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        } as PondBrutEntry;
+      });
+    return [...pending, ...entries];
   },
   async getTruckChecklist(siteId: string, date: string) {
     const params = new URLSearchParams({ siteId, date });
@@ -735,7 +994,7 @@ export const serviceApi = {
       }
       return { ...result, attachmentErrors };
     } catch (error) {
-      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+      if (!(error instanceof TypeError)) throw error;
       const siteId = String(payload.siteId || "");
       if (!siteId) throw error;
       await queueLogisticsWrite(requestId, siteId, payload, files);
@@ -747,29 +1006,83 @@ export const serviceApi = {
   },
   async syncPendingLogistics(siteId?: string) {
     if (!navigator.onLine) return { synced: 0, pending: (await getQueuedLogisticsWrites(siteId)).length };
-    const queued = await getQueuedLogisticsWrites(siteId);
-    let synced = 0;
-    for (const item of queued) {
-      try {
-        const result = await request<{ entry?: any }>(item.path || "/logistics", {
-          method: "POST", body: body({ ...item.payload, clientRequestId: item.requestId }),
-        });
-        if (!result.entry?.id) throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
-        for (const file of item.files) {
-          const upload = await serviceApi.uploadDocument(
-            item.siteId,
-            new File([file.blob], file.name, { type: file.type, lastModified: file.lastModified }),
-            "Flux logistique",
-          );
-          await serviceApi.linkLogisticsDocument(result.entry.id, upload.id, item.siteId);
+    const syncKey = siteId || "*";
+    const activeSync = logisticsSyncs.get(syncKey);
+    if (activeSync) return activeSync;
+    const sync = (async () => {
+      const queued = (await getQueuedLogisticsWrites(siteId)).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+      let synced = 0;
+      for (const item of queued) {
+        if (item.status && item.status !== "pending") break;
+        try {
+          const replayBody = item.path === "/vigilance"
+            ? item.payload.entries
+            : { ...item.payload, clientRequestId: item.requestId };
+          const result = await request<{ entry?: any; id?: string; entries?: unknown[] }>(item.path || "/logistics", {
+            method: item.method || "POST", body: body(replayBody),
+          });
+          if (!result.entry?.id && !result.id && !(Array.isArray(result.entries) && result.entries.length)) {
+            throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
+          }
+          for (const file of item.files) {
+            const upload = await serviceApi.uploadDocument(
+              item.siteId,
+              new File([file.blob], file.name, { type: file.type, lastModified: file.lastModified }),
+              "Flux logistique",
+            );
+            await serviceApi.linkLogisticsDocument(result.entry.id, upload.id, item.siteId);
+          }
+          await removeQueuedLogisticsWrite(item.requestId);
+          synced += 1;
+        } catch (error) {
+          if (error instanceof ApiResponseError && error.status >= 400 && error.status < 500 && error.status !== 401 && error.status !== 403) {
+            await updateQueuedLogisticsWrite(item.requestId, {
+              status: error.status === 409 ? "conflict" : "rejected",
+              lastError: error.message,
+            });
+          }
+          break;
         }
-        await removeQueuedLogisticsWrite(item.requestId);
-        synced += 1;
-      } catch {
-        // Keep the write and its files for a later retry.
       }
+      return { synced, pending: (await getQueuedLogisticsWrites(siteId)).length };
+    })();
+    logisticsSyncs.set(syncKey, sync);
+    try {
+      return await sync;
+    } finally {
+      if (logisticsSyncs.get(syncKey) === sync) logisticsSyncs.delete(syncKey);
     }
-    return { synced, pending: queued.length - synced };
+  },
+  async syncAllPendingLogistics() {
+    const queued = await getQueuedLogisticsWrites();
+    const siteIds = [...new Set(queued.map((entry) => entry.siteId))];
+    let synced = 0;
+    for (const siteId of siteIds) {
+      const result = await serviceApi.syncPendingLogistics(siteId);
+      synced += result.synced;
+    }
+    return { synced, pending: (await getQueuedLogisticsWrites()).length };
+  },
+  async getPendingLogisticsCount() {
+    return (await getQueuedLogisticsWrites()).length;
+  },
+  async getRejectedOfflineWriteCount() {
+    return (await getQueuedLogisticsWrites()).filter((item) => item.status && item.status !== "pending").length;
+  },
+  async listPendingOfflineWrites() {
+    return (await getQueuedLogisticsWrites()).map(({ requestId, siteId, path, method, createdAt, status, lastError }) => ({
+      requestId, siteId, path, method, createdAt, status: status || "pending", lastError,
+    }));
+  },
+  async retryPendingOfflineWrite(requestId: string) {
+    const item = (await getQueuedLogisticsWrites()).find((entry) => entry.requestId === requestId);
+    if (!item) throw new Error("Cette saisie n’est plus dans la file hors ligne.");
+    await updateQueuedLogisticsWrite(requestId, { status: "pending", lastError: undefined });
+  },
+  async discardPendingOfflineWrite(requestId: string) {
+    const item = (await getQueuedLogisticsWrites()).find((entry) => entry.requestId === requestId);
+    if (!item) throw new Error("Cette saisie n’est plus dans la file hors ligne.");
+    await removeQueuedLogisticsWrite(requestId);
   },
   async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", data: unknown) {
     return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=${type}`, { method: "PUT", body: body(data) });
@@ -798,7 +1111,7 @@ export const serviceApi = {
     try {
       return (await request<{ entry: StarParticulierLoading }>("/logistics/star-particulier", { method: "POST", body: body(payload) })).entry;
     } catch (error) {
-      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+      if (!(error instanceof TypeError)) throw error;
       await queueLogisticsWrite(requestId, data.siteId, payload, [], "/logistics/star-particulier");
       return pendingLogisticsEntry({ requestId, siteId: data.siteId, payload, createdAt: new Date().toISOString() }) as StarParticulierLoading;
     }
@@ -811,7 +1124,8 @@ export const serviceApi = {
     return request<{ id: string; deleted: boolean }>(`/logistics/star-particulier/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
   async createEmptyBottleDelivery(data: unknown) {
-    return request<{ entry: EmptyBottleDelivery }>("/logistics", { method: "POST", body: body(data) });
+    const result = await serviceApi.createLogistics(data);
+    return { entry: result.entry as EmptyBottleDelivery };
   },
   async updateWasteLogistics(id: string, data: unknown) {
     return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) });
@@ -863,34 +1177,129 @@ export const serviceApi = {
     return request<{ id: string; deleted: boolean }>(`${path}/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
   async listBicycleMovements(siteId: string) {
-    return (await request<{ entries: BicycleMovement[] }>(`/bicycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: BicycleMovement[] = [];
+    try { entries = (await request<{ entries: BicycleMovement[] }>(`/bicycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries; }
+    catch (error) { if (navigator.onLine && !(error instanceof TypeError)) throw error; }
+    const queued = (await getQueuedLogisticsWrites(siteId)).filter((item) => item.path?.startsWith("/bicycle-movements"));
+    const pendingCreates = queued.filter((item) => item.path === "/bicycle-movements" && item.method === "POST").map((item) => ({
+      ...(item.payload as unknown as Omit<BicycleMovement, "id">), id: `pending-${item.requestId}`,
+      heureSortie: null, updatedAt: null, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError,
+    })) as BicycleMovement[];
+    const pendingUpdates = entries.flatMap((entry) => {
+      const base = `/bicycle-movements/${encodeURIComponent(entry.id)}`;
+      const op = queued.filter((item) => item.path?.split("?")[0] === base || item.path?.split("?")[0] === `${base}/sortie`).slice(-1)[0];
+      if (!op) return [entry];
+      if (op.method === "DELETE") return [];
+      return [{ ...entry, ...(op.method === "PUT" ? op.payload : {}), ...(op.method === "PATCH" ? { heureSortie: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false }) } : {}), pendingSync: true, pendingSyncStatus: op.status || "pending", pendingSyncError: op.lastError } as BicycleMovement];
+    });
+    return [...pendingCreates, ...pendingUpdates];
   },
-  async createBicycleMovement(data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie">) {
-    return (await request<{ entry: BicycleMovement }>("/bicycle-movements", { method: "POST", body: body(data) })).entry;
+  async createBicycleMovement(data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie" | "updatedAt" | "pendingSync"> & { prenom?: string; section?: string }) {
+    const requestId = crypto.randomUUID(); const payload = { ...data, clientRequestId: requestId };
+    try { return (await request<{ entry: BicycleMovement }>("/bicycle-movements", { method: "POST", body: body(payload) })).entry; }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/bicycle-movements");
+      return { ...data, id: `pending-${requestId}`, prenom: data.prenom || "", section: data.section || "", heureSortie: null, siteName: "", pendingSync: true } as BicycleMovement;
+    }
   },
-  async updateBicycleMovement(id: string, data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie">) {
-    return (await request<{ entry: BicycleMovement }>(`/bicycle-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateBicycleMovement(id: string, data: Omit<BicycleMovement, "id" | "prenom" | "section" | "heureSortie" | "updatedAt" | "pendingSync">, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de le modifier.");
+    const requestId = crypto.randomUUID(); const payload = { ...data, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    const path = `/bicycle-movements/${encodeURIComponent(id)}`;
+    try { return (await request<{ entry: BicycleMovement }>(path, { method: "PUT", body: body(payload) })).entry; }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { ...data, id, prenom: "", section: "", heureSortie: null, siteName: "", updatedAt: expectedUpdatedAt || null, pendingSync: true };
+    }
   },
-  async deleteBicycleMovement(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/bicycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteBicycleMovement(id: string, siteId: string, expectedUpdatedAt?: string | null): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de l’annuler.");
+    const requestId = crypto.randomUUID(); const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+    const path = `/bicycle-movements/${encodeURIComponent(id)}?${params}`;
+    try { return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" }); }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId, expectedUpdatedAt: expectedUpdatedAt || null }, [], path, "DELETE");
+      return { id, deleted: false, pendingSync: true };
+    }
   },
-  async recordBicycleExit(id: string, siteId: string) {
-    return (await request<{ entry: BicycleMovement }>(`/bicycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`, { method: "PATCH" })).entry;
+  async recordBicycleExit(id: string, siteId: string, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant d’enregistrer sa sortie.");
+    const requestId = crypto.randomUUID(); const params = new URLSearchParams({ siteId });
+    const path = `/bicycle-movements/${encodeURIComponent(id)}/sortie?${params}`;
+    const payload = { siteId, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    try { return (await request<{ entry: BicycleMovement }>(path, { method: "PATCH", body: body(payload) })).entry; }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, heureSortie: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false }), updatedAt: expectedUpdatedAt || null, pendingSync: true } as BicycleMovement;
+    }
   },
   async listMotorcycleMovements(siteId: string) {
-    return (await request<{ entries: MotorcycleMovement[] }>(`/motorcycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: MotorcycleMovement[] = [];
+    try { entries = (await request<{ entries: MotorcycleMovement[] }>(`/motorcycle-movements?siteId=${encodeURIComponent(siteId)}`)).entries; }
+    catch (error) { if (navigator.onLine && !(error instanceof TypeError)) throw error; }
+    const queued = (await getQueuedLogisticsWrites(siteId)).filter((item) => item.path?.startsWith("/motorcycle-movements"));
+    const pendingCreates = queued.filter((item) => item.path === "/motorcycle-movements" && item.method === "POST").map((item) => ({
+      ...(item.payload as unknown as Omit<MotorcycleMovement, "id">), id: `pending-${item.requestId}`,
+      heureSortie: null, updatedAt: null, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError,
+    })) as MotorcycleMovement[];
+    const pendingUpdates = entries.flatMap((entry) => {
+      const base = `/motorcycle-movements/${encodeURIComponent(entry.id)}`;
+      const op = queued.filter((item) => item.path?.split("?")[0] === base || item.path?.split("?")[0] === `${base}/sortie`).slice(-1)[0];
+      if (!op) return [entry];
+      if (op.method === "DELETE") return [];
+      return [{ ...entry, ...(op.method === "PUT" ? op.payload : {}), ...(op.method === "PATCH" ? { heureSortie: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false }) } : {}), pendingSync: true, pendingSyncStatus: op.status || "pending", pendingSyncError: op.lastError } as MotorcycleMovement];
+    });
+    return [...pendingCreates, ...pendingUpdates];
   },
-  async createMotorcycleMovement(data: Omit<MotorcycleMovement, "id" | "heureSortie">) {
-    return (await request<{ entry: MotorcycleMovement }>("/motorcycle-movements", { method: "POST", body: body(data) })).entry;
+  async createMotorcycleMovement(data: Omit<MotorcycleMovement, "id" | "heureSortie" | "updatedAt" | "pendingSync">) {
+    const requestId = crypto.randomUUID(); const payload = { ...data, clientRequestId: requestId };
+    try { return (await request<{ entry: MotorcycleMovement }>("/motorcycle-movements", { method: "POST", body: body(payload) })).entry; }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/motorcycle-movements");
+      return { ...data, id: `pending-${requestId}`, heureSortie: null, siteName: "", pendingSync: true } as MotorcycleMovement;
+    }
   },
-  async updateMotorcycleMovement(id: string, data: Omit<MotorcycleMovement, "id" | "heureSortie">) {
-    return (await request<{ entry: MotorcycleMovement }>(`/motorcycle-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateMotorcycleMovement(id: string, data: Omit<MotorcycleMovement, "id" | "heureSortie" | "updatedAt" | "pendingSync">, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de le modifier.");
+    const requestId = crypto.randomUUID(); const payload = { ...data, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    const path = `/motorcycle-movements/${encodeURIComponent(id)}`;
+    try { return (await request<{ entry: MotorcycleMovement }>(path, { method: "PUT", body: body(payload) })).entry; }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { ...data, id, heureSortie: null, siteName: "", updatedAt: expectedUpdatedAt || null, pendingSync: true };
+    }
   },
-  async recordMotorcycleExit(id: string, siteId: string) {
-    return (await request<{ entry: MotorcycleMovement }>(`/motorcycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`, { method: "PATCH" })).entry;
+  async recordMotorcycleExit(id: string, siteId: string, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant d’enregistrer sa sortie.");
+    const requestId = crypto.randomUUID(); const path = `/motorcycle-movements/${encodeURIComponent(id)}/sortie?siteId=${encodeURIComponent(siteId)}`;
+    const payload = { siteId, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    try { return (await request<{ entry: MotorcycleMovement }>(path, { method: "PATCH", body: body(payload) })).entry; }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, heureSortie: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false }), updatedAt: expectedUpdatedAt || null, pendingSync: true } as MotorcycleMovement;
+    }
   },
-  async deleteMotorcycleMovement(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/motorcycle-movements/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteMotorcycleMovement(id: string, siteId: string, expectedUpdatedAt?: string | null): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de l’annuler.");
+    const requestId = crypto.randomUUID(); const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+    const path = `/motorcycle-movements/${encodeURIComponent(id)}?${params}`;
+    try { return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" }); }
+    catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: false, pendingSync: true };
+    }
   },
   async listLogisticsEvents(siteId?: string, type?: "ANOMALIE" | "DIVERS" | "VIOLATION_PROCEDURE") {
     const params = new URLSearchParams();
@@ -914,35 +1323,159 @@ export const serviceApi = {
   async startPatrol(data: unknown) { return (await request<{ patrol: any }>("/patrols", { method: "POST", body: body(data) })).patrol; },
   async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[]) { return (await request<{ patrol: any }>(`/patrols/${id}`, { method: "PATCH", body: body({ checkpoints }) })).patrol; },
   async finishPatrol(id: string, observations: string) { return (await request<{ patrol: any }>(`/patrols/${id}/finish`, { method: "POST", body: body({ observations }) })).patrol; },
-  async listVigilance(siteId?: string) { return (await request<{ entries: VigilanceEntry[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
-  async createVigilance(data: unknown) {
-    const scopedData = Array.isArray(data)
-      ? data.map((entry) => entry && typeof entry === "object" ? JSON.parse(body(entry)) : entry)
-      : data;
-    return request<{ entries: any[] }>("/vigilance", { method: "POST", body: body(scopedData) });
+  async listVigilance(siteId?: string) {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const entries = (await request<{ entries: VigilanceEntry[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries;
+    if (!siteId) return entries;
+    const queued = (await getQueuedLogisticsWrites(siteId)).filter((item) => item.path === "/vigilance");
+    const pending = queued.flatMap((item) => {
+      const rows = Array.isArray(item.payload.entries) ? item.payload.entries : [];
+      return rows.map((row) => {
+        const entry = row as Record<string, unknown>;
+        return {
+          ...entry,
+          id: `pending-${String(entry.clientRequestId || item.requestId)}`,
+          siteId,
+          siteName: String(entry.siteName || ""),
+          createdAt: item.createdAt,
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        } as unknown as VigilanceEntry;
+      });
+    });
+    return [...pending, ...entries];
   },
-  async listMainCourante(siteId?: string) { return (await request<{ entries: any[] }>(`/main-courante${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries; },
-  async createMainCourante(data: unknown) { return request<{ entry: any }>("/main-courante", { method: "POST", body: body(data) }); },
+  async createVigilance(data: unknown): Promise<{ entries: any[]; pendingSync?: boolean }> {
+    const entries = (Array.isArray(data) ? data : [data]).map((entry) => ({
+      ...(entry && typeof entry === "object" ? JSON.parse(body(entry)) : {}),
+      clientRequestId: crypto.randomUUID(),
+    }));
+    const siteId = typeof entries[0]?.siteId === "string" ? entries[0].siteId : "";
+    try {
+      return await request<{ entries: any[]; pendingSync?: boolean }>("/vigilance", { method: "POST", body: body(entries) });
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      const requestId = crypto.randomUUID();
+      await queueLogisticsWrite(requestId, siteId, { siteId, entries }, [], "/vigilance");
+      return {
+        entries: entries.map((entry) => ({ ...entry, id: `pending-${entry.clientRequestId}`, siteName: "", createdAt: new Date().toISOString(), pendingSync: true })),
+        pendingSync: true,
+      };
+    }
+  },
+  async listMainCourante(siteId?: string) {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const entries = (await request<{ entries: any[] }>(`/main-courante${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries;
+    if (!siteId) return entries;
+    const pending = (await getQueuedLogisticsWrites(siteId)).filter((item) => item.path === "/main-courante");
+    return [...pending.map(pendingLogisticsEntry), ...entries];
+  },
+  async createMainCourante(data: unknown) {
+    const source = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+    const siteId = typeof source.siteId === "string" ? source.siteId : "";
+    const requestId = crypto.randomUUID();
+    const payload = { ...source, clientRequestId: requestId };
+    try {
+      return await request<{ entry: any }>("/main-courante", { method: "POST", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], "/main-courante");
+      return { entry: pendingLogisticsEntry({ requestId, siteId, payload, createdAt: new Date().toISOString() }) };
+    }
+  },
   async listCourrierMovements(siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
-    return (await request<{ entries: CourrierMovement[] }>(`/courrier-movements${query}`)).entries;
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const entries = (await request<{ entries: CourrierMovement[] }>(`/courrier-movements${query}`)).entries;
+    if (!siteId) return entries;
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const pendingCreates = queued.filter((item) => item.path === "/courrier-movements" && item.method === "POST").map((item) => {
+      const payload = item.payload as unknown as Omit<CourrierMovement, "id" | "siteName">;
+      return {
+        ...payload,
+        id: `pending-${item.requestId}`,
+        siteId,
+        siteName: "",
+        heureSortie: null,
+        updatedAt: null,
+        createdAt: item.createdAt,
+        pendingSync: true,
+        pendingSyncStatus: item.status || "pending",
+        pendingSyncError: item.lastError,
+      } as CourrierMovement;
+    });
+    const pendingUpdates = entries.map((entry) => {
+      const basePath = `/courrier-movements/${encodeURIComponent(entry.id)}`;
+      const operation = queued.filter((item) => {
+        const path = item.path?.split("?")[0];
+        return (path === basePath || path === `${basePath}/exit`) && item.method !== "POST";
+      }).slice(-1)[0];
+      if (!operation) return entry;
+      return {
+        ...entry,
+        ...(operation.method === "PUT" ? operation.payload : {}),
+        ...(operation.method === "PATCH" ? { heureSortie: String(operation.payload.heureSortie || "") } : {}),
+        ...(operation.method === "DELETE" ? { annuleLe: operation.createdAt } : {}),
+        pendingSync: true,
+        pendingSyncStatus: operation.status || "pending",
+        pendingSyncError: operation.lastError,
+      } as CourrierMovement;
+    });
+    return [...pendingCreates, ...pendingUpdates];
   },
-  async createCourrierMovement(data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }) {
-    return (await request<{ entry: CourrierMovement }>("/courrier-movements", { method: "POST", body: body(data) })).entry;
+  async createCourrierMovement(data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }): Promise<CourrierMovement> {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: CourrierMovement }>("/courrier-movements", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/courrier-movements");
+      return { ...data, id: `pending-${requestId}`, siteName: "", heureSortie: null, updatedAt: null, annuleLe: null, pendingSync: true };
+    }
   },
-  async updateCourrierMovement(id: string, data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }) {
-    return (await request<{ entry: CourrierMovement }>(`/courrier-movements/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateCourrierMovement(id: string, data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de le modifier.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    const path = `/courrier-movements/${encodeURIComponent(id)}`;
+    try {
+      return (await request<{ entry: CourrierMovement }>(path, { method: "PUT", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { ...data, id, siteName: "", heureSortie: null, updatedAt: expectedUpdatedAt || null, pendingSync: true };
+    }
   },
-  async exitCourrierMovement(id: string, siteId: string) {
+  async exitCourrierMovement(id: string, siteId: string, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant d’enregistrer sa sortie.");
+    const requestId = crypto.randomUUID();
     const params = new URLSearchParams({ siteId });
-    return (await request<{ entry: Pick<CourrierMovement, "id" | "heureSortie"> }>(
-      `/courrier-movements/${encodeURIComponent(id)}/exit?${params}`,
-      { method: "PATCH", body: "{}" },
-    )).entry;
+    const path = `/courrier-movements/${encodeURIComponent(id)}/exit?${params}`;
+    const heureSortie = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
+    const payload = { siteId, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId, heureSortie };
+    try {
+      return (await request<{ entry: Pick<CourrierMovement, "id" | "heureSortie" | "updatedAt"> & { pendingSync?: boolean } }>(path, { method: "PATCH", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, heureSortie, updatedAt: expectedUpdatedAt || null, pendingSync: true };
+    }
   },
-  async deleteCourrierMovement(id: string, siteId: string) {
-    const params = new URLSearchParams({ siteId });
-    return request<{ id: string; deleted: boolean }>(`/courrier-movements/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+  async deleteCourrierMovement(id: string, siteId: string, expectedUpdatedAt?: string | null): Promise<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de l’annuler.");
+    const requestId = crypto.randomUUID();
+    const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+    const path = `/courrier-movements/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId, expectedUpdatedAt: expectedUpdatedAt || null }, [], path, "DELETE");
+      return { id, deleted: false, cancelled: true, annuleLe: new Date().toISOString(), pendingSync: true };
+    }
   },
   async listSubcontractorMaterials(siteId: string) {
     return (await request<{ entries: SubcontractorMaterialMovement[] }>(`/materiels-sous-traitant?siteId=${encodeURIComponent(siteId)}`)).entries;
@@ -977,28 +1510,150 @@ export const serviceApi = {
     return (await request<{ entry: Pick<StarMaterialEntry, "id" | "heureSortie"> }>(`/materiels-star/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
   },
   async listVisitorQuestionnaires(siteId: string) {
-    return (await request<{ entries: VisitorQuestionnaireRecord[] }>(`/visitor-questionnaires?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: VisitorQuestionnaireRecord[] = [];
+    try {
+      entries = (await request<{ entries: VisitorQuestionnaireRecord[] }>(`/visitor-questionnaires?siteId=${encodeURIComponent(siteId)}`)).entries;
+    } catch (error) {
+      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const pendingCreates = queued.filter((item) => item.path === "/visitor-questionnaires" && item.method === "POST").map((item) => ({
+      ...(item.payload as unknown as { data: VisitorQuestionnaireData }),
+      id: `pending-${item.requestId}`,
+      siteId,
+      siteName: "",
+      createdAt: item.createdAt,
+      updatedAt: item.createdAt,
+      pendingSync: true,
+      pendingSyncStatus: item.status || "pending",
+      pendingSyncError: item.lastError,
+    })) as unknown as VisitorQuestionnaireRecord[];
+    const pendingUpdates = entries.flatMap((entry) => {
+      const path = `/visitor-questionnaires/${encodeURIComponent(entry.id)}`;
+      const operation = queued.filter((item) => item.path === path && item.method !== "POST").slice(-1)[0];
+      if (!operation) return [entry];
+      if (operation.method === "DELETE") return [];
+      return [{
+        ...entry,
+        data: operation.payload.data as VisitorQuestionnaireData,
+        pendingSync: true,
+        pendingSyncStatus: operation.status || "pending",
+        pendingSyncError: operation.lastError,
+      }];
+    });
+    return [...pendingCreates, ...pendingUpdates];
   },
   async createVisitorQuestionnaire(data: { data: VisitorQuestionnaireData; siteId: string }) {
-    return (await request<{ entry: VisitorQuestionnaireRecord }>("/visitor-questionnaires", { method: "POST", body: body(data) })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: VisitorQuestionnaireRecord }>("/visitor-questionnaires", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/visitor-questionnaires");
+      return { id: `pending-${requestId}`, ...data, siteName: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), pendingSync: true };
+    }
   },
-  async updateVisitorQuestionnaire(id: string, data: { data: VisitorQuestionnaireData; siteId: string }) {
-    return (await request<{ entry: VisitorQuestionnaireRecord }>(`/visitor-questionnaires/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateVisitorQuestionnaire(id: string, data: { data: VisitorQuestionnaireData; siteId: string }, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du questionnaire avant de le modifier.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    const path = `/visitor-questionnaires/${encodeURIComponent(id)}`;
+    try {
+      return (await request<{ entry: VisitorQuestionnaireRecord }>(path, { method: "PUT", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { id, ...data, siteName: "", createdAt: expectedUpdatedAt || new Date().toISOString(), updatedAt: expectedUpdatedAt || new Date().toISOString(), pendingSync: true };
+    }
   },
-  async deleteVisitorQuestionnaire(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/visitor-questionnaires/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteVisitorQuestionnaire(id: string, siteId: string, expectedUpdatedAt?: string | null): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du questionnaire avant de le supprimer.");
+    const requestId = crypto.randomUUID();
+    const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+    const path = `/visitor-questionnaires/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId, expectedUpdatedAt: expectedUpdatedAt || null }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async listObjectDeclarations(siteId: string) {
-    return (await request<{ entries: ObjectDeclarationRecord[] }>(`/object-declarations?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: ObjectDeclarationRecord[] = [];
+    try {
+      entries = (await request<{ entries: ObjectDeclarationRecord[] }>(`/object-declarations?siteId=${encodeURIComponent(siteId)}`)).entries;
+    } catch (error) {
+      if (navigator.onLine && !(error instanceof TypeError)) throw error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const pendingCreates = queued.filter((item) => item.path === "/object-declarations" && item.method === "POST").map((item) => ({
+      ...(item.payload as unknown as { data: ObjectDeclarationData }),
+      id: `pending-${item.requestId}`,
+      siteId,
+      siteName: "",
+      createdAt: item.createdAt,
+      updatedAt: item.createdAt,
+      pendingSync: true,
+      pendingSyncStatus: item.status || "pending",
+      pendingSyncError: item.lastError,
+    })) as unknown as ObjectDeclarationRecord[];
+    const pendingUpdates = entries.flatMap((entry) => {
+      const path = `/object-declarations/${encodeURIComponent(entry.id)}`;
+      const operation = queued.filter((item) => item.path === path && item.method !== "POST").slice(-1)[0];
+      if (!operation) return [entry];
+      if (operation.method === "DELETE") return [];
+      return [{
+        ...entry,
+        data: operation.payload.data as ObjectDeclarationData,
+        pendingSync: true,
+        pendingSyncStatus: operation.status || "pending",
+        pendingSyncError: operation.lastError,
+      }];
+    });
+    return [...pendingCreates, ...pendingUpdates];
   },
   async createObjectDeclaration(data: { data: ObjectDeclarationData; siteId: string }) {
-    return (await request<{ entry: ObjectDeclarationRecord }>("/object-declarations", { method: "POST", body: body(data) })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: ObjectDeclarationRecord }>("/object-declarations", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/object-declarations");
+      return { id: `pending-${requestId}`, ...data, siteName: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), pendingSync: true };
+    }
   },
-  async updateObjectDeclaration(id: string, data: { data: ObjectDeclarationData; siteId: string }) {
-    return (await request<{ entry: ObjectDeclarationRecord }>(`/object-declarations/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateObjectDeclaration(id: string, data: { data: ObjectDeclarationData; siteId: string }, expectedUpdatedAt?: string | null) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de la déclaration avant de la modifier.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, expectedUpdatedAt: expectedUpdatedAt || null, clientRequestId: requestId };
+    const path = `/object-declarations/${encodeURIComponent(id)}`;
+    try {
+      return (await request<{ entry: ObjectDeclarationRecord }>(path, { method: "PUT", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { id, ...data, siteName: "", createdAt: expectedUpdatedAt || new Date().toISOString(), updatedAt: expectedUpdatedAt || new Date().toISOString(), pendingSync: true };
+    }
   },
-  async deleteObjectDeclaration(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/object-declarations/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteObjectDeclaration(id: string, siteId: string, expectedUpdatedAt?: string | null): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de la déclaration avant de la supprimer.");
+    const requestId = crypto.randomUUID();
+    const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+    const path = `/object-declarations/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId, expectedUpdatedAt: expectedUpdatedAt || null }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
     return request<{ data: Record<string, any[]> | null; postes: ApsPostConfiguration[] | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
@@ -1007,14 +1662,12 @@ export const serviceApi = {
     return request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-attendance/posts", { method: "PUT", body: body(data) });
   },
   async lookupEmployeeByMatricule(matricule: string, signal?: AbortSignal) {
-    const response = await fetch(`${apiBaseUrl}/employes/${encodeURIComponent(matricule)}`, {
-      headers: authHeaders(),
-      signal,
-    });
-    const result = await response.json().catch(() => ({}));
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
-    return result as EmployeeByMatricule;
+    try {
+      return await request<EmployeeByMatricule>(`/employes/${encodeURIComponent(matricule)}`, { signal });
+    } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 404) return null;
+      throw error;
+    }
   },
   async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]>; postes: ApsPostConfiguration[] }) {
     return request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(data) });

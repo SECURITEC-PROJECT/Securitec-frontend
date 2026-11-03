@@ -82,7 +82,7 @@ export default function Courrier() {
   useEffect(() => {
     if (!site?.id) return;
     let active = true;
-    serviceApi.listCourrierMovements(site.id)
+    const refreshEntries = () => serviceApi.listCourrierMovements(site.id)
       .then((rows) => {
         if (active) setRegistry({ siteId: site.id, entries: rows, error: "" });
       })
@@ -93,7 +93,15 @@ export default function Courrier() {
           error: reason instanceof Error ? reason.message : "Chargement du registre courrier impossible.",
         });
       });
-    return () => { active = false; };
+    const refreshOnQueueChange = () => { void refreshEntries(); };
+    void refreshEntries();
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [site?.id]);
 
   const resetForm = () => {
@@ -123,7 +131,7 @@ export default function Courrier() {
         siteId: site.id,
       };
       const entry = editing
-        ? await serviceApi.updateCourrierMovement(editing.id, payload)
+        ? await serviceApi.updateCourrierMovement(editing.id, payload, editing.updatedAt)
         : await serviceApi.createCourrierMovement(payload);
       setRegistry((current) => ({
         siteId: site.id,
@@ -133,7 +141,9 @@ export default function Courrier() {
         error: "",
       }));
       resetForm();
-      toast.success(editing ? "Mouvement courrier modifié." : "Entrée courrier enregistrée.");
+      toast.success(entry.pendingSync
+        ? "Mouvement enregistré localement. Synchronisation au retour du réseau."
+        : editing ? "Mouvement courrier modifié." : "Entrée courrier enregistrée.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Enregistrement impossible.");
     } finally {
@@ -156,12 +166,12 @@ export default function Courrier() {
     if (!site?.id) return;
     setExitingId(entry.id);
     try {
-      const result = await serviceApi.exitCourrierMovement(entry.id, site.id);
+      const result = await serviceApi.exitCourrierMovement(entry.id, site.id, entry.updatedAt);
       setRegistry((current) => ({
         ...current,
         entries: current.entries.map((row) => row.id === entry.id ? { ...row, ...result } : row),
       }));
-      toast.success(`Sortie enregistrée pour ${entry.prenom}.`);
+      toast.success(result.pendingSync ? "Sortie enregistrée localement. Synchronisation au retour du réseau." : `Sortie enregistrée pour ${entry.prenom}.`);
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Impossible d’enregistrer la sortie.");
     } finally {
@@ -174,13 +184,13 @@ export default function Courrier() {
     if (entry.annuleLe || !(await confirmDeletion(`Annuler le mouvement de ${entry.prenom} ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteCourrierMovement(entry.id, site.id);
+      const result = await serviceApi.deleteCourrierMovement(entry.id, site.id, entry.updatedAt);
       setRegistry((current) => ({
         ...current,
-        entries: current.entries.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row),
+        entries: current.entries.map((row) => row.id === entry.id ? { ...row, annuleLe: result.annuleLe || new Date().toISOString(), pendingSync: result.pendingSync } : row),
       }));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Mouvement courrier annulé et conservé dans l’historique.");
+      toast.success(result.pendingSync ? "Annulation enregistrée localement. Synchronisation au retour du réseau." : "Mouvement courrier annulé et conservé dans l’historique.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -309,7 +319,7 @@ export default function Courrier() {
                     <tbody className="divide-y divide-border/70">
                       {filteredEntries.map((entry) => (
                         <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
-                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
+                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block font-sans text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                           <td className="px-3 py-3 font-medium">{entry.prenom}</td>
                           <td className="break-words whitespace-pre-wrap px-3 py-3">{entry.designation}</td>
@@ -320,15 +330,15 @@ export default function Courrier() {
                               <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                                 <Printer className="h-4 w-4" />
                               </Button>
-                              {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => beginEdit(entry)}>
+                              {!entry.annuleLe && !entry.pendingSync && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => beginEdit(entry)}>
                                 <Pencil className="h-4 w-4" />
                               </Button>}
-                              {!entry.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler le mouvement" title="Annuler le mouvement" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
+                              {!entry.annuleLe && !entry.pendingSync && <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Annuler le mouvement" title="Annuler le mouvement" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>}
-                              <RegistryAuditHistory entity="mouvement_courrier" recordId={entry.id} />
-                              <RegistryAttachments entity="mouvement_courrier" recordId={entry.id} siteId={site?.id} />
-                              {!entry.annuleLe && !entry.heureSortie && (
+                              {!entry.pendingSync && <RegistryAuditHistory entity="mouvement_courrier" recordId={entry.id} />}
+                              {!entry.pendingSync && <RegistryAttachments entity="mouvement_courrier" recordId={entry.id} siteId={site?.id} />}
+                              {!entry.pendingSync && !entry.annuleLe && !entry.heureSortie && (
                                 <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}>
                                   <LogOut className="h-4 w-4" />
                                   {exitingId === entry.id ? "Sortie…" : "Sortie"}

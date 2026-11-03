@@ -158,12 +158,20 @@ export default function DechargementBouteillesVides() {
   useEffect(() => {
     let active = true;
     if (!site?.id) return;
-    serviceApi.listLogistics(site.id)
+    const refreshEntries = () => serviceApi.listLogistics(site.id)
       .then((flows) => {
         if (active) setEntries((flows as EmptyBottleDelivery[]).filter((entry) => entry.type === "BOUTEILLES_VIDES"));
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : "Chargement des réceptions impossible."));
-    return () => { active = false; };
+    const refreshOnQueueChange = () => { void refreshEntries(); };
+    void refreshEntries();
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [site?.id]);
 
   const resetForm = () => {
@@ -222,8 +230,10 @@ export default function DechargementBouteillesVides() {
         toast.success("Réception modifiée.");
       } else {
         const { entry } = await serviceApi.createEmptyBottleDelivery(payload);
-        setEntries((current) => [entry, ...current]);
-        toast.success("Réception de bouteilles enregistrée.");
+        setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
+        toast.success(entry.pendingSync
+          ? "Réception enregistrée localement. Synchronisation au retour du réseau."
+          : "Réception de bouteilles enregistrée.");
       }
       resetForm();
     } catch (error) {
@@ -379,7 +389,7 @@ export default function DechargementBouteillesVides() {
               {showPondBrutFields ? (
                 <>
                   <div className="space-y-1.5">
-                    <Label htmlFor="empty-bottles-brut">BRUT (poids total du véhicule chargé)</Label>
+                    <Label htmlFor="empty-bottles-brut">BRUT</Label>
                     <Input id="empty-bottles-brut" type="number" min="1" max="9999999999.99" step="1" required value={form.brut} onChange={(event) => setForm({ ...form, brut: event.target.value })} />
                   </div>
                   <div className="space-y-1.5">
@@ -399,7 +409,7 @@ export default function DechargementBouteillesVides() {
                     <Input id="empty-bottles-product" maxLength={255} autoComplete="off" placeholder="Ex. bouteille vide (facultatif)" value={form.produit} onChange={(event) => setForm({ ...form, produit: event.target.value })} />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-                    <Label htmlFor="empty-bottles-remark">Remarque</Label>
+                    <Label htmlFor="empty-bottles-remark">Observations</Label>
                     <textarea id="empty-bottles-remark" rows={3} maxLength={2000} placeholder="Ajouter une remarque (facultatif)" value={form.remarque} onChange={(event) => setForm({ ...form, remarque: event.target.value })} className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
                   </div>
                 </>
@@ -504,7 +514,7 @@ export default function DechargementBouteillesVides() {
             <tbody>
               {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="border-b last:border-0">
-                  <td className="px-3 py-2">{displayDate(entry.date)}</td>
+                  <td className="px-3 py-2">{displayDate(entry.date)}{entry.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                   <td className="px-3 py-2">{entry.heureArrivee || "—"}</td>
                   <td className="px-3 py-2">{entry.heureFin || "—"}</td>
                   <td className="px-3 py-2 font-medium">{entry.immatriculationVehicule}</td>
@@ -525,10 +535,10 @@ export default function DechargementBouteillesVides() {
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la réception" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                         <Printer className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="Modifier la réception" title="Modifier la réception" onClick={() => editEntry(entry)}>
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="Modifier la réception" title={entry.pendingSync ? "Disponible après synchronisation" : "Modifier la réception"} disabled={Boolean(entry.pendingSync)} onClick={() => editEntry(entry)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Supprimer la réception" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
+                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Supprimer la réception" title={entry.pendingSync ? "Disponible après synchronisation" : "Supprimer la réception"} disabled={Boolean(entry.pendingSync) || deletingId === entry.id} onClick={() => void deleteEntry(entry)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>

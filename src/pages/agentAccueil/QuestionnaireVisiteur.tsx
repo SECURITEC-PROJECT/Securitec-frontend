@@ -126,7 +126,7 @@ export default function QuestionnaireVisiteur() {
   useEffect(() => {
     if (!siteId) return;
     let active = true;
-    serviceApi.listVisitorQuestionnaires(siteId)
+    const refreshEntries = () => serviceApi.listVisitorQuestionnaires(siteId)
       .then((entries) => {
         if (active) {
           setRecords(entries);
@@ -140,7 +140,15 @@ export default function QuestionnaireVisiteur() {
           toast.error(error instanceof Error ? error.message : "Chargement de l’historique impossible.");
         }
       });
-    return () => { active = false; };
+    const refreshOnQueueChange = () => { void refreshEntries(); };
+    void refreshEntries();
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [siteId]);
 
   useEffect(() => {
@@ -181,14 +189,17 @@ export default function QuestionnaireVisiteur() {
     try {
       const payload = { data, siteId };
       const saved = editingId
-        ? await serviceApi.updateVisitorQuestionnaire(editingId, payload)
+        ? await serviceApi.updateVisitorQuestionnaire(editingId, payload, records.find((record) => record.id === editingId)?.updatedAt)
         : await serviceApi.createVisitorQuestionnaire(payload);
       setRecords((current) => editingId
         ? current.map((record) => record.id === saved.id ? saved : record)
         : [saved, ...current]);
       setLoadedSiteId(siteId);
-      toast.success(editingId ? "Questionnaire mis à jour dans l’historique." : "Questionnaire enregistré dans l’historique.");
-      setEditingId(saved.id);
+      toast.success(saved.pendingSync
+        ? "Questionnaire enregistré localement. Synchronisation au retour du réseau."
+        : editingId ? "Questionnaire mis à jour dans l’historique." : "Questionnaire enregistré dans l’historique.");
+      setEditingId(saved.pendingSync ? null : saved.id);
+      if (saved.pendingSync) setData(emptyData());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -206,10 +217,12 @@ export default function QuestionnaireVisiteur() {
     if (!siteId || !(await confirmDeletion(`Supprimer le questionnaire de ${record.data.firstName} ${record.data.lastName} ? Cette action est définitive.`))) return;
     setDeletingId(record.id);
     try {
-      await serviceApi.deleteVisitorQuestionnaire(record.id, siteId);
+      const result = await serviceApi.deleteVisitorQuestionnaire(record.id, siteId, record.updatedAt);
       setRecords((current) => current.filter((entry) => entry.id !== record.id));
       if (editingId === record.id) resetForm();
-      toast.success("Questionnaire supprimé de l’historique.");
+      toast.success(result.pendingSync
+        ? "Suppression enregistrée localement. Synchronisation au retour du réseau."
+        : "Questionnaire supprimé de l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
@@ -391,7 +404,7 @@ export default function QuestionnaireVisiteur() {
                   <tbody className="divide-y">
                     {filteredRecords.map((record) => (
                       <tr key={record.id}>
-                        <td className="whitespace-nowrap px-3 py-3">{formatDate(record.data.date)}</td>
+                        <td className="whitespace-nowrap px-3 py-3">{formatDate(record.data.date)}{record.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={record.pendingSyncError || undefined}>{record.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : record.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                         <td className="px-3 py-3">{record.data.lastName}</td>
                         <td className="px-3 py-3">{record.data.firstName}</td>
                         <td className="max-w-xs truncate px-3 py-3">{record.data.reason}</td>
@@ -399,8 +412,8 @@ export default function QuestionnaireVisiteur() {
                         <td className="whitespace-nowrap px-3 py-3">
                           <div className="flex gap-1">
                             <Button type="button" variant="ghost" size="icon" aria-label="Imprimer le questionnaire" title="Imprimer en A4" onClick={() => printCurrent(record.data)}><Printer className="size-4" /></Button>
-                            <Button type="button" variant="ghost" size="icon" aria-label="Modifier le questionnaire" title="Modifier" onClick={() => editRecord(record)}><Pencil className="size-4" /></Button>
-                            <Button type="button" variant="ghost" size="icon" aria-label="Supprimer le questionnaire" title="Supprimer" className="text-destructive hover:text-destructive" disabled={deletingId === record.id} onClick={() => void deleteRecord(record)}><Trash2 className="size-4" /></Button>
+                            <Button type="button" variant="ghost" size="icon" aria-label="Modifier le questionnaire" title={record.pendingSync ? "Disponible après synchronisation" : "Modifier"} disabled={Boolean(record.pendingSync)} onClick={() => editRecord(record)}><Pencil className="size-4" /></Button>
+                            <Button type="button" variant="ghost" size="icon" aria-label="Supprimer le questionnaire" title={record.pendingSync ? "Disponible après synchronisation" : "Supprimer"} className="text-destructive hover:text-destructive" disabled={Boolean(record.pendingSync) || deletingId === record.id} onClick={() => void deleteRecord(record)}><Trash2 className="size-4" /></Button>
                           </div>
                         </td>
                       </tr>

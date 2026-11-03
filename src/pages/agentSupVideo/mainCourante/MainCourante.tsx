@@ -29,6 +29,13 @@ export default function MainCourante() {
 
   useEffect(() => {
     void fetchMainCourante();
+    const refreshOnQueueChange = () => { void fetchMainCourante(); };
+    window.addEventListener("online", refreshOnQueueChange);
+    window.addEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    return () => {
+      window.removeEventListener("online", refreshOnQueueChange);
+      window.removeEventListener("securitec-offline-queue-changed", refreshOnQueueChange);
+    };
   }, [siteId]);
 
   return (

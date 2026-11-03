@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { API_URL, authHeaders } from "@/lib/api";
+import { requestCachedApi } from "@/lib/service-api";
 import { useEffect, useState } from "react";
 import GenerateurCRJ, { type CRJData } from "./GenerateurCRJ";
 import ValidationCRJ from "./ValidationCRJ";
@@ -32,12 +32,7 @@ export default function ComptesRendus() {
   // Charger les prestataires et les sites depuis la base de données
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${API_URL}/crj/options`, { headers: authHeaders(), signal: controller.signal })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Chargement des options CRJ impossible.");
-        return data;
-      })
+    requestCachedApi<{ prestataires?: Option[]; sites?: Option[] }>("/crj/options", { signal: controller.signal })
       .then((data) => {
         if (data.prestataires?.length) {
           setPrestataires(data.prestataires);
@@ -61,12 +56,8 @@ export default function ComptesRendus() {
     setErreur("");
 
     const params = new URLSearchParams({ prestataireId, siteId, date });
-    fetch(`${API_URL}/crj?${params}`, { headers: authHeaders(), signal: controller.signal })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Erreur serveur");
-        setCrj(data);
-      })
+    requestCachedApi<CRJData>(`/crj?${params}`, { signal: controller.signal })
+      .then(setCrj)
       .catch((err) => {
         if (err.name === "AbortError") return;
         setCrj(null);

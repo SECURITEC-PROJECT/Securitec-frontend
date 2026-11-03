@@ -59,9 +59,11 @@ export default function FormVigilance({ siteId, onRefresh }: FormVigilanceProps)
 
     setSaving(true);
     try {
-      await serviceApi.createVigilance(payload);
+      const result = await serviceApi.createVigilance(payload);
 
-      toast.success("Points de vigilance consignés avec succès dans le CRJ !");
+      toast.success(result.pendingSync
+        ? "Points de vigilance enregistrés localement. Synchronisation au retour du réseau."
+        : "Points de vigilance consignés avec succès dans le CRJ !");
       if (onRefresh) void onRefresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer les points de vigilance.");
