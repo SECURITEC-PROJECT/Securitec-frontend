@@ -3,11 +3,10 @@ import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSites } from "@/hooks/useSites";
-import { serviceApi, type ChauffeurRecord, type StarParticulierLoading } from "@/lib/service-api";
+import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
 import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -28,18 +27,27 @@ const designationValues = designationGroups.flatMap(({ label, options }) =>
 );
 
 type LoadingType = StarParticulierLoading["typeChargement"];
-type LoadingForm = Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId">;
+type LoadingForm = Omit<StarParticulierLoading, "id" | "type" | "siteName" | "siteId">;
+const paletteDesignations = designationGroups
+  .find(({ label }) => label === "Palette")?.options
+  .map((option) => `Palette : ${option}`) ?? [];
 
+const today = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
 const nowTime = () => {
   const date = new Date();
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 };
 
 const emptyForm = (): LoadingForm => ({
+  date: today(),
   typeChargement: "STAR",
   heureDebut: nowTime(),
   heureSortie: nowTime(),
   camion: "",
+  immatriculationVehicule: "",
   proprietaire: "",
   nomChauffeur: "",
   designation: "",
@@ -53,8 +61,6 @@ const emptyForm = (): LoadingForm => ({
 });
 
 const numberField = (value: string, maxLength: number) => value === "" || new RegExp(`^\\d{1,${maxLength}}$`).test(value);
-const normalizeMatricule = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("fr");
-
 export default function ChargementsStarParticuliers() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
@@ -67,38 +73,25 @@ export default function ChargementsStarParticuliers() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [chauffeurRegistry, setChauffeurRegistry] = useState<{
-    siteId: string;
-    chauffeurs: ChauffeurRecord[];
-    error: string;
-  }>({ siteId: "", chauffeurs: [], error: "" });
-  const [vehicleSuggestionsOpen, setVehicleSuggestionsOpen] = useState(false);
-  const [activeVehicleSuggestion, setActiveVehicleSuggestion] = useState(0);
-  const [selectedChauffeurId, setSelectedChauffeurId] = useState("");
   const siteNameSelected = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === siteNameSelected), [sites, siteNameSelected]);
   const siteId = site?.id || "";
-  const registeredChauffeurs = chauffeurRegistry.siteId === siteId
-    ? chauffeurRegistry.chauffeurs
-    : [];
-  const chauffeursLoading = Boolean(siteId) && chauffeurRegistry.siteId !== siteId;
-  const chauffeursError = chauffeurRegistry.siteId === siteId ? chauffeurRegistry.error : "";
-  const chauffeursWithMatricule = registeredChauffeurs.filter((driver) => driver.matricule?.trim());
-  const matchingChauffeurs = chauffeursWithMatricule.filter((driver) =>
-    !normalizeMatricule(form.camion) || normalizeMatricule(driver.matricule || "").includes(normalizeMatricule(form.camion)),
-  ).slice(0, 8);
-  const selectedChauffeur = registeredChauffeurs.find((driver) => driver.id === selectedChauffeurId);
   const loading = Boolean(siteId) && entriesSiteId !== siteId;
   const isLegacyDesignation = form.designation && !designationValues.includes(form.designation);
   const visibleEntries = entriesSiteId === siteId
     ? entries.filter((entry) => entry.typeChargement === form.typeChargement)
     : [];
+  const visibleDesignationGroups = designationGroups.filter(({ label }) =>
+    form.typeChargement === "PALETTE" ? label === "Palette" : label !== "Palette",
+  );
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
   const filteredEntries = visibleEntries.filter((entry) =>
     [
       entry.heureSortie,
       entry.heureDebut,
+      entry.date,
       entry.camion,
+      entry.immatriculationVehicule,
       entry.proprietaire,
       entry.nomChauffeur,
       entry.designation,
@@ -143,67 +136,15 @@ export default function ChargementsStarParticuliers() {
     };
   }, [siteId]);
 
-  useEffect(() => {
-    let active = true;
-    if (!siteId) return () => { active = false; };
-    serviceApi.listChauffeurs(siteId)
-      .then((chauffeurs) => {
-        if (active) setChauffeurRegistry({ siteId, chauffeurs, error: "" });
-      })
-      .catch((reason) => {
-        if (active) setChauffeurRegistry({
-          siteId,
-          chauffeurs: [],
-          error: reason instanceof Error ? reason.message : "Chargement des chauffeurs impossible.",
-        });
-      });
-    return () => { active = false; };
-  }, [siteId]);
-
-  const selectChauffeur = (driver: ChauffeurRecord) => {
-    setSelectedChauffeurId(driver.id);
-    setForm((current) => ({
-      ...current,
-      camion: driver.matricule?.trim() || "",
-      nomChauffeur: driver.nomPrenom,
-    }));
-    setVehicleSuggestionsOpen(false);
-  };
-
-  const changeMatricule = (camion: string) => {
-    setSelectedChauffeurId("");
-    setForm((current) => ({ ...current, camion, nomChauffeur: "" }));
-    setActiveVehicleSuggestion(0);
-    setVehicleSuggestionsOpen(true);
-    const exactMatches = chauffeursWithMatricule.filter(
-      (driver) => normalizeMatricule(driver.matricule || "") === normalizeMatricule(camion),
-    );
-    if (exactMatches.length === 1) selectChauffeur(exactMatches[0]);
-  };
-
   const resetForm = () => {
     setForm(emptyForm());
     setEditing(null);
-    setSelectedChauffeurId("");
-    setVehicleSuggestionsOpen(false);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!siteId) {
       toast.error("Sélectionnez un site de travail.");
-      return;
-    }
-    if (chauffeursLoading) {
-      toast.error("Veuillez attendre le chargement des fiches chauffeurs.");
-      return;
-    }
-    if (chauffeursError) {
-      toast.error("Impossible de vérifier les chauffeurs enregistrés. Réessayez après le chargement.");
-      return;
-    }
-    if (!selectedChauffeur || normalizeMatricule(selectedChauffeur.matricule || "") !== normalizeMatricule(form.camion)) {
-      toast.error("Sélectionnez un véhicule (matricule) enregistré pour associer son chauffeur.");
       return;
     }
     if (!numberField(form.lp, 6) || !numberField(form.titre, 8) || !numberField(form.plomb, 8)) {
@@ -219,7 +160,9 @@ export default function ChargementsStarParticuliers() {
     try {
       const payload = {
         ...form,
+        date: form.date,
         camion: form.camion.trim(),
+        immatriculationVehicule: form.immatriculationVehicule.trim(),
         proprietaire: form.proprietaire.trim(),
         nomChauffeur: form.nomChauffeur.trim(),
         designation: form.designation.trim(),
@@ -251,13 +194,14 @@ export default function ChargementsStarParticuliers() {
   };
 
   const editEntry = (entry: StarParticulierLoading) => {
-    setSelectedChauffeurId("");
     setEditing(entry);
     setForm({
+      date: entry.date?.slice(0, 10) || today(),
       typeChargement: entry.typeChargement,
       heureDebut: entry.heureDebut || "",
       heureSortie: entry.heureSortie,
       camion: entry.camion,
+      immatriculationVehicule: entry.immatriculationVehicule || "",
       proprietaire: entry.proprietaire,
       nomChauffeur: entry.nomChauffeur,
       designation: entry.designation,
@@ -269,13 +213,6 @@ export default function ChargementsStarParticuliers() {
       titre: entry.titre,
       plomb: entry.plomb,
     });
-    const exactMatches = chauffeursWithMatricule.filter(
-      (driver) =>
-        normalizeMatricule(driver.matricule || "") === normalizeMatricule(entry.camion)
-        && driver.nomPrenom.trim().toLocaleLowerCase("fr") === entry.nomChauffeur.trim().toLocaleLowerCase("fr"),
-    );
-    if (exactMatches.length === 1) setSelectedChauffeurId(exactMatches[0].id);
-    setVehicleSuggestionsOpen(false);
   };
 
   const deleteEntry = async (entry: StarParticulierLoading) => {
@@ -298,7 +235,7 @@ export default function ChargementsStarParticuliers() {
 
   const handlePrint = () => {
     const originalTitle = window.document.title;
-    window.document.title = `Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : "particuliers"}`;
+    window.document.title = `Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : form.typeChargement === "PALETTE" ? "Palette" : "particuliers"}`;
     window.addEventListener("afterprint", () => {
       window.document.title = originalTitle;
     }, { once: true });
@@ -306,11 +243,13 @@ export default function ChargementsStarParticuliers() {
   };
 
   const printEntry = (entry: StarParticulierLoading) => {
-    printRecord(`Chargement ${entry.typeChargement === "STAR" ? "STAR" : "particulier"}`, siteNameSelected, [
+    const loadingLabel = entry.typeChargement === "STAR" ? "STAR" : entry.typeChargement === "PALETTE" ? "Palette" : "particulier";
+    printRecord(`Chargement ${loadingLabel}`, siteNameSelected, [
       ["Date", entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"],
       ["Heure de début (HD)", entry.heureDebut || "—"],
       ["Heure de fin (HF)", entry.heureSortie || "—"],
       ["Véhicule", entry.camion],
+      ["Immatriculation du camion", entry.immatriculationVehicule],
       ["Propriétaire", entry.proprietaire],
       ["Nom chauffeur", entry.nomChauffeur],
       ["Désignation", entry.designation],
@@ -321,13 +260,13 @@ export default function ChargementsStarParticuliers() {
       ["LP", entry.lp],
       ["Titre", entry.titre],
       ["Plomb", entry.plomb],
-      ["Chargement", entry.typeChargement === "STAR" ? "STAR" : "Particulier"],
+      ["Chargement", loadingLabel],
     ]);
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Chargements Star et particuliers" subtitle="Enregistrement et suivi des chargements sortants." />
+      <PageHeader title="Chargements STAR, particuliers et palettes" subtitle="Enregistrement et suivi des chargements sortants." />
       <div className="max-w-xl">
         <SitePicker
           id="star-particulier-site"
@@ -353,14 +292,25 @@ export default function ChargementsStarParticuliers() {
         <form className="space-y-5" onSubmit={(event) => void submit(event)}>
           <Tabs
             value={form.typeChargement}
-            onValueChange={(value) => setForm((current) => ({ ...current, typeChargement: value as LoadingType }))}
+            onValueChange={(value) => setForm((current) => ({
+              ...current,
+              typeChargement: value as LoadingType,
+              designation: value === "PALETTE"
+                ? (paletteDesignations.includes(current.designation) ? current.designation : "")
+                : (paletteDesignations.includes(current.designation) ? "" : current.designation),
+            }))}
           >
             <TabsList aria-label="Type de chargement">
               <TabsTrigger value="STAR">STAR</TabsTrigger>
               <TabsTrigger value="PARTICULIER">Particulier</TabsTrigger>
+              <TabsTrigger value="PALETTE">Palette</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="loading-date">Date</Label>
+              <Input id="loading-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-start-time">Heure d'entrée (HE)</Label>
               <Input id="loading-start-time" type="time" required value={form.heureDebut ?? ""} onChange={(event) => setForm({ ...form, heureDebut: event.target.value })} />
@@ -371,76 +321,25 @@ export default function ChargementsStarParticuliers() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-vehicle">Véhicule (matricule)</Label>
-              <Popover open={vehicleSuggestionsOpen && matchingChauffeurs.length > 0} onOpenChange={setVehicleSuggestionsOpen}>
-                <PopoverAnchor asChild>
-                  <Input
-                    id="loading-vehicle"
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-expanded={vehicleSuggestionsOpen && matchingChauffeurs.length > 0}
-                    aria-controls="loading-vehicle-suggestions"
-                    aria-activedescendant={matchingChauffeurs[activeVehicleSuggestion] ? `loading-vehicle-option-${activeVehicleSuggestion}` : undefined}
-                    required
-                    maxLength={160}
-                    autoComplete="off"
-                    placeholder={chauffeursLoading ? "Chargement des chauffeurs…" : "Rechercher un matricule enregistré"}
-                    value={form.camion}
-                    onFocus={() => setVehicleSuggestionsOpen(true)}
-                    onChange={(event) => changeMatricule(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (!matchingChauffeurs.length) return;
-                      if (event.key === "ArrowDown") {
-                        event.preventDefault();
-                        setActiveVehicleSuggestion((current) => (current + 1) % matchingChauffeurs.length);
-                      } else if (event.key === "ArrowUp") {
-                        event.preventDefault();
-                        setActiveVehicleSuggestion((current) => (current - 1 + matchingChauffeurs.length) % matchingChauffeurs.length);
-                      } else if (event.key === "Enter" && vehicleSuggestionsOpen) {
-                        event.preventDefault();
-                        const driver = matchingChauffeurs[activeVehicleSuggestion];
-                        if (driver) selectChauffeur(driver);
-                      } else if (event.key === "Escape") {
-                        setVehicleSuggestionsOpen(false);
-                      }
-                    }}
-                  />
-                </PopoverAnchor>
-                <PopoverContent
-                  id="loading-vehicle-suggestions"
-                  align="start"
-                  className="w-[var(--radix-popover-trigger-width)] p-1"
-                  onOpenAutoFocus={(event) => event.preventDefault()}
-                >
-                  <ul role="listbox" aria-label="Véhicules enregistrés avec leur chauffeur" className="max-h-52 overflow-y-auto">
-                    {matchingChauffeurs.map((driver, index) => (
-                      <li key={driver.id} role="presentation">
-                        <button
-                          id={`loading-vehicle-option-${index}`}
-                          type="button"
-                          role="option"
-                          aria-selected={index === activeVehicleSuggestion}
-                          className={`w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${index === activeVehicleSuggestion ? "bg-accent" : ""}`}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => selectChauffeur(driver)}
-                        >
-                          <span>{driver.matricule}</span>
-                          <span className="ml-2 text-muted-foreground">— {driver.nomPrenom}</span>
-                          {driver.vehicule && <span className="ml-2 text-muted-foreground">({driver.vehicule})</span>}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </PopoverContent>
-              </Popover>
-              {chauffeursError
-                ? <p role="alert" className="text-xs text-destructive">{chauffeursError}</p>
-                : chauffeursLoading
-                  ? <p className="text-xs text-muted-foreground">Chargement des fiches chauffeurs du site…</p>
-                  : !chauffeursWithMatricule.length
-                    ? <p className="text-xs text-muted-foreground">Aucun matricule enregistré. Ajoutez-en un dans le module Chauffeurs.</p>
-                    : form.camion.trim() && !selectedChauffeur
-                      ? <p role="alert" className="text-xs text-destructive">Choisissez un matricule dans les chauffeurs enregistrés.</p>
-                      : <p className="text-xs text-muted-foreground">Sélectionnez un matricule enregistré pour renseigner le chauffeur automatiquement.</p>}
+              <Input
+                id="loading-vehicle"
+                required
+                maxLength={160}
+                placeholder="Saisir le véhicule / matricule"
+                value={form.camion}
+                onChange={(event) => setForm({ ...form, camion: event.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="loading-truck-registration">Immatriculation du camion</Label>
+              <Input
+                id="loading-truck-registration"
+                required
+                maxLength={100}
+                placeholder="Saisir l’immatriculation"
+                value={form.immatriculationVehicule}
+                onChange={(event) => setForm({ ...form, immatriculationVehicule: event.target.value })}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="loading-owner">Propriétaire</Label>
@@ -453,9 +352,8 @@ export default function ChargementsStarParticuliers() {
                 required
                 maxLength={255}
                 value={form.nomChauffeur}
-                readOnly
-                className="bg-muted/50"
-                placeholder="Rempli depuis la fiche chauffeur"
+                onChange={(event) => setForm({ ...form, nomChauffeur: event.target.value })}
+                placeholder="Saisir le nom du chauffeur"
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
@@ -469,7 +367,7 @@ export default function ChargementsStarParticuliers() {
                   <SelectValue placeholder="Choisir une désignation" />
                 </SelectTrigger>
                 <SelectContent>
-                  {designationGroups.map(({ label, options }) => (
+                  {visibleDesignationGroups.map(({ label, options }) => (
                     <SelectGroup key={label}>
                       <SelectLabel>{label}</SelectLabel>
                       {options.map((option) => {
@@ -528,7 +426,7 @@ export default function ChargementsStarParticuliers() {
       </Panel>
 
       <section id="star-loading-print-area">
-      <Panel title={`Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : "Particuliers"}`}>
+      <Panel title={`Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : form.typeChargement === "PALETTE" ? "Palette" : "Particuliers"}`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 star-loading-screen">
           <div className="relative min-w-[260px] flex-1">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -547,16 +445,18 @@ export default function ChargementsStarParticuliers() {
         {filteredEntries.length ? (
           <div className="overflow-hidden rounded-lg border star-loading-screen">
             <div className="max-h-[560px] overflow-auto">
-              <table className="w-full min-w-[1450px] text-left text-sm">
+              <table className="w-full min-w-[1500px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
-                  <tr>{["HE", "HS", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
+                  <tr>{["Date", "HE", "HS", "Véhicule", "Immatriculation camion", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
                     <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
+                      <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureDebut || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                       <td className="px-3 py-3 font-medium">{entry.camion}</td>
+                      <td className="px-3 py-3 font-mono text-xs">{entry.immatriculationVehicule || "—"}</td>
                       <td className="px-3 py-3">{entry.proprietaire}</td>
                       <td className="px-3 py-3">{entry.nomChauffeur}</td>
                       <td className="break-words px-3 py-3">{entry.designation}</td>
@@ -567,7 +467,7 @@ export default function ChargementsStarParticuliers() {
                       <td className="px-3 py-3 font-mono text-xs">{entry.lp}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.titre}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.plomb}</td>
-                      <td className="px-3 py-3">{entry.typeChargement === "STAR" ? "STAR" : "Particulier"}</td>
+                      <td className="px-3 py-3">{entry.typeChargement === "STAR" ? "STAR" : entry.typeChargement === "PALETTE" ? "Palette" : "Particulier"}</td>
                       <td className="whitespace-nowrap px-3 py-3">
                         <div className="flex items-center gap-1">
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le chargement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="h-4 w-4" /></Button>
@@ -583,18 +483,20 @@ export default function ChargementsStarParticuliers() {
           </div>
         ) : <div className="star-loading-screen"><Empty text={loading ? "Chargement du registre…" : loadError ? "Le registre n’a pas pu être chargé." : visibleEntries.length ? "Aucun chargement ne correspond à votre recherche." : "Aucun chargement enregistré pour ce site."} /></div>}
         <div className="star-loading-print hidden">
-          <h1 className="mb-1 text-xl font-bold">Registre des chargements {form.typeChargement === "STAR" ? "STAR" : "particuliers"}</h1>
+          <h1 className="mb-1 text-xl font-bold">Registre des chargements {form.typeChargement === "STAR" ? "STAR" : form.typeChargement === "PALETTE" ? "Palette" : "particuliers"}</h1>
           <p className="mb-4 text-sm">Site : {siteNameSelected || "—"} · Imprimé le {new Date().toLocaleString("fr-FR")}</p>
           <table>
             <thead>
-              <tr>{["HD", "HF", "Véhicule", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+              <tr>{["Date", "HD", "HF", "Véhicule", "Immatriculation camion", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement"].map((heading) => <th key={heading}>{heading}</th>)}</tr>
             </thead>
             <tbody>
               {visibleEntries.map((entry) => (
                 <tr key={entry.id}>
+                  <td>{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                   <td>{entry.heureDebut || "—"}</td>
                   <td>{entry.heureSortie || "—"}</td>
                   <td>{entry.camion || "—"}</td>
+                  <td>{entry.immatriculationVehicule || "—"}</td>
                   <td>{entry.proprietaire || "—"}</td>
                   <td>{entry.nomChauffeur || "—"}</td>
                   <td>{entry.designation || "—"}</td>
@@ -605,7 +507,7 @@ export default function ChargementsStarParticuliers() {
                   <td>{entry.lp || "—"}</td>
                   <td>{entry.titre || "—"}</td>
                   <td>{entry.plomb || "—"}</td>
-                  <td>{entry.typeChargement === "STAR" ? "STAR" : "Particulier"}</td>
+                  <td>{entry.typeChargement === "STAR" ? "STAR" : entry.typeChargement === "PALETTE" ? "Palette" : "Particulier"}</td>
                 </tr>
               ))}
             </tbody>

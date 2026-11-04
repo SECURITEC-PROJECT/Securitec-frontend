@@ -51,7 +51,7 @@ export const SIDEBAR_GROUPS: { title: string; items: { to: string; label: string
       { to: "/dashboard/rondes", label: "Patrouille ou ronde", icon: RouteIcon },
       { to: "/dashboard/points-vigilance", label: "Points de vigilance", icon: ShieldAlert },
       { to: "/dashboard/consigne", label: "Consignes", icon: FileWarning },
-      { to: "/dashboard/chargements-star-particuliers", label: "Chargements Star et particuliers", icon: Truck },
+      { to: "/dashboard/chargements-star-particuliers", label: "Chargements STAR, particuliers et palettes", icon: Truck },
       { to: "/dashboard/materiels-sous-traitant", label: "Matériels sous-traitant", icon: Wrench },
       { to: "/dashboard/enregistrements-ordures", label: "Enregistrements Ordures", icon: Trash2 },
       { to: "/dashboard/ordures", label: "Déchets", icon: Trash2 },

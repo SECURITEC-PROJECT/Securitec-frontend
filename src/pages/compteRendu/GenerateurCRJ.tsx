@@ -432,7 +432,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                   <th className="border border-black p-1">TRANSPORTEUR</th>
                   <th className="border border-black p-1">N° TITRE / FACTURE</th>
                   <th className="border border-black p-1">PLOMB</th>
-                  <th className="border border-black p-1">DESTINATION</th>
                 </tr>
               </thead>
               <tbody>
@@ -442,7 +441,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
                     <td className="border border-black p-1">{c.transporteur}</td>
                     <td className="border border-black p-1 font-mono">{c.titre}</td>
                     <td className="border border-black p-1 font-mono">{c.plomb}</td>
-                    <td className="border border-black p-1">{c.destination}</td>
                   </tr>
                 )) : (
                   <tr>

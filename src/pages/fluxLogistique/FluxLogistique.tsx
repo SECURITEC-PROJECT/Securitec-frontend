@@ -16,9 +16,11 @@ type TruckForm = {
   date: string;
   immatriculationVehicule: string;
   heureSortie: string;
+  transporteur: string;
   designation: string;
   nbr: string;
   facture: string;
+  plomb: string;
   destinataire: string;
   typeDocument: string;
   emetteur: string;
@@ -52,9 +54,11 @@ const emptyTruck = (): TruckForm => ({
   date: today(),
   immatriculationVehicule: "",
   heureSortie: nowTime(),
+  transporteur: "",
   designation: "",
   nbr: "",
   facture: "",
+  plomb: "",
   destinataire: "",
   typeDocument: "BON",
   emetteur: "",
@@ -183,6 +187,8 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       return [
       entry.date,
       entry.immatriculationVehicule,
+      entry.transporteur,
+      entry.plomb,
       isWasteRegister ? "" : entry.heureSortie,
       entry.designation,
       entry.nbr,
@@ -340,9 +346,11 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       date: String(entry.date).slice(0, 10),
       immatriculationVehicule: entry.immatriculationVehicule || "",
       heureSortie: entry.heureSortie || "",
+      transporteur: entry.transporteur || "",
       designation: entry.designation || "",
       nbr: entry.nbr || "",
       facture: entry.facture || "",
+      plomb: entry.plomb || "",
       destinataire: entry.destinataire || "",
       typeDocument: entry.typeDocument || "BON",
       emetteur: entry.emetteur || "",
@@ -391,14 +399,18 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   const exportSpreadsheet = () => {
     const columns = [
       "Date", isWasteRegister ? "Véhicule" : "Transport (matricule)",
+      ...(isWasteRegister ? ["Transporteur"] : []),
       ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre",
       isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination",
+      ...(isWasteRegister ? ["Plomb"] : []),
       ...(!isWasteRegister ? ["Type de document", "Émetteur", "Vérification", "Visa agent"] : []),
       "Auteur", "Horodatage de saisie",
     ];
     const rows = filteredEntries.map((entry) => [
       entry.date, entry.immatriculationVehicule, ...(!isWasteRegister ? [entry.heureSortie] : []),
+      ...(isWasteRegister ? [entry.transporteur] : []),
       entry.designation, entry.nbr, entry.facture, entry.destinataire,
+      ...(isWasteRegister ? [entry.plomb] : []),
       ...(!isWasteRegister ? [entry.typeDocument || "", entry.emetteur || "", entry.verification || "", entry.visaAgent || ""] : []),
       entry.createdBy || "",
       entry.createdAt ? new Date(entry.createdAt).toLocaleString("fr-FR") : "",
@@ -420,11 +432,13 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       const cells = [
         displayDate,
         entry.immatriculationVehicule || "—",
+        ...(isWasteRegister ? [entry.transporteur || "—"] : []),
         ...(!isWasteRegister ? [entry.heureSortie || "—"] : []),
         entry.designation || "—",
         entry.nbr || "—",
         entry.facture || "—",
         entry.destinataire || "—",
+        ...(isWasteRegister ? [entry.plomb || "—"] : []),
         ...(!isWasteRegister ? [entry.typeDocument || "—", entry.emetteur || "—", entry.verification || "—", entry.visaAgent || "—"] : []),
       ];
       return `<tr>${cells.map((value) => `<td>${escapeHtml(String(value))}</td>`).join("")}</tr>`;
@@ -432,11 +446,13 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     const tableHeaders = [
       "Date",
       isWasteRegister ? "Véhicule" : "Transport (matricule)",
+      ...(isWasteRegister ? ["Transporteur"] : []),
       ...(!isWasteRegister ? ["Heure de sortie"] : []),
       "Désignation",
       "Nombre",
       isWasteRegister ? "Facture" : "Numéro Bon / Facture",
       "Destination",
+      ...(isWasteRegister ? ["Plomb"] : []),
       ...(!isWasteRegister ? ["Type de document", "Émetteur", "Vérification", "Visa agent"] : []),
     ].map((heading) => `<th>${escapeHtml(heading)}</th>`).join("");
 
@@ -478,11 +494,13 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     printRecord(isWasteRegister ? "Enregistrement d’ordures" : "Enregistrement Bon / facture / Bon de sortie", entry.siteName || selectedSiteName, [
       ["Date", displayDate],
       [isWasteRegister ? "Véhicule" : "Transport (matricule)", entry.immatriculationVehicule || "—"],
+      ...(isWasteRegister ? [["Transporteur", entry.transporteur || "—"] as [string, string]] : []),
       ...(!isWasteRegister ? [["Heure de sortie", entry.heureSortie || "—"] as [string, string]] : []),
       ["Désignation", entry.designation || "—"],
       ["Nombre", entry.nbr || "—"],
       [isWasteRegister ? "Facture" : "Numéro Bon / Facture", entry.facture || "—"],
       ["Destination", entry.destinataire || "—"],
+      ...(isWasteRegister ? [["Plomb", entry.plomb || "—"] as [string, string]] : []),
       ...(!isWasteRegister ? [
         ["Type de document", entry.typeDocument || "—"] as [string, string],
         ["Émetteur", entry.emetteur || "—"] as [string, string],
@@ -578,6 +596,18 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="flux-carrier" className="flex min-h-10 items-center text-base font-semibold">Transporteur</Label>
+              <Input
+                id="flux-carrier"
+                className="h-12 text-base"
+                required
+                maxLength={255}
+                placeholder="Saisir le transporteur"
+                value={truckForm.transporteur}
+                onChange={(event) => setTruckForm({ ...truckForm, transporteur: event.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="flux-designation" className="flex min-h-10 items-center text-base font-semibold">Désignation</Label>
               <select
                 id="flux-designation"
@@ -614,17 +644,26 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="flux-invoice" className="flex min-h-10 items-center text-base font-semibold">Facture</Label>
+              <Label htmlFor="flux-invoice" className="flex min-h-10 items-center text-base font-semibold">Facture (saisie manuelle)</Label>
               <Input
                 id="flux-invoice"
                 className="h-12 text-base"
                 required
                 maxLength={160}
-                pattern="\\d+"
-                inputMode="numeric"
-                title="Saisissez un numéro de facture."
+                placeholder="Saisir la référence de facture"
                 value={truckForm.facture}
                 onChange={(event) => setTruckForm({ ...truckForm, facture: event.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="flux-seal" className="flex min-h-10 items-center text-base font-semibold">Plomb (facultatif, saisie manuelle)</Label>
+              <Input
+                id="flux-seal"
+                className="h-12 text-base"
+                maxLength={100}
+                placeholder="Saisir le plomb si disponible"
+                value={truckForm.plomb}
+                onChange={(event) => setTruckForm({ ...truckForm, plomb: event.target.value })}
               />
             </div>
           </div>}
@@ -834,7 +873,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
             <table className="w-full min-w-[1450px] text-left text-sm">
               <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                 <tr>
-                  {["Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(!isWasteRegister ? ["Type document", "Émetteur", "Vérification", "Visa agent"] : []), "Saisie par / le", "Pièces jointes", "Historique", "Actions"].map((label) => (
+                  {["Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(isWasteRegister ? ["Transporteur"] : []), ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(isWasteRegister ? ["Plomb"] : []), ...(!isWasteRegister ? ["Type document", "Émetteur", "Vérification", "Visa agent"] : []), "Saisie par / le", "Pièces jointes", "Historique", "Actions"].map((label) => (
                     <th key={label} className="whitespace-nowrap border-b px-3 py-3 font-medium">{label}</th>
                   ))}
                 </tr>
@@ -844,11 +883,13 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                   <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
                     <td className="whitespace-nowrap px-3 py-3">{String(entry.date).slice(0, 10)}</td>
                     <td className="whitespace-nowrap px-3 py-3 font-medium">{entry.immatriculationVehicule || "—"}</td>
+                    {isWasteRegister && <td className="px-3 py-3">{entry.transporteur || "—"}</td>}
                     {!isWasteRegister && <td className="whitespace-nowrap px-3 py-3">{entry.heureSortie || "—"}</td>}
                     <td className="max-w-md whitespace-pre-wrap px-3 py-3">{entry.designation || "—"}</td>
                     <td className="px-3 py-3">{entry.nbr || "—"}</td>
                     <td className="px-3 py-3">{entry.facture || "—"}</td>
                     <td className="px-3 py-3">{entry.destinataire || "—"}</td>
+                    {isWasteRegister && <td className="px-3 py-3">{entry.plomb || "—"}</td>}
                     {!isWasteRegister && <>
                       <td className="px-3 py-3">{entry.typeDocument || "—"}</td>
                       <td className="px-3 py-3">{entry.emetteur || "—"}</td>
@@ -874,7 +915,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                   </tr>
                 ))}
                 {!filteredEntries.length && (
-                  <tr><td colSpan={isWasteRegister ? 10 : 15} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  <tr><td colSpan={isWasteRegister ? 12 : 15} className="px-3 py-8 text-center text-sm text-muted-foreground">
                     {entries.length ? "Aucun résultat pour cette recherche." : `Aucun enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} pour ce site.`}
                   </td></tr>
                 )}
