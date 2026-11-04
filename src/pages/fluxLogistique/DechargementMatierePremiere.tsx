@@ -66,6 +66,7 @@ interface MatierePremiereEntry {
   quantite?: number | string | null;
   document?: string | null;
   provenance?: string | null;
+  pendingSync?: boolean;
 }
 
 const today = () => {
@@ -105,23 +106,31 @@ export default function DechargementMatierePremiere() {
     let active = true;
     if (!selectedSiteId) return () => { active = false; };
 
-    serviceApi.listLogistics(selectedSiteId)
-      .then((result) => {
-        if (active) setRegistry({
-          siteId: selectedSiteId,
-          entries: result.filter((entry) => entry.type === "MATIERE_PREMIERE"),
-          error: "",
+    const refresh = () => {
+      void serviceApi.listLogistics(selectedSiteId)
+        .then((result) => {
+          if (active) setRegistry({
+            siteId: selectedSiteId,
+            entries: result.filter((entry) => entry.type === "MATIERE_PREMIERE"),
+            error: "",
+          });
+        })
+        .catch((error) => {
+          if (active) setRegistry({
+            siteId: selectedSiteId,
+            entries: [],
+            error: error instanceof Error ? error.message : "Chargement du registre impossible.",
+          });
         });
-      })
-      .catch((error) => {
-        if (active) setRegistry({
-          siteId: selectedSiteId,
-          entries: [],
-          error: error instanceof Error ? error.message : "Chargement du registre impossible.",
-        });
-      });
-
-    return () => { active = false; };
+    };
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", refresh);
+    };
   }, [selectedSiteId]);
 
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
@@ -180,7 +189,9 @@ export default function DechargementMatierePremiere() {
           ...current,
           entries: current.entries.map((item) => item.id === editingId ? { ...item, ...entry } : item),
         }));
-        toast.success("Déchargement modifié.");
+        toast[entry.pendingSync ? "info" : "success"](entry.pendingSync
+          ? "Modification enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+          : "Déchargement modifié.");
       } else {
         const result = await serviceApi.createLogistics(payload);
         if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
@@ -202,10 +213,12 @@ export default function DechargementMatierePremiere() {
     if (!(await confirmDeletion(`Supprimer le déchargement « ${entry.designation || entry.id} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteMatierePremiereLogistics(entry.id, selectedSiteId);
+      const result = await serviceApi.deleteMatierePremiereLogistics(entry.id, selectedSiteId);
       setRegistry((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== entry.id) }));
       if (editingId === entry.id) clearForm();
-      toast.success("Déchargement supprimé du registre.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Déchargement supprimé du registre.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {

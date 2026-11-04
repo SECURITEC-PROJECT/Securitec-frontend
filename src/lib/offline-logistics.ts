@@ -18,11 +18,12 @@ export interface QueuedLogisticsWrite {
 }
 
 const databaseName = "securitec-offline";
-const databaseVersion = 4;
+const databaseVersion = 5;
 const entryStore = "logistics-cache";
 const userEntryStore = "user-logistics-cache";
 const queueStore = "logistics-queue";
 const apiCacheStore = "api-cache";
+const documentCacheStore = "document-cache";
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -48,6 +49,9 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains(apiCacheStore)) {
         database.createObjectStore(apiCacheStore, { keyPath: "cacheKey" });
       }
+      if (!database.objectStoreNames.contains(documentCacheStore)) {
+        database.createObjectStore(documentCacheStore, { keyPath: "cacheKey" });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("Impossible d’ouvrir le stockage hors connexion."));
@@ -67,6 +71,22 @@ export async function getCachedApiResponse<T>(userId: string, path: string): Pro
     store.get(`${userId}:${path}`),
   );
   return cached?.value ?? null;
+}
+
+export async function cacheDocumentFile(userId: string, documentId: string, blob: Blob, name: string): Promise<void> {
+  await storeRequest(documentCacheStore, "readwrite", (store) => store.put({
+    cacheKey: `${userId}:${documentId}`,
+    blob,
+    name,
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+export async function getCachedDocumentFile(userId: string, documentId: string): Promise<{ blob: Blob; name: string } | null> {
+  const cached = await storeRequest<{ blob: Blob; name: string } | undefined>(documentCacheStore, "readonly", (store) =>
+    store.get(`${userId}:${documentId}`),
+  );
+  return cached ? { blob: cached.blob, name: cached.name } : null;
 }
 
 async function storeRequest<T>(storeName: string, mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {

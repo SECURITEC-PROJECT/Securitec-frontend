@@ -23,6 +23,7 @@ interface DepotageEntry {
   chauffeur?: string | null;
   magasinier?: string | null;
   siteName?: string | null;
+  pendingSync?: boolean;
 }
 
 const today = () => {
@@ -65,23 +66,31 @@ export default function DepotageFuelGasoil() {
     let active = true;
     if (!selectedSiteId) return () => { active = false; };
 
-    serviceApi.listLogistics(selectedSiteId)
-      .then((result) => {
-        if (active) setRegistry({
-          siteId: selectedSiteId,
-          entries: result.filter((entry) => entry.type === "DEPOTAGE_FUEL"),
-          error: "",
+    const refresh = () => {
+      void serviceApi.listLogistics(selectedSiteId)
+        .then((result) => {
+          if (active) setRegistry({
+            siteId: selectedSiteId,
+            entries: result.filter((entry) => entry.type === "DEPOTAGE_FUEL"),
+            error: "",
+          });
+        })
+        .catch((error) => {
+          if (active) setRegistry({
+            siteId: selectedSiteId,
+            entries: [],
+            error: error instanceof Error ? error.message : "Chargement du registre impossible.",
+          });
         });
-      })
-      .catch((error) => {
-        if (active) setRegistry({
-          siteId: selectedSiteId,
-          entries: [],
-          error: error instanceof Error ? error.message : "Chargement du registre impossible.",
-        });
-      });
-
-    return () => { active = false; };
+    };
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", refresh);
+    };
   }, [selectedSiteId]);
 
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
@@ -148,7 +157,9 @@ export default function DepotageFuelGasoil() {
           ...current,
           entries: current.entries.map((item) => item.id === editingId ? { ...item, ...entry } : item),
         }));
-        toast.success("Dépotage fuel/gasoil modifié.");
+        toast[entry.pendingSync ? "info" : "success"](entry.pendingSync
+          ? "Modification enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+          : "Dépotage fuel/gasoil modifié.");
       } else {
         const result = await serviceApi.createLogistics(payload);
         if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
@@ -170,10 +181,12 @@ export default function DepotageFuelGasoil() {
     if (!(await confirmDeletion(`Supprimer le dépotage « ${entry.titre || entry.id} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteDepotageFuelLogistics(entry.id, selectedSiteId);
+      const result = await serviceApi.deleteDepotageFuelLogistics(entry.id, selectedSiteId);
       setRegistry((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== entry.id) }));
       if (editingId === entry.id) clearForm();
-      toast.success("Dépotage supprimé du registre.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Dépotage supprimé du registre.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {

@@ -227,7 +227,9 @@ export default function DechargementBouteillesVides() {
       if (editingEntry) {
         const { entry } = await serviceApi.updateEmptyBottleDelivery(editingEntry.id, payload);
         setEntries((current) => current.map((item) => item.id === entry.id ? { ...item, ...entry, siteName: selectedSiteName } : item));
-        toast.success("Réception modifiée.");
+        toast[entry.pendingSync ? "info" : "success"](entry.pendingSync
+          ? "Modification enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+          : "Réception modifiée.");
       } else {
         const { entry } = await serviceApi.createEmptyBottleDelivery(payload);
         setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
@@ -273,10 +275,12 @@ export default function DechargementBouteillesVides() {
     if (!site?.id || !(await confirmDeletion(`Supprimer la réception du véhicule « ${entry.immatriculationVehicule} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteEmptyBottleDelivery(entry.id, site.id);
+      const result = await serviceApi.deleteEmptyBottleDelivery(entry.id, site.id);
       setEntries((current) => current.filter((item) => item.id !== entry.id));
       if (editingEntry?.id === entry.id) resetForm();
-      toast.success("Réception supprimée.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Réception supprimée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {

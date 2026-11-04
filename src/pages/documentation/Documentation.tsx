@@ -47,6 +47,25 @@ export default function Documentation() {
     return () => { active = false; };
   }, [selectedSiteId]);
 
+  useEffect(() => {
+    if (!selectedSiteId) return;
+    let active = true;
+    const refresh = () => {
+      void serviceApi.listDocuments(selectedSiteId)
+        .then((result) => { if (active) setDocuments(result); })
+        .catch((reason) => {
+          if (active) setError(reason instanceof Error ? reason.message : "Chargement des documents impossible.");
+        });
+    };
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", refresh);
+    };
+  }, [selectedSiteId]);
+
   const displayed = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
     return documents.filter((doc) => !query || `${doc.name} ${doc.category} ${doc.extension}`.toLocaleLowerCase("fr").includes(query));
@@ -57,12 +76,14 @@ export default function Documentation() {
     if (!file || !selectedSiteId) return;
     setError(""); setUploading(true);
     try {
-      await serviceApi.uploadDocument(selectedSiteId, file, category);
+      const uploadedDocument = await serviceApi.uploadDocument(selectedSiteId, file, category);
       setFile(null);
       const input = document.getElementById("document-file") as HTMLInputElement | null;
       if (input) input.value = "";
       await refresh();
-      toast.success("Document importé.");
+      toast[uploadedDocument.pendingSync ? "info" : "success"](uploadedDocument.pendingSync
+        ? "Document enregistré hors connexion. Il sera synchronisé au retour du réseau."
+        : "Document importé.");
       toast.success("Document importé.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Import du fichier impossible."); }
     finally { setUploading(false); }
@@ -86,7 +107,13 @@ export default function Documentation() {
   const remove = async (doc: SiteDocument) => {
     if (!(await confirmDeletion(`Supprimer « ${doc.name} » ?`))) return;
     setWorkingId(doc.id); setError("");
-    try { await serviceApi.deleteDocument(doc.id); setDocuments((current) => current.filter((item) => item.id !== doc.id)); toast.success("Document supprimé."); }
+    try {
+      const result = await serviceApi.deleteDocument(doc.id, selectedSiteId);
+      setDocuments((current) => current.filter((item) => item.id !== doc.id));
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Document supprimé.");
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Suppression impossible."); }
     finally { setWorkingId(""); }
   };

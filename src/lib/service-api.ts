@@ -4,8 +4,10 @@ import {
   cacheLogisticsEntries,
   getCachedLogisticsEntries,
   getCachedApiResponse,
+  getCachedDocumentFile,
   getQueuedLogisticsWrites,
   cacheApiResponse,
+  cacheDocumentFile,
   queueLogisticsWrite,
   updateQueuedLogisticsWrite,
   removeQueuedLogisticsWrite,
@@ -247,6 +249,9 @@ export interface SiteDocument {
   size: number;
   category: string;
   createdAt: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface ChauffeurRecord {
@@ -405,6 +410,9 @@ export interface StarParticulierLoading {
   plomb: string;
   siteId: string;
   siteName: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface TruckChecklistRow {
@@ -584,6 +592,122 @@ const body = (data: unknown): string => {
   return JSON.stringify(data);
 };
 
+function addClientRequestId(data: unknown, requestId: string): Record<string, unknown> {
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return { ...(data as Record<string, unknown>), clientRequestId: requestId };
+  }
+  return { clientRequestId: requestId };
+}
+
+function pendingDocument(item: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>[number]): SiteDocument {
+  const file = item.files[0];
+  const name = file?.name || String(item.payload.name || "document");
+  return {
+    id: `pending-${item.requestId}`,
+    name,
+    extension: name.split(".").pop()?.toLowerCase() || "",
+    mimeType: file?.type || "application/octet-stream",
+    size: file?.blob.size || Number(item.payload.size || 0),
+    category: String(item.payload.category || "Autre"),
+    createdAt: item.createdAt,
+    pendingSync: true,
+    pendingSyncStatus: item.status || "pending",
+    pendingSyncError: item.lastError,
+  };
+}
+
+function applyPendingLogisticsWrites<T extends { id: string }>(
+  entries: T[],
+  queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
+): T[] {
+  let result = [...entries];
+  for (const item of queued.sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const path = item.path || "";
+    if (path === "/logistics" && (item.method || "POST") === "POST") {
+      result.unshift(pendingLogisticsEntry(item) as T);
+      continue;
+    }
+    if (!path.startsWith("/logistics/") || path.includes("/attachments")) continue;
+    const id = path.match(/^\/logistics\/(?:empty-bottles\/|star-particulier\/)?([^/?]+)/)?.[1];
+    if (!id) continue;
+    const entryId = decodeURIComponent(id);
+    if (item.method === "DELETE") {
+      result = result.filter((entry) => entry.id !== entryId);
+    } else if (item.method === "PUT") {
+      result = result.map((entry) => entry.id === entryId
+        ? { ...entry, ...item.payload, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError } as T
+        : entry);
+    }
+  }
+  return result;
+}
+
+function applyPendingStarLoadings(
+  entries: StarParticulierLoading[],
+  queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
+): StarParticulierLoading[] {
+  let result = [...entries];
+  for (const item of queued.filter((entry) => entry.path?.startsWith("/logistics/star-particulier"))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const path = item.path || "";
+    if (path === "/logistics/star-particulier" && item.method === "POST") {
+      result.unshift(pendingLogisticsEntry(item) as StarParticulierLoading);
+      continue;
+    }
+    const id = path.match(/^\/logistics\/star-particulier\/([^/?]+)/)?.[1];
+    if (!id) continue;
+    const entryId = decodeURIComponent(id);
+    if (item.method === "DELETE") result = result.filter((entry) => entry.id !== entryId);
+    else if (item.method === "PUT") {
+      result = result.map((entry) => entry.id === entryId
+        ? { ...entry, ...item.payload, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError }
+        : entry);
+    }
+  }
+  return result;
+}
+
+async function uploadDocumentRequest(siteId: string, file: File, category: string): Promise<SiteDocument> {
+  const token = sessionStorage.getItem(tokenKey);
+  const headers = new Headers({
+    "Content-Type": file.type || "application/octet-stream",
+    "X-Site-Id": siteId,
+    "X-File-Name": encodeURIComponent(file.name),
+    "X-File-Category": category,
+  });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${apiBaseUrl}/documents`, { method: "POST", headers, body: file });
+  const result = await response.json().catch(() => ({})) as { document?: SiteDocument; error?: string };
+  if (!response.ok) throw new ApiResponseError(result.error || `Erreur API (${response.status})`, response.status);
+  if (!result.document) throw new Error("La réponse du serveur ne contient pas le document importé.");
+  return result.document;
+}
+
+async function queueDocumentUpload(
+  siteId: string,
+  file: File,
+  category: string,
+  link?: { kind: "logistics"; entryId: string } | { kind: "registry"; entity: string; recordId: string },
+): Promise<SiteDocument> {
+  const requestId = crypto.randomUUID();
+  await queueLogisticsWrite(requestId, siteId, {
+    siteId,
+    name: file.name,
+    category,
+    ...(link ? { link } : {}),
+  }, [file], "/documents");
+  return pendingDocument({
+    requestId,
+    siteId,
+    userId: sessionStorage.getItem("securitec-session-user-id") || "",
+    path: "/documents",
+    method: "POST",
+    payload: { siteId, name: file.name, category, ...(link ? { link } : {}) },
+    files: [{ name: file.name, type: file.type, lastModified: file.lastModified, blob: file }],
+    createdAt: new Date().toISOString(),
+  });
+}
+
 export const serviceApi = {
   async listUsers() { return (await request<{ users: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null }[] }>("/users")).users; },
   async createUser(data: { name: string; identifier: string; role: number; pin: string; siteId: string | null }) { return (await request<{ user: { id: string; name: string; identifier: string; role: number; siteId: string | null; siteName: string | null } }>("/users", { method: "POST", body: body(data) })).user; },
@@ -611,54 +735,217 @@ export const serviceApi = {
   async deleteTransporteur(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/transporteurs/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
-  async listDocuments(siteId: string) { return (await request<{ documents: SiteDocument[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents; },
+  async listDocuments(siteId: string) {
+    const queued = await getQueuedLogisticsWrites(siteId);
+    let documents: SiteDocument[] = [];
+    try {
+      documents = (await request<{ documents: SiteDocument[] }>(`/documents?siteId=${encodeURIComponent(siteId)}`)).documents;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !queued.some((item) => item.path === "/documents")) throw error;
+    }
+    const deletedIds = new Set(queued.filter((item) => item.method === "DELETE" && item.path?.startsWith("/documents/"))
+      .map((item) => item.path?.split("/").pop() || ""));
+    return [...queued.filter((item) => item.path === "/documents").map(pendingDocument),
+      ...documents.filter((document) => !deletedIds.has(document.id))];
+  },
   async uploadDocument(siteId: string, file: File, category: string) {
-    const token = sessionStorage.getItem(tokenKey);
-    const headers = new Headers({ "Content-Type": file.type || "application/octet-stream", "X-Site-Id": siteId,
-      "X-File-Name": encodeURIComponent(file.name), "X-File-Category": category });
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    const response = await fetch(`${apiBaseUrl}/documents`, { method: "POST", headers, body: file });
-    const result = await response.json().catch(() => ({})) as { document?: SiteDocument; error?: string };
-    if (!response.ok) throw new Error(result.error || `Erreur API (${response.status})`);
-    if (!result.document) throw new Error("La réponse du serveur ne contient pas le document importé.");
-    return result.document;
+    try {
+      return await uploadDocumentRequest(siteId, file, category);
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      return queueDocumentUpload(siteId, file, category);
+    }
   },
   async downloadDocument(id: string) {
     const token = sessionStorage.getItem(tokenKey);
+    const userId = sessionStorage.getItem("securitec-session-user-id");
+    if (id.startsWith("pending-")) {
+      const queued = (await getQueuedLogisticsWrites()).find((item) => item.requestId === id.slice("pending-".length));
+      const file = queued?.files[0];
+      if (file) return { blob: file.blob, name: file.name };
+    }
     const headers = new Headers();
     if (token) headers.set("Authorization", `Bearer ${token}`);
-    const response = await fetch(`${apiBaseUrl}/documents/${encodeURIComponent(id)}`, { headers });
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({}));
-      throw new Error(result.error || `Erreur API (${response.status})`);
+    try {
+      const response = await fetch(`${apiBaseUrl}/documents/${encodeURIComponent(id)}`, { headers });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || `Erreur API (${response.status})`);
+      }
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const name = encoded ? decodeURIComponent(encoded) : "document";
+      const blob = await response.blob();
+      if (userId) {
+        try {
+          await cacheDocumentFile(userId, id, blob, name);
+        } catch (error) {
+          console.warn("Le document téléchargé n’a pas pu être enregistré pour une consultation hors ligne.", error);
+        }
+      }
+      return { blob, name };
+    } catch (error) {
+      if (!(error instanceof TypeError) || !userId) throw error;
+      const cached = await getCachedDocumentFile(userId, id);
+      if (cached) return cached;
+      throw error;
     }
-    const disposition = response.headers.get("Content-Disposition") || "";
-    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-    return { blob: await response.blob(), name: encoded ? decodeURIComponent(encoded) : "document" };
   },
   async listRegistryAttachments(entity: string, recordId: string) {
-    return (await request<{ attachments: Array<{ id: string; documentId: string; name: string; extension: string; size: number; linkedAt: string }> }>(`/register-attachments?entity=${encodeURIComponent(entity)}&recordId=${encodeURIComponent(recordId)}`)).attachments;
+    const queued = await getQueuedLogisticsWrites();
+    let attachments: Array<{ id: string; documentId: string; name: string; extension: string; size: number; linkedAt: string }> = [];
+    try {
+      attachments = (await request<{ attachments: typeof attachments }>(`/register-attachments?entity=${encodeURIComponent(entity)}&recordId=${encodeURIComponent(recordId)}`)).attachments;
+    } catch (error) {
+      const hasQueuedChange = queued.some((item) => {
+        const link = item.payload.link as { kind?: string; entity?: string; recordId?: string } | undefined;
+        return (item.path === "/documents" && link?.kind === "registry" && link.entity === entity && link.recordId === recordId)
+          || (item.path === "/register-attachments" && item.payload.entity === entity && item.payload.recordId === recordId);
+      });
+      if (!(error instanceof TypeError) || !hasQueuedChange) throw error;
+    }
+    const pendingUploads = queued.filter((item) => {
+      const link = item.payload.link as { kind?: string; entity?: string; recordId?: string } | undefined;
+      return item.path === "/documents" && link?.kind === "registry" && link.entity === entity && link.recordId === recordId;
+    }).map((item) => ({
+      id: `pending-${item.requestId}`,
+      documentId: `pending-${item.requestId}`,
+      name: item.files[0]?.name || String(item.payload.name || "document"),
+      extension: (item.files[0]?.name || "").split(".").pop()?.toLowerCase() || "",
+      size: item.files[0]?.blob.size || 0,
+      linkedAt: item.createdAt,
+    }));
+    const pendingLinks = queued.filter((item) => item.path === "/register-attachments"
+      && item.method === "POST" && item.payload.entity === entity && item.payload.recordId === recordId)
+      .map((item) => ({
+        id: `pending-${item.requestId}`,
+        documentId: String(item.payload.documentId || ""),
+        name: String(item.payload.name || "Document à associer"),
+        extension: String(item.payload.name || "").split(".").pop()?.toLowerCase() || "",
+        size: Number(item.payload.size || 0),
+        linkedAt: item.createdAt,
+      }));
+    const pendingDeletes = new Set(queued.filter((item) => item.method === "DELETE" && item.path?.startsWith("/register-attachments/"))
+      .map((item) => item.path?.split("/").pop() || ""));
+    return [...pendingUploads, ...pendingLinks, ...attachments.filter((item) => !pendingDeletes.has(item.id))];
   },
-  async linkRegistryAttachment(entity: string, recordId: string, documentId: string) {
-    return request<{ linked: boolean; id: string | null }>("/register-attachments", { method: "POST", body: body({ entity, recordId, documentId }) });
+  async linkRegistryAttachment(entity: string, recordId: string, documentId: string, siteId?: string | null) {
+    if (documentId.startsWith("pending-")) {
+      const requestId = documentId.slice("pending-".length);
+      const item = (await getQueuedLogisticsWrites()).find((entry) => entry.requestId === requestId);
+      if (!item || item.path !== "/documents") throw new Error("Le document en attente est introuvable.");
+      await updateQueuedLogisticsWrite(requestId, { payload: { ...item.payload, link: { kind: "registry", entity, recordId } } });
+      return { linked: true, id: `pending-${requestId}`, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const payload = { entity, recordId, documentId, siteId: siteId || "" };
+    try {
+      return await request<{ linked: boolean; id: string | null }>("/register-attachments", { method: "POST", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], "/register-attachments");
+      return { linked: true, id: `pending-${requestId}`, pendingSync: true };
+    }
   },
-  async unlinkRegistryAttachment(id: string) {
-    return request<{ id: string; unlinked: boolean }>(`/register-attachments/${encodeURIComponent(id)}`, { method: "DELETE" });
+  async addRegistryAttachment(entity: string, recordId: string, siteId: string, file: File) {
+    let document: SiteDocument;
+    try {
+      document = await uploadDocumentRequest(siteId, file, "Pièce de registre");
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      document = await queueDocumentUpload(siteId, file, "Pièce de registre", { kind: "registry", entity, recordId });
+      return document;
+    }
+    await serviceApi.linkRegistryAttachment(entity, recordId, document.id, siteId);
+    return document;
+  },
+  async unlinkRegistryAttachment(id: string, siteId?: string | null) {
+    if (id.startsWith("pending-")) {
+      await serviceApi.discardPendingOfflineWrite(id.slice("pending-".length));
+      return { id, unlinked: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const path = `/register-attachments/${encodeURIComponent(id)}`;
+    try {
+      return await request<{ id: string; unlinked: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, unlinked: true, pendingSync: true };
+    }
   },
   async listLogisticsAttachments(entryId: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
-    return (await request<{ attachments: SiteDocument[] }>(`/logistics/${encodeURIComponent(entryId)}/attachments${query}`)).attachments;
+    const queued = await getQueuedLogisticsWrites(siteId);
+    let attachments: SiteDocument[] = [];
+    try {
+      attachments = (await request<{ attachments: SiteDocument[] }>(`/logistics/${encodeURIComponent(entryId)}/attachments${query}`)).attachments;
+    } catch (error) {
+      const hasQueuedChange = queued.some((item) => {
+        const link = item.payload.link as { kind?: string; entryId?: string } | undefined;
+        return (item.path === "/documents" && link?.kind === "logistics" && link.entryId === entryId)
+          || item.path === `/logistics/${encodeURIComponent(entryId)}/attachments`;
+      });
+      if (!(error instanceof TypeError) || !hasQueuedChange) throw error;
+    }
+    const pending = queued.filter((item) => {
+      const link = item.payload.link as { kind?: string; entryId?: string } | undefined;
+      return (item.path === "/documents" && link?.kind === "logistics" && link.entryId === entryId)
+        || (item.path === `/logistics/${encodeURIComponent(entryId)}/attachments` && item.method === "POST");
+    }).map((item) => item.path === "/documents"
+      ? pendingDocument(item)
+      : { ...pendingDocument(item), id: String(item.payload.documentId || `pending-${item.requestId}`) });
+    return [...pending, ...attachments];
   },
   async linkLogisticsDocument(entryId: string, documentId: string, siteId: string) {
-    return request<{ linked: boolean }>(`/logistics/${encodeURIComponent(entryId)}/attachments`, {
-      method: "POST", body: body({ documentId, siteId }),
-    });
+    if (documentId.startsWith("pending-")) {
+      const requestId = documentId.slice("pending-".length);
+      const item = (await getQueuedLogisticsWrites(siteId)).find((entry) => entry.requestId === requestId);
+      if (!item || item.path !== "/documents") throw new Error("Le document en attente est introuvable.");
+      await updateQueuedLogisticsWrite(requestId, { payload: { ...item.payload, link: { kind: "logistics", entryId } } });
+      return { linked: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const path = `/logistics/${encodeURIComponent(entryId)}/attachments`;
+    const payload = { documentId, siteId };
+    try {
+      return await request<{ linked: boolean }>(path, { method: "POST", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path);
+      return { linked: true, pendingSync: true };
+    }
+  },
+  async addLogisticsAttachment(entryId: string, siteId: string, file: File, category = "Flux logistique") {
+    let document: SiteDocument;
+    try {
+      document = await uploadDocumentRequest(siteId, file, category);
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      document = await queueDocumentUpload(siteId, file, category, { kind: "logistics", entryId });
+      return document;
+    }
+    await serviceApi.linkLogisticsDocument(entryId, document.id, siteId);
+    return document;
   },
   async listLogisticsAudit(entryId: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
     return (await request<{ entries: { id: string; action: string; createdAt: string; createdBy: string | null; before: Record<string, unknown>; after: Record<string, unknown> }[] }>(`/logistics/${encodeURIComponent(entryId)}/audit${query}`)).entries;
   },
-  async deleteDocument(id: string) { return request<{ id: string; deleted: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }); },
+  async deleteDocument(id: string, siteId?: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await serviceApi.discardPendingOfflineWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const path = `/documents/${encodeURIComponent(id)}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
+  },
   async listSites() { return request<{ sites: { id: string; name: string; type: "USINE" | "AGENCE" }[]; canCreate: boolean; canDelete: boolean }>("/sites"); },
   async listAdminPosts() { return (await request<{ posts: AdminPost[] }>("/admin/posts")).posts; },
   async createAdminPost(data: { siteId: string; nom: string }) { return (await request<{ post: AdminPost }>("/admin/posts", { method: "POST", body: body(data) })).post; },
@@ -923,15 +1210,14 @@ export const serviceApi = {
       if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
       const entries = (await request<{ entries: any[] }>(`/logistics${query}`)).entries;
       if (siteId) await cacheLogisticsEntries(siteId, entries);
-      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => !entry.path || entry.path === "/logistics");
-      return [...pending.map(pendingLogisticsEntry), ...entries];
+      return applyPendingLogisticsWrites(entries, await getQueuedLogisticsWrites(siteId));
     } catch (error) {
       if (!siteId) throw error;
       const [cached, pending] = await Promise.all([
         getCachedLogisticsEntries(siteId), getQueuedLogisticsWrites(siteId),
       ]);
       if (!cached.length && !pending.length) throw error;
-      return [...pending.filter((entry) => !entry.path || entry.path === "/logistics").map(pendingLogisticsEntry), ...cached];
+      return applyPendingLogisticsWrites(cached, pending);
     }
   },
   async listPondBrut(siteId: string) {
@@ -985,8 +1271,7 @@ export const serviceApi = {
       if (result.entry) {
         for (const file of files) {
           try {
-            const document = await serviceApi.uploadDocument(String(payload.siteId || ""), file, "Flux logistique");
-            await serviceApi.linkLogisticsDocument(String(result.entry.id), document.id, String(payload.siteId || ""));
+            await serviceApi.addLogisticsAttachment(String(result.entry.id), String(payload.siteId || ""), file);
           } catch (error) {
             attachmentErrors.push(error instanceof Error ? error.message : `Impossible d’ajouter ${file.name}.`);
           }
@@ -1015,13 +1300,38 @@ export const serviceApi = {
       for (const item of queued) {
         if (item.status && item.status !== "pending") break;
         try {
+          if (item.path === "/documents") {
+            const queuedFile = item.files[0];
+            if (!queuedFile) throw new Error("Le fichier associé à cette saisie hors ligne est introuvable.");
+            const document = await uploadDocumentRequest(
+              item.siteId,
+              new File([queuedFile.blob], queuedFile.name, { type: queuedFile.type, lastModified: queuedFile.lastModified }),
+              String(item.payload.category || "Autre"),
+            );
+            const link = item.payload.link as { kind?: string; entity?: string; recordId?: string; entryId?: string } | undefined;
+            if (link?.kind === "logistics" && link.entryId) {
+              const path = `/logistics/${encodeURIComponent(link.entryId)}/attachments`;
+              const payload = { documentId: document.id, siteId: item.siteId, name: queuedFile.name, size: queuedFile.blob.size };
+              await updateQueuedLogisticsWrite(item.requestId, { path, method: "POST", payload, files: [] });
+              await request(path, { method: "POST", body: body(payload) });
+            } else if (link?.kind === "registry" && link.entity && link.recordId) {
+              const path = "/register-attachments";
+              const payload = { entity: link.entity, recordId: link.recordId, documentId: document.id, name: queuedFile.name, size: queuedFile.blob.size };
+              await updateQueuedLogisticsWrite(item.requestId, { path, method: "POST", payload, files: [] });
+              await request(path, { method: "POST", body: body(payload) });
+            }
+            await removeQueuedLogisticsWrite(item.requestId);
+            synced += 1;
+            continue;
+          }
           const replayBody = item.path === "/vigilance"
             ? item.payload.entries
             : { ...item.payload, clientRequestId: item.requestId };
-          const result = await request<{ entry?: any; id?: string; entries?: unknown[] }>(item.path || "/logistics", {
+          const result = await request<{ entry?: any; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
             method: item.method || "POST", body: body(replayBody),
           });
-          if (!result.entry?.id && !result.id && !(Array.isArray(result.entries) && result.entries.length)) {
+          if (!result.entry?.id && !result.id && !result.linked && !result.unlinked
+            && !(Array.isArray(result.entries) && result.entries.length)) {
             throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
           }
           for (const file of item.files) {
@@ -1084,26 +1394,43 @@ export const serviceApi = {
     if (!item) throw new Error("Cette saisie n’est plus dans la file hors ligne.");
     await removeQueuedLogisticsWrite(requestId);
   },
-  async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", data: unknown) {
-    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=${type}`, { method: "PUT", body: body(data) });
+  async updateTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", data: unknown, files: File[] = []) {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const path = `/logistics/${encodeURIComponent(id)}?type=${type}`;
+    try {
+      return await request<{ entry: any }>(path, { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, files, path, "PUT");
+      return { entry: { ...payload, id, pendingSync: true, pendingSyncStatus: "pending" as const } };
+    }
   },
-  async deleteTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", siteId: string) {
+  async deleteTruckLogistics(id: string, type: "DECHARGEMENT" | "CHARGEMENT" | "ORDURES", siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
     const params = new URLSearchParams({ type, siteId });
-    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+    const path = `/logistics/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId, type }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async listStarParticulierLoadings(siteId: string) {
     const query = `?siteId=${encodeURIComponent(siteId)}`;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const queued = await getQueuedLogisticsWrites(siteId);
+    let entries: StarParticulierLoading[] = [];
     try {
-      if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
-      const rows = await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`);
-      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
-      return [...pending.map((entry) => pendingLogisticsEntry(entry)), ...rows.entries]
-        .filter((entry) => entry.typeChargement === "STAR" || entry.typeChargement === "PARTICULIER");
+      entries = (await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`)).entries;
     } catch (error) {
-      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
-      if (!pending.length) throw error;
-      return pending.map((entry) => pendingLogisticsEntry(entry)) as StarParticulierLoading[];
+      if (!(error instanceof TypeError) || !queued.some((item) => item.path?.startsWith("/logistics/star-particulier"))) throw error;
     }
+    return applyPendingStarLoadings(entries, queued)
+      .filter((entry) => entry.typeChargement === "STAR" || entry.typeChargement === "PARTICULIER");
   },
   async createStarParticulierLoading(data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
     const requestId = crypto.randomUUID();
@@ -1117,41 +1444,135 @@ export const serviceApi = {
     }
   },
   async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
-    return (await request<{ entry: StarParticulierLoading }>(`/logistics/star-particulier/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    const path = `/logistics/star-particulier/${encodeURIComponent(id)}`;
+    try {
+      return (await request<{ entry: StarParticulierLoading }>(path, { method: "PUT", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], path, "PUT");
+      return { ...data, id, pendingSync: true } as StarParticulierLoading;
+    }
   },
-  async deleteStarParticulierLoading(id: string, siteId: string) {
+  async deleteStarParticulierLoading(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
     const params = new URLSearchParams({ siteId });
-    return request<{ id: string; deleted: boolean }>(`/logistics/star-particulier/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+    const path = `/logistics/star-particulier/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async createEmptyBottleDelivery(data: unknown) {
     const result = await serviceApi.createLogistics(data);
     return { entry: result.entry as EmptyBottleDelivery };
   },
   async updateWasteLogistics(id: string, data: unknown) {
-    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) });
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const path = `/logistics/${encodeURIComponent(id)}`;
+    try {
+      return await request<{ entry: any }>(path, { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PUT");
+      return { entry: { ...payload, id, pendingSync: true, pendingSyncStatus: "pending" as const } };
+    }
   },
   async updateMatierePremiereLogistics(id: string, data: unknown) {
-    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=MATIERE_PREMIERE`, { method: "PUT", body: body(data) });
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const path = `/logistics/${encodeURIComponent(id)}?type=MATIERE_PREMIERE`;
+    try {
+      return await request<{ entry: any }>(path, { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PUT");
+      return { entry: { ...payload, id, pendingSync: true, pendingSyncStatus: "pending" as const } };
+    }
   },
-  async deleteWasteLogistics(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteWasteLogistics(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    const path = `/logistics/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
-  async updateEmptyBottleDelivery(id: string, data: unknown) {
-    return request<{ entry: EmptyBottleDelivery }>(`/logistics/empty-bottles/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) });
+  async updateEmptyBottleDelivery(id: string, data: Omit<EmptyBottleDelivery, "id" | "siteName" | "type"> & {
+    siteId: string;
+    type?: string;
+    pondBrut?: { brut: number; tare: number; net: number; clientFournisseur: string; produit: string; remarque: string };
+    siteName?: string;
+    siteType?: string;
+  }) {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    const path = `/logistics/empty-bottles/${encodeURIComponent(id)}`;
+    try {
+      return await request<{ entry: EmptyBottleDelivery }>(path, { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PUT");
+      return { entry: { ...data, id, type: "BOUTEILLES_VIDES" as const, pendingSync: true, pendingSyncStatus: "pending" as const } };
+    }
   },
-  async deleteEmptyBottleDelivery(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/logistics/empty-bottles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteEmptyBottleDelivery(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    const path = `/logistics/empty-bottles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
-  async deleteMatierePremiereLogistics(id: string, siteId: string) {
+  async deleteMatierePremiereLogistics(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
     const params = new URLSearchParams({ siteId, type: "MATIERE_PREMIERE" });
-    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+    const path = `/logistics/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId, type: "MATIERE_PREMIERE" }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async updateDepotageFuelLogistics(id: string, data: unknown) {
-    return request<{ entry: any }>(`/logistics/${encodeURIComponent(id)}?type=DEPOTAGE_FUEL`, { method: "PUT", body: body(data) });
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const path = `/logistics/${encodeURIComponent(id)}?type=DEPOTAGE_FUEL`;
+    try {
+      return await request<{ entry: any }>(path, { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PUT");
+      return { entry: { ...payload, id, pendingSync: true, pendingSyncStatus: "pending" as const } };
+    }
   },
-  async deleteDepotageFuelLogistics(id: string, siteId: string) {
+  async deleteDepotageFuelLogistics(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
     const params = new URLSearchParams({ siteId, type: "DEPOTAGE_FUEL" });
-    return request<{ id: string; deleted: boolean }>(`/logistics/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
+    const path = `/logistics/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId, type: "DEPOTAGE_FUEL" }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async listRegisterEmployees(siteId: string) {
     return (await request<{ employees: RegisterEmployeeOption[] }>(`/employees/options?siteId=${encodeURIComponent(siteId)}`)).employees;

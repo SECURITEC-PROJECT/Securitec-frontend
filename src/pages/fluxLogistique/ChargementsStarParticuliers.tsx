@@ -116,22 +116,31 @@ export default function ChargementsStarParticuliers() {
   useEffect(() => {
     if (!siteId) return;
     let active = true;
-    serviceApi.listStarParticulierLoadings(siteId)
-      .then((rows) => {
-        if (active) {
-          setEntries(rows);
-          setEntriesSiteId(siteId);
-          setLoadError("");
-        }
-      })
-      .catch((reason) => {
-        if (active) {
-          setEntries([]);
-          setEntriesSiteId(siteId);
-          setLoadError(reason instanceof Error ? reason.message : "Chargement des chargements impossible.");
-        }
-      });
-    return () => { active = false; };
+    const refresh = () => {
+      void serviceApi.listStarParticulierLoadings(siteId)
+        .then((rows) => {
+          if (active) {
+            setEntries(rows);
+            setEntriesSiteId(siteId);
+            setLoadError("");
+          }
+        })
+        .catch((reason) => {
+          if (active) {
+            setEntries([]);
+            setEntriesSiteId(siteId);
+            setLoadError(reason instanceof Error ? reason.message : "Chargement des chargements impossible.");
+          }
+        });
+    };
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", refresh);
+    };
   }, [siteId]);
 
   useEffect(() => {
@@ -231,7 +240,9 @@ export default function ChargementsStarParticuliers() {
         : [entry, ...current]);
       setEntriesSiteId(siteId);
       resetForm();
-      toast.success(editing ? "Chargement modifié." : "Chargement enregistré.");
+      toast[entry.pendingSync ? "info" : "success"](entry.pendingSync
+        ? `${editing ? "Modification" : "Saisie"} enregistrée hors connexion. Elle sera synchronisée au retour du réseau.`
+        : editing ? "Chargement modifié." : "Chargement enregistré.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Enregistrement impossible.");
     } finally {
@@ -272,10 +283,12 @@ export default function ChargementsStarParticuliers() {
     if (!(await confirmDeletion(`Supprimer le chargement ${entry.typeChargement} du véhicule « ${entry.camion} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteStarParticulierLoading(entry.id, siteId);
+      const result = await serviceApi.deleteStarParticulierLoading(entry.id, siteId);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Chargement supprimé.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Chargement supprimé.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {

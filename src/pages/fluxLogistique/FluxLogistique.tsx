@@ -299,12 +299,11 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       let savedEntry: TruckEntry | undefined;
       let attachmentErrors: string[] = [];
       if (editingTruck) {
-        const { entry } = await serviceApi.updateTruckLogistics(editingTruck.id, entryType, payload);
+        const { entry } = await serviceApi.updateTruckLogistics(editingTruck.id, entryType, payload, attachmentFiles);
         savedEntry = { ...editingTruck, ...entry, siteName: selectedSiteName };
-        for (const file of attachmentFiles) {
+        for (const file of entry.pendingSync ? [] : attachmentFiles) {
           try {
-            const document = await serviceApi.uploadDocument(site.id, file, "Flux logistique");
-            await serviceApi.linkLogisticsDocument(editingTruck.id, document.id, site.id);
+            await serviceApi.addLogisticsAttachment(editingTruck.id, site.id, file);
             savedEntry!.attachmentCount = (savedEntry!.attachmentCount || 0) + 1;
           } catch (error) {
             attachmentErrors.push(error instanceof Error ? error.message : `Impossible d’ajouter ${file.name}.`);
@@ -360,13 +359,15 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     }
     if (!(await confirmDeletion(`Annuler l’enregistrement du véhicule « ${entry.immatriculationVehicule} » ? L’action restera visible dans l’historique.`))) return;
     try {
-      await serviceApi.deleteTruckLogistics(entry.id, entryType, site.id);
+      const result = await serviceApi.deleteTruckLogistics(entry.id, entryType, site.id);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
       if (editingTruck?.id === entry.id) {
         setEditingTruck(null);
         setTruckForm(emptyTruck());
       }
-      toast.success(`Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} annulé.`);
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Annulation enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : `Enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} annulé.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     }
