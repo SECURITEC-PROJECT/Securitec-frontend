@@ -2440,6 +2440,7 @@ export const serviceApi = {
           checkpoints: item.payload.checkpoints || [],
           anomalies: item.payload.finishAfterSync ? String(item.payload.observations || "") : null,
           siteId: item.siteId,
+          agent_id: item.userId,
           site_name: String(item.payload.siteName || ""),
           pendingSync: true,
           pendingFinish: Boolean(item.payload.finishAfterSync),
@@ -2484,6 +2485,7 @@ export const serviceApi = {
         ended_at: null,
         checkpoints: data.checkpoints || [],
         siteId,
+        agent_id: sessionStorage.getItem("securitec-session-user-id") || "",
         pendingSync: true,
         pendingSyncStatus: "pending",
       };

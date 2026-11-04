@@ -16,6 +16,7 @@ type Checkpoint = { name: string; at: string | null };
 type Patrol = {
   id: string; route_name: string; started_at: string; ended_at: string | null;
   checkpoints: Checkpoint[]; anomalies: string | null; siteId: string; site_name?: string;
+  agent_id?: string;
   pendingSync?: boolean; pendingFinish?: boolean;
   pendingSyncStatus?: "pending" | "conflict" | "rejected"; pendingSyncError?: string;
 };
@@ -29,6 +30,7 @@ export default function Rondes() {
   const [saving, setSaving] = useState(false);
   const selectedSiteId = siteId || sites[0]?.id || "";
   const site = sites.find((item) => item.id === selectedSiteId);
+  const currentUserId = sessionStorage.getItem("securitec-session-user-id") || "";
 
   useEffect(() => {
     let active = true;
@@ -52,7 +54,10 @@ export default function Rondes() {
     setPatrols(await serviceApi.listPatrols(selectedSiteId || undefined));
   };
 
-  const active = useMemo(() => patrols.find((patrol) => !patrol.ended_at), [patrols]);
+  const active = useMemo(
+    () => patrols.find((patrol) => !patrol.ended_at && patrol.agent_id === currentUserId),
+    [patrols, currentUserId],
+  );
 
   const start = async () => {
     if (!selectedSiteId) return;

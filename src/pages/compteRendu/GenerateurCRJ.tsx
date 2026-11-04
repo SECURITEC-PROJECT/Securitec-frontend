@@ -51,10 +51,9 @@ export interface CRJData {
   }>;
   violations: Array<{ heure: string; nomPrenom: string; obs: string; mesures: string }>;
   divers: Array<{ dateHeure: string; faits: string; mesures: string }>;
-  mouvementsAps: Array<{ heureEntree: string; mouvement: string; observation: string; heureSortie: string }>;
 }
 
-type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "violations" | "divers" | "vigilance" | "rondes" | "apsMovements";
+type PrintSectionId = "agents" | "keys" | "unloading" | "loading" | "stock" | "alcootest" | "anomalies" | "violations" | "divers" | "vigilance" | "rondes";
 
 const AGENT_POST_ROWS: Array<{ label: string; post: string | null }> = [
   { label: "Poste de garde I", post: "Poste de garde I" },
@@ -174,8 +173,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
     };
   }, [printSection]);
 
-  // Les rubriques suivantes sont numérotées à la suite (le stock extérieur ajoute une rubrique)
-  const decalage = data.siteType === 'Agence' ? 1 : 0;
   const agentsPostes = Array.isArray(data.agentsPostes) ? data.agentsPostes : [];
   const knownPosts = new Set(AGENT_POST_ROWS.map((row) => row.post).filter((post): post is string => post !== null).map(canonicalPost));
   const postRowCapacity = new Map<string, number>();
@@ -456,7 +453,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {data.siteType === 'Agence' && (
           <div data-print-section="stock" data-print-selected={printSection === "stock" ? "true" : undefined}>
             <PrintMeta data={data} />
-            <PrintSectionTitle id="stock" title="5 - INVENTAIRE STOCK EXTERIEUR MAGASIN" onPrint={handlePrintSection} />
+            <PrintSectionTitle id="stock" title="INVENTAIRE STOCK EXTERIEUR MAGASIN" onPrint={handlePrintSection} />
             <div className="grid grid-cols-2 gap-2 text-[10px]">
               <div className="border border-black p-2">
                 <p className="font-bold underline mb-1">VIDES (Palettes & Vrac) :</p>
@@ -475,7 +472,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* ALCOOTEST */}
         <div data-print-section="alcootest" data-print-selected={printSection === "alcootest" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="alcootest" title={`${5 + decalage} - ALCOOTEST`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="alcootest" title="5 - ALCOOTEST" onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -515,7 +512,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* POINTS DE VIGILANCE */}
         <div data-print-section="vigilance" data-print-selected={printSection === "vigilance" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="vigilance" title={`${7 + decalage} - POINTS DE VIGILANCE`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="vigilance" title="6 - POINTS DE VIGILANCE" onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -542,7 +539,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* ANOMALIES */}
         <div data-print-section="anomalies" data-print-selected={printSection === "anomalies" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="anomalies" title={`${8 + decalage} - ANOMALIES`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="anomalies" title="7 - ANOMALIES" onPrint={handlePrintSection} />
           <table className="w-full table-fixed border-collapse border border-black text-center text-[9px]">
             <thead>
               <tr className="bg-gray-100">
@@ -578,7 +575,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* VIOLATIONS DE PROCEDURE */}
         <div data-print-section="violations" data-print-selected={printSection === "violations" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="violations" title={`${9 + decalage} - VIOLATION DE PROCEDURE`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="violations" title="8 - VIOLATION DE PROCEDURE" onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -604,7 +601,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* DIVERS */}
         <div data-print-section="divers" data-print-selected={printSection === "divers" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="divers" title={`${10 + decalage} - DIVERS`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="divers" title="9 - DIVERS" onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -628,7 +625,7 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
         {/* RONDES */}
         <div data-print-section="rondes" data-print-selected={printSection === "rondes" ? "true" : undefined}>
           <PrintMeta data={data} />
-          <PrintSectionTitle id="rondes" title={`${11 + decalage} - RONDES`} onPrint={handlePrintSection} />
+          <PrintSectionTitle id="rondes" title="10 - RONDES" onPrint={handlePrintSection} />
           <table className="w-full border-collapse border border-black text-center text-[10px]">
             <thead>
               <tr className="bg-gray-100">
@@ -647,36 +644,6 @@ export default function GenerateurCRJ({ data }: { data: CRJData }) {
               )) : (
                 <tr>
                   <td colSpan={3} className="border border-black p-1 text-gray-500 italic">R.A.S</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* MOUVEMENTS APS */}
-        <div data-print-section="apsMovements" data-print-selected={printSection === "apsMovements" ? "true" : undefined}>
-          <PrintMeta data={data} />
-          <PrintSectionTitle id="apsMovements" title={`${12 + decalage} - MOUVEMENTS APS`} onPrint={handlePrintSection} />
-          <table className="w-full border-collapse border border-black text-center text-[10px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="w-[15%] border border-black p-1">HEURE D'ENTRÉE</th>
-                <th className="w-[40%] border border-black p-1">MOUVEMENT / ÉVÉNEMENT</th>
-                <th className="w-[30%] border border-black p-1">OBSERVATION</th>
-                <th className="w-[15%] border border-black p-1">HEURE DE SORTIE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.mouvementsAps.length > 0 ? data.mouvementsAps.map((movement, index) => (
-                <tr key={`${movement.heureEntree}-${index}`}>
-                  <td className="border border-black p-1 font-mono">{movement.heureEntree}</td>
-                  <td className="border border-black p-1 text-left">{movement.mouvement}</td>
-                  <td className="border border-black p-1 text-left">{movement.observation || "—"}</td>
-                  <td className="border border-black p-1 font-mono">{movement.heureSortie || "—"}</td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={4} className="border border-black p-1 text-gray-500 italic">Aucun mouvement APS enregistré ce jour.</td>
                 </tr>
               )}
             </tbody>
