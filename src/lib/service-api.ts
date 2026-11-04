@@ -2104,11 +2104,6 @@ export const serviceApi = {
     const queued = await getQueuedLogisticsWrites(siteId);
     let entries: StarParticulierLoading[] = [];
     try {
-      if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
-      const rows = await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`);
-      const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
-      return [...pending.map((entry) => pendingLogisticsEntry(entry)), ...rows.entries]
-        .filter((entry) => ["STAR", "PARTICULIER", "PALETTE"].includes(entry.typeChargement));
       entries = (await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`)).entries;
     } catch (error) {
       if (!(error instanceof TypeError) || !queued.some((item) => item.path?.startsWith("/logistics/star-particulier"))) throw error;
@@ -2127,8 +2122,6 @@ export const serviceApi = {
       return pendingLogisticsEntry({ requestId, siteId: data.siteId, payload, createdAt: new Date().toISOString() }) as StarParticulierLoading;
     }
   },
-  async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "siteName" | "siteId"> & { siteId: string }) {
-    return (await request<{ entry: StarParticulierLoading }>(`/logistics/star-particulier/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
     const requestId = crypto.randomUUID();
     const payload = { ...data, clientRequestId: requestId };
