@@ -16,6 +16,12 @@ import {
 const apiBaseUrl = API_URL;
 const tokenKey = "securitec-access-token";
 const logisticsSyncs = new Map<string, Promise<{ synced: number; pending: number }>>();
+const madagascarTime = () => new Intl.DateTimeFormat("fr-FR", {
+  timeZone: "Indian/Antananarivo",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+}).format(new Date());
 
 class ApiResponseError extends Error {
   readonly status: number;
@@ -213,6 +219,9 @@ export interface SubcontractorMaterialMovement {
   siteName?: string;
   createdAt?: string;
   annuleLe?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface StarMaterialItem {
@@ -233,6 +242,9 @@ export interface StarMaterialEntry {
   siteId: string;
   siteName: string;
   annuleLe?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface Provider {
@@ -805,6 +817,150 @@ function applyPendingVehicleWrites(
         ? item.status === "conflict" || item.status === "rejected"
           ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
           : { ...entry, annuleLe: item.createdAt, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError }
+        : entry);
+    }
+  }
+  return result;
+}
+
+function pendingSubcontractorMaterial(item: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>[number]): SubcontractorMaterialMovement {
+  return {
+    id: `pending-${item.requestId}`,
+    date: String(item.payload.date || item.createdAt.slice(0, 10)),
+    heureEntree: String(item.payload.heureEntree || item.createdAt.slice(11, 16)),
+    materiels: String(item.payload.materiels || ""),
+    nombre: Number(item.payload.nombre || 0),
+    entreprise: String(item.payload.providerName || ""),
+    providerId: String(item.payload.prestataireId || ""),
+    provider: String(item.payload.providerName || ""),
+    heureSortie: null,
+    siteId: item.siteId,
+    createdAt: item.createdAt,
+    pendingSync: true,
+    pendingSyncStatus: item.status || "pending",
+    pendingSyncError: item.lastError,
+  };
+}
+
+function applyPendingSubcontractorMaterials(
+  entries: SubcontractorMaterialMovement[],
+  queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
+): SubcontractorMaterialMovement[] {
+  let result = [...entries];
+  for (const item of queued.filter((entry) => entry.path === "/materiels-sous-traitant" || entry.path?.startsWith("/materiels-sous-traitant/"))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const path = item.path || "";
+    if (path === "/materiels-sous-traitant" && item.method === "POST") {
+      result.unshift(pendingSubcontractorMaterial(item));
+      continue;
+    }
+    const id = path.match(/^\/materiels-sous-traitant\/([^/?]+)/)?.[1];
+    if (!id) continue;
+    const entryId = decodeURIComponent(id);
+    if (item.method === "DELETE") {
+      if (item.status === "conflict" || item.status === "rejected") {
+        result = result.map((entry) => entry.id === entryId
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : entry);
+      } else {
+        result = result.map((entry) => entry.id === entryId
+          ? { ...entry, annuleLe: item.createdAt, pendingSync: true, pendingSyncStatus: "pending" }
+          : entry);
+      }
+    } else if (item.method === "PUT") {
+      result = result.map((entry) => entry.id === entryId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : {
+            ...entry,
+            date: String(item.payload.date || entry.date),
+            heureEntree: String(item.payload.heureEntree || entry.heureEntree),
+            materiels: String(item.payload.materiels || ""),
+            nombre: Number(item.payload.nombre || 0),
+            providerId: String(item.payload.prestataireId || entry.providerId),
+            provider: String(item.payload.providerName || entry.provider),
+            entreprise: String(item.payload.providerName || entry.entreprise),
+            pendingSync: true,
+            pendingSyncStatus: "pending",
+          }
+        : entry);
+    } else if (item.method === "PATCH" && path.endsWith("/sortie")) {
+      result = result.map((entry) => entry.id === entryId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : { ...entry, heureSortie: String(item.payload.heureSortie || item.createdAt.slice(11, 16)), pendingSync: true, pendingSyncStatus: "pending" }
+        : entry);
+    }
+  }
+  return result;
+}
+
+function pendingStarMaterial(item: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>[number]): StarMaterialEntry {
+  return {
+    id: `pending-${item.requestId}`,
+    date: String(item.payload.date || item.createdAt.slice(0, 10)),
+    heureEntree: String(item.payload.heureEntree || item.createdAt.slice(11, 16)),
+    prenom: String(item.payload.prenom || ""),
+    matricule: String(item.payload.matricule || ""),
+    providerId: String(item.payload.prestataireId || ""),
+    provider: String(item.payload.providerName || ""),
+    items: Array.isArray(item.payload.items) ? item.payload.items as StarMaterialItem[] : [],
+    heureSortie: null,
+    siteId: item.siteId,
+    siteName: String(item.payload.siteName || ""),
+    pendingSync: true,
+    pendingSyncStatus: item.status || "pending",
+    pendingSyncError: item.lastError,
+  };
+}
+
+function applyPendingStarMaterials(
+  entries: StarMaterialEntry[],
+  queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
+): StarMaterialEntry[] {
+  let result = [...entries];
+  for (const item of queued.filter((entry) => entry.path === "/materiels-star" || entry.path?.startsWith("/materiels-star/"))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const path = item.path || "";
+    if (path === "/materiels-star" && item.method === "POST") {
+      result.unshift(pendingStarMaterial(item));
+      continue;
+    }
+    const id = path.match(/^\/materiels-star\/([^/?]+)/)?.[1];
+    if (!id) continue;
+    const entryId = decodeURIComponent(id);
+    if (item.method === "DELETE") {
+      if (item.status === "conflict" || item.status === "rejected") {
+        result = result.map((entry) => entry.id === entryId
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : entry);
+      } else {
+        result = result.map((entry) => entry.id === entryId
+          ? { ...entry, annuleLe: item.createdAt, pendingSync: true, pendingSyncStatus: "pending" }
+          : entry);
+      }
+    } else if (item.method === "PUT") {
+      result = result.map((entry) => entry.id === entryId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : {
+            ...entry,
+            date: String(item.payload.date || entry.date),
+            heureEntree: String(item.payload.heureEntree || entry.heureEntree),
+            prenom: String(item.payload.prenom || entry.prenom),
+            matricule: String(item.payload.matricule || entry.matricule),
+            providerId: String(item.payload.prestataireId || entry.providerId),
+            provider: String(item.payload.providerName || entry.provider),
+            items: Array.isArray(item.payload.items) ? item.payload.items as StarMaterialItem[] : entry.items,
+            pendingSync: true,
+            pendingSyncStatus: "pending",
+          }
+        : entry);
+    } else if (item.method === "PATCH" && path.endsWith("/sortie")) {
+      result = result.map((entry) => entry.id === entryId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : { ...entry, heureSortie: String(item.payload.heureSortie || item.createdAt.slice(11, 16)), pendingSync: true, pendingSyncStatus: "pending" }
         : entry);
     }
   }
@@ -2240,36 +2396,161 @@ export const serviceApi = {
     }
   },
   async listSubcontractorMaterials(siteId: string) {
-    return (await request<{ entries: SubcontractorMaterialMovement[] }>(`/materiels-sous-traitant?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const path = `/materiels-sous-traitant?siteId=${encodeURIComponent(siteId)}`;
+    let entries: SubcontractorMaterialMovement[] = [];
+    try {
+      entries = (await request<{ entries: SubcontractorMaterialMovement[] }>(path)).entries;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !queued.some((item) => item.path?.startsWith("/materiels-sous-traitant"))) throw error;
+    }
+    return applyPendingSubcontractorMaterials(entries, queued);
   },
-  async createSubcontractorMaterial(data: { date: string; heureEntree: string; materiels: string; nombre: number; prestataireId: string; siteId: string }) {
-    return (await request<{ entry: SubcontractorMaterialMovement }>("/materiels-sous-traitant", { method: "POST", body: body(data) })).entry;
+  async createSubcontractorMaterial(data: { date: string; heureEntree: string; materiels: string; nombre: number; prestataireId: string; providerName?: string; siteId: string }) {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const serialized = body(payload);
+    try {
+      return (await request<{ entry: SubcontractorMaterialMovement }>("/materiels-sous-traitant", { method: "POST", body: serialized })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const queuedPayload = JSON.parse(serialized) as Record<string, unknown>;
+      await queueLogisticsWrite(requestId, data.siteId, queuedPayload, [], "/materiels-sous-traitant");
+      return pendingSubcontractorMaterial({
+        requestId, userId: sessionStorage.getItem("securitec-session-user-id") || "", siteId: data.siteId,
+        path: "/materiels-sous-traitant", method: "POST", payload: queuedPayload, files: [], createdAt: new Date().toISOString(),
+      });
+    }
   },
-  async updateSubcontractorMaterial(id: string, data: { date: string; heureEntree: string; materiels: string; nombre: number; prestataireId: string; siteId: string }) {
-    return (await request<{ entry: SubcontractorMaterialMovement }>(`/materiels-sous-traitant/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateSubcontractorMaterial(id: string, data: { date: string; heureEntree: string; materiels: string; nombre: number; prestataireId: string; providerName?: string; siteId: string }) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée avant de la modifier.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, updateRequestId: requestId };
+    const path = `/materiels-sous-traitant/${encodeURIComponent(id)}`;
+    const serialized = body(payload);
+    try {
+      return (await request<{ entry: SubcontractorMaterialMovement }>(path, { method: "PUT", body: serialized })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const queuedPayload = JSON.parse(serialized) as Record<string, unknown>;
+      await queueLogisticsWrite(requestId, data.siteId, queuedPayload, [], path, "PUT");
+      return {
+        id, date: data.date, heureEntree: data.heureEntree, materiels: data.materiels, nombre: data.nombre,
+        entreprise: data.providerName || "", providerId: data.prestataireId, provider: data.providerName || "",
+        heureSortie: null, siteId: data.siteId, pendingSync: true, pendingSyncStatus: "pending" as const,
+      };
+    }
   },
-  async deleteSubcontractorMaterial(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/materiels-sous-traitant/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteSubcontractorMaterial(id: string, siteId: string): Promise<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    const path = `/materiels-sous-traitant/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: false, cancelled: true, annuleLe: new Date().toISOString(), pendingSync: true };
+    }
   },
-  async exitSubcontractorMaterial(id: string, siteId: string) {
+  async exitSubcontractorMaterial(id: string, siteId: string): Promise<Pick<SubcontractorMaterialMovement, "id" | "heureSortie"> & { pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée avant d’enregistrer sa sortie.");
+    const requestId = crypto.randomUUID();
+    const heureSortie = madagascarTime();
     const params = new URLSearchParams({ siteId });
-    return (await request<{ entry: Pick<SubcontractorMaterialMovement, "id" | "heureSortie"> }>(`/materiels-sous-traitant/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
+    const path = `/materiels-sous-traitant/${encodeURIComponent(id)}/sortie?${params}`;
+    const payload = { clientRequestId: requestId, heureSortie };
+    try {
+      return (await request<{ entry: Pick<SubcontractorMaterialMovement, "id" | "heureSortie"> }>(path, { method: "PATCH", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, heureSortie, pendingSync: true };
+    }
   },
   async listStarMaterials(siteId: string) {
-    return (await request<{ entries: StarMaterialEntry[] }>(`/materiels-star?siteId=${encodeURIComponent(siteId)}`)).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const path = `/materiels-star?siteId=${encodeURIComponent(siteId)}`;
+    let entries: StarMaterialEntry[] = [];
+    try {
+      entries = (await request<{ entries: StarMaterialEntry[] }>(path)).entries;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !queued.some((item) => item.path?.startsWith("/materiels-star"))) throw error;
+    }
+    return applyPendingStarMaterials(entries, queued);
   },
-  async createStarMaterial(data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; prestataireId: string; siteId: string }) {
-    return (await request<{ entry: StarMaterialEntry }>("/materiels-star", { method: "POST", body: body(data) })).entry;
+  async createStarMaterial(data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; prestataireId: string; providerName?: string; siteName?: string; siteId: string }) {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const serialized = body(payload);
+    try {
+      return (await request<{ entry: StarMaterialEntry }>("/materiels-star", { method: "POST", body: serialized })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const queuedPayload = JSON.parse(serialized) as Record<string, unknown>;
+      await queueLogisticsWrite(requestId, data.siteId, queuedPayload, [], "/materiels-star");
+      return pendingStarMaterial({
+        requestId, userId: sessionStorage.getItem("securitec-session-user-id") || "", siteId: data.siteId,
+        path: "/materiels-star", method: "POST", payload: queuedPayload, files: [], createdAt: new Date().toISOString(),
+      });
+    }
   },
-  async updateStarMaterial(id: string, data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; prestataireId: string; siteId: string }) {
-    return (await request<{ entry: StarMaterialEntry }>(`/materiels-star/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
+  async updateStarMaterial(id: string, data: { date: string; heureEntree: string; prenom: string; matricule: string; items: StarMaterialItem[]; prestataireId: string; providerName?: string; siteName?: string; siteId: string }) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée avant de la modifier.");
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, updateRequestId: requestId };
+    const path = `/materiels-star/${encodeURIComponent(id)}`;
+    const serialized = body(payload);
+    try {
+      return (await request<{ entry: StarMaterialEntry }>(path, { method: "PUT", body: serialized })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const queuedPayload = JSON.parse(serialized) as Record<string, unknown>;
+      await queueLogisticsWrite(requestId, data.siteId, queuedPayload, [], path, "PUT");
+      return {
+        id, date: data.date, heureEntree: data.heureEntree, prenom: data.prenom, matricule: data.matricule,
+        providerId: data.prestataireId, provider: data.providerName || "", items: data.items,
+        heureSortie: null, siteId: data.siteId, siteName: data.siteName || "",
+        pendingSync: true, pendingSyncStatus: "pending" as const,
+      };
+    }
   },
-  async deleteStarMaterial(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(`/materiels-star/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
+  async deleteStarMaterial(id: string, siteId: string): Promise<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const params = new URLSearchParams({ siteId, clientRequestId: requestId });
+    const path = `/materiels-star/${encodeURIComponent(id)}?${params}`;
+    try {
+      return await request<{ id: string; deleted: boolean; cancelled?: boolean; annuleLe?: string }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: false, cancelled: true, annuleLe: new Date().toISOString(), pendingSync: true };
+    }
   },
-  async exitStarMaterial(id: string, siteId: string) {
+  async exitStarMaterial(id: string, siteId: string): Promise<Pick<StarMaterialEntry, "id" | "heureSortie"> & { pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée avant d’enregistrer sa sortie.");
+    const requestId = crypto.randomUUID();
+    const heureSortie = madagascarTime();
     const params = new URLSearchParams({ siteId });
-    return (await request<{ entry: Pick<StarMaterialEntry, "id" | "heureSortie"> }>(`/materiels-star/${encodeURIComponent(id)}/sortie?${params}`, { method: "PATCH", body: "{}" })).entry;
+    const path = `/materiels-star/${encodeURIComponent(id)}/sortie?${params}`;
+    const payload = { clientRequestId: requestId, heureSortie };
+    try {
+      return (await request<{ entry: Pick<StarMaterialEntry, "id" | "heureSortie"> }>(path, { method: "PATCH", body: body(payload) })).entry;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, heureSortie, pendingSync: true };
+    }
   },
   async listVisitorQuestionnaires(siteId: string) {
     if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
