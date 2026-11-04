@@ -15,6 +15,7 @@ interface DepotageEntry {
   id: string;
   date: string;
   heurePointe?: string | null;
+  immatriculationVehicule?: string | null;
   titre?: string | null;
   plomb?: string | null;
   designation?: string | null;
@@ -38,6 +39,7 @@ export default function DepotageFuelGasoil() {
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
   const [date, setDate] = useState(today);
   const [heurePointe, setHeurePointe] = useState(nowTime);
+  const [immatriculationVehicule, setImmatriculationVehicule] = useState("");
   const [titre, setTitre] = useState("");
   const [plomb, setPlomb] = useState("");
   const [designation, setDesignation] = useState("");
@@ -90,7 +92,7 @@ export default function DepotageFuelGasoil() {
   const filteredEntries = entries.filter((entry) => {
     const matchesDate = !searchDate || entry.date?.slice(0, 10) === searchDate;
     const matchesText = [
-      entry.date, entry.heurePointe, entry.titre, entry.plomb, entry.designation, entry.cree,
+      entry.date, entry.heurePointe, entry.immatriculationVehicule, entry.titre, entry.plomb, entry.designation, entry.cree,
       entry.chauffeur, entry.magasinier,
     ].some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
     return matchesDate && matchesText;
@@ -99,6 +101,7 @@ export default function DepotageFuelGasoil() {
   const clearForm = () => {
     setDate(today());
     setHeurePointe(nowTime());
+    setImmatriculationVehicule("");
     setTitre("");
     setPlomb("");
     setDesignation("");
@@ -113,6 +116,7 @@ export default function DepotageFuelGasoil() {
     setEditingId(entry.id);
     setDate(entry.date.slice(0, 10));
     setHeurePointe(entry.heurePointe || "");
+    setImmatriculationVehicule(entry.immatriculationVehicule || "");
     setTitre(entry.titre || "");
     setPlomb(entry.plomb || "");
     setDesignation(entry.designation || "");
@@ -131,6 +135,7 @@ export default function DepotageFuelGasoil() {
         type: "DEPOTAGE_FUEL",
         date,
         heurePointe,
+        immatriculationVehicule: immatriculationVehicule.trim(),
         titre: titre.trim(),
         plomb: plomb.trim(),
         designation: designation.trim(),
@@ -195,6 +200,7 @@ export default function DepotageFuelGasoil() {
     printRecord("Dépotage fuel et gasoil", entry.siteName || selectedSiteName, [
       ["Date", displayDate],
       ["Heure de pointe", entry.heurePointe || "—"],
+      ["Immatriculation du camion", entry.immatriculationVehicule || "—"],
       ["Titre", entry.titre || "—"],
       ["Plomb", entry.plomb || "—"],
       ["Désignation", entry.designation || "—"],
@@ -231,6 +237,10 @@ export default function DepotageFuelGasoil() {
               <div className="space-y-2">
                 <Label htmlFor="fuel-time">Heure de pointe</Label>
                 <Input id="fuel-time" type="time" required value={heurePointe} onChange={(event) => setHeurePointe(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fuel-immatriculation">Immatriculation du camion</Label>
+                <Input id="fuel-immatriculation" required maxLength={100} value={immatriculationVehicule} onChange={(event) => setImmatriculationVehicule(event.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fuel-titre">Titre</Label>
@@ -305,7 +315,7 @@ export default function DepotageFuelGasoil() {
             <Input
               aria-label="Rechercher dans le registre"
               className="border-0 px-0 shadow-none focus-visible:ring-0"
-              placeholder="Rechercher titre, plomb, désignation…"
+              placeholder="Rechercher immatriculation, titre, plomb…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -334,6 +344,7 @@ export default function DepotageFuelGasoil() {
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Heure</th>
+                  <th className="px-4 py-3">Immatriculation camion</th>
                   <th className="px-4 py-3">Titre</th>
                   <th className="px-4 py-3">Plomb</th>
                   <th className="px-4 py-3">Désignation</th>
@@ -346,15 +357,16 @@ export default function DepotageFuelGasoil() {
               </thead>
               <tbody className="divide-y">
                 {loadingEntries ? (
-                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={10}>Chargement du registre…</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={11}>Chargement du registre…</td></tr>
                 ) : filteredEntries.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={10}>
+                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={11}>
                     {entries.length === 0 ? "Aucun dépotage enregistré." : "Aucun résultat pour ces critères."}
                   </td></tr>
                 ) : filteredEntries.map((entry) => (
                   <tr key={entry.id} className="hover:bg-muted/30">
                     <td className="whitespace-nowrap px-4 py-3">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td className="px-4 py-3">{entry.heurePointe || "—"}</td>
+                    <td className="px-4 py-3">{entry.immatriculationVehicule || "—"}</td>
                     <td className="px-4 py-3">{entry.titre || "—"}</td>
                     <td className="whitespace-pre-line px-4 py-3">{entry.plomb || "—"}</td>
                     <td className="px-4 py-3">{entry.designation || "—"}</td>
@@ -388,7 +400,7 @@ export default function DepotageFuelGasoil() {
             <table>
               <thead>
                 <tr>
-                  {["Date", "Heure", "Titre", "Plomb", "Désignation", "Quantité", "Créé par", "Chauffeur", "Magasinier"].map((heading) => (
+                  {["Date", "Heure", "Immatriculation camion", "Titre", "Plomb", "Désignation", "Quantité", "Créé par", "Chauffeur", "Magasinier"].map((heading) => (
                     <th key={heading}>{heading}</th>
                   ))}
                 </tr>
@@ -398,6 +410,7 @@ export default function DepotageFuelGasoil() {
                   <tr key={entry.id}>
                     <td>{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td>{entry.heurePointe || "—"}</td>
+                    <td>{entry.immatriculationVehicule || "—"}</td>
                     <td>{entry.titre || "—"}</td>
                     <td>{entry.plomb || "—"}</td>
                     <td>{entry.designation || "—"}</td>

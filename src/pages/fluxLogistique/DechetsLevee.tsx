@@ -25,9 +25,11 @@ interface DechetsEntry {
   heureSortie?: string | null;
   numeroPesage?: string | null;
   facture?: string | null;
+  plomb?: string | null;
   poids?: string | number | null;
   destinataire?: string | null;
   vehicule?: string | null;
+  transporteur?: string | null;
   siteName?: string | null;
 }
 
@@ -50,9 +52,11 @@ export default function DechetsLevee() {
   const [heureSortie, setHeureSortie] = useState(nowTime);
   const [numeroPesage, setNumeroPesage] = useState("");
   const [facture, setFacture] = useState("");
+  const [plomb, setPlomb] = useState("");
   const [poids, setPoids] = useState("");
   const [destinataire, setDestinataire] = useState("");
   const [vehicule, setVehicule] = useState("");
+  const [transporteur, setTransporteur] = useState("");
   const [vehicleSuggestionsOpen, setVehicleSuggestionsOpen] = useState(false);
   const [activeVehicleSuggestion, setActiveVehicleSuggestion] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -141,7 +145,7 @@ export default function DechetsLevee() {
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
   const filteredEntries = entries.filter((entry) =>
-    [formatWasteType(entry.typeDechet), entry.numeroPesage, entry.facture, entry.vehicule, entry.destinataire, entry.siteName]
+    [formatWasteType(entry.typeDechet), entry.numeroPesage, entry.facture, entry.plomb, entry.vehicule, entry.transporteur, entry.destinataire, entry.siteName]
       .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
   );
 
@@ -151,9 +155,11 @@ export default function DechetsLevee() {
     setHeureSortie(nowTime());
     setNumeroPesage("");
     setFacture("");
+    setPlomb("");
     setPoids("");
     setDestinataire("");
     setVehicule("");
+    setTransporteur("");
     setVehicleSuggestionsOpen(false);
     setEditingId(null);
   };
@@ -165,9 +171,11 @@ export default function DechetsLevee() {
     setHeureSortie(entry.heureSortie || "");
     setNumeroPesage(entry.numeroPesage || "");
     setFacture(entry.facture || "");
+    setPlomb(entry.plomb || "");
     setPoids(entry.poids == null ? "" : String(entry.poids));
     setDestinataire(entry.destinataire || "");
     setVehicule(entry.vehicule || "");
+    setTransporteur(entry.transporteur || "");
     setVehicleSuggestionsOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -194,9 +202,11 @@ export default function DechetsLevee() {
         heureSortie,
         numeroPesage: numeroPesage.trim(),
         facture: facture.trim(),
+        plomb: plomb.trim(),
         poids: Number(poids),
         destinataire: destinataire.trim(),
         vehicule: vehicule.trim(),
+        transporteur: transporteur.trim(),
         siteId: site?.id,
         siteName: selectedSiteName,
         siteType: selectedSiteType,
@@ -255,8 +265,10 @@ export default function DechetsLevee() {
       ["Type", formatWasteType(entry.typeDechet)],
       ["Heure de sortie", entry.heureSortie || "—"],
       ["Véhicule", entry.vehicule || "—"],
+      ["Transporteur", entry.transporteur || "—"],
       ["N° de pesage", entry.numeroPesage || "—"],
       ["Facture", entry.facture || "—"],
+      ["Plomb", entry.plomb || "—"],
       ["Poids", entry.poids == null ? "—" : `${Number(entry.poids).toLocaleString("fr-FR")} kg`],
       ["Destinataire / client", entry.destinataire || "—"],
     ] as const;
@@ -408,6 +420,10 @@ export default function DechetsLevee() {
                       : <p className="text-xs text-muted-foreground">Sélectionnez un véhicule enregistré dans le module Chauffeurs.</p>}
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="dechets-transporteur">Transporteur</Label>
+                <Input id="dechets-transporteur" required maxLength={255} autoComplete="organization" placeholder="Saisir le transporteur" value={transporteur} onChange={(event) => setTransporteur(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="dechets-destinataire">Destinataire / client</Label>
                 <Input id="dechets-destinataire" required maxLength={255} value={destinataire} onChange={(event) => setDestinataire(event.target.value)} />
               </div>
@@ -430,8 +446,12 @@ export default function DechetsLevee() {
                 <Input id="dechets-pesage" required maxLength={100} value={numeroPesage} onChange={(event) => setNumeroPesage(event.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="dechets-facture">Numéro de facture</Label>
-                <Input id="dechets-facture" required maxLength={160} value={facture} onChange={(event) => setFacture(event.target.value)} />
+                <Label htmlFor="dechets-facture">Numéro de facture (facultatif, saisie manuelle)</Label>
+                <Input id="dechets-facture" maxLength={160} placeholder="Saisir le numéro si disponible" value={facture} onChange={(event) => setFacture(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dechets-plomb">Plomb (facultatif, saisie manuelle)</Label>
+                <Input id="dechets-plomb" maxLength={100} placeholder="Saisir le numéro de plomb si disponible" value={plomb} onChange={(event) => setPlomb(event.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dechets-poids">Poids (kg)</Label>
@@ -461,7 +481,7 @@ export default function DechetsLevee() {
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre des sorties de drèche et de levure"
-              placeholder="Rechercher véhicule, pesage, facture, client…"
+              placeholder="Rechercher véhicule, transporteur, pesage, facture…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="h-full min-h-11 pl-9"
@@ -487,8 +507,10 @@ export default function DechetsLevee() {
                     <th className="px-3 py-3">Désignation</th>
                     <th className="px-3 py-3">Heure de sortie</th>
                     <th className="px-3 py-3">Véhicule</th>
+                    <th className="px-3 py-3">Transporteur</th>
                     <th className="px-3 py-3">N° pesage</th>
                     <th className="px-3 py-3">Facture</th>
+                    <th className="px-3 py-3">Plomb</th>
                     <th className="px-3 py-3 text-right">Poids (kg)</th>
                     <th className="px-4 py-3">Destinataire / client</th>
                     <th className="px-4 py-3 text-right">Actions</th>
@@ -501,8 +523,10 @@ export default function DechetsLevee() {
                       <td className="px-3 py-3">{formatWasteType(entry.typeDechet)}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                       <td className="px-3 py-3 font-medium">{entry.vehicule || "—"}</td>
+                      <td className="px-3 py-3">{entry.transporteur || "—"}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.numeroPesage || "—"}</td>
                       <td className="px-3 py-3">{entry.facture || "—"}</td>
+                      <td className="px-3 py-3">{entry.plomb || "—"}</td>
                       <td className="px-3 py-3 text-right font-mono">{entry.poids == null ? "—" : Number(entry.poids).toLocaleString("fr-FR")}</td>
                       <td className="px-4 py-3">{entry.destinataire || "—"}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
@@ -530,7 +554,7 @@ export default function DechetsLevee() {
                   ))}
                   {filteredEntries.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      <td colSpan={11} className="px-4 py-10 text-center text-sm text-muted-foreground">
                         Aucun résultat pour cette recherche.
                       </td>
                     </tr>
@@ -547,7 +571,7 @@ export default function DechetsLevee() {
             <table>
               <thead>
                 <tr>
-                  {["Date", "Désignation", "Heure de sortie", "Véhicule", "N° pesage", "Facture", "Poids (kg)", "Destinataire / client"].map((heading) => (
+                  {["Date", "Désignation", "Heure de sortie", "Véhicule", "Transporteur", "N° pesage", "Facture", "Plomb", "Poids (kg)", "Destinataire / client"].map((heading) => (
                     <th key={heading}>{heading}</th>
                   ))}
                 </tr>
@@ -559,8 +583,10 @@ export default function DechetsLevee() {
                     <td>{formatWasteType(entry.typeDechet)}</td>
                     <td>{entry.heureSortie || "—"}</td>
                     <td>{entry.vehicule || "—"}</td>
+                    <td>{entry.transporteur || "—"}</td>
                     <td>{entry.numeroPesage || "—"}</td>
                     <td>{entry.facture || "—"}</td>
+                    <td>{entry.plomb || "—"}</td>
                     <td>{entry.poids == null ? "—" : Number(entry.poids).toLocaleString("fr-FR")}</td>
                     <td>{entry.destinataire || "—"}</td>
                   </tr>

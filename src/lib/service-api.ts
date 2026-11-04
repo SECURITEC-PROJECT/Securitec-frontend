@@ -389,10 +389,11 @@ export interface StarParticulierLoading {
   id: string;
   date: string;
   type: "CHARGEMENT";
-  typeChargement: "STAR" | "PARTICULIER";
+  typeChargement: "STAR" | "PARTICULIER" | "PALETTE";
   heureDebut: string | null;
   heureSortie: string;
   camion: string;
+  immatriculationVehicule: string;
   proprietaire: string;
   nomChauffeur: string;
   designation: string;
@@ -1098,14 +1099,14 @@ export const serviceApi = {
       const rows = await request<{ entries: StarParticulierLoading[] }>(`/logistics/star-particulier${query}`);
       const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
       return [...pending.map((entry) => pendingLogisticsEntry(entry)), ...rows.entries]
-        .filter((entry) => entry.typeChargement === "STAR" || entry.typeChargement === "PARTICULIER");
+        .filter((entry) => ["STAR", "PARTICULIER", "PALETTE"].includes(entry.typeChargement));
     } catch (error) {
       const pending = (await getQueuedLogisticsWrites(siteId)).filter((entry) => entry.path === "/logistics/star-particulier");
       if (!pending.length) throw error;
       return pending.map((entry) => pendingLogisticsEntry(entry)) as StarParticulierLoading[];
     }
   },
-  async createStarParticulierLoading(data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
+  async createStarParticulierLoading(data: Omit<StarParticulierLoading, "id" | "type" | "siteName" | "siteId"> & { siteId: string }) {
     const requestId = crypto.randomUUID();
     const payload = { ...data, clientRequestId: requestId };
     try {
@@ -1116,7 +1117,7 @@ export const serviceApi = {
       return pendingLogisticsEntry({ requestId, siteId: data.siteId, payload, createdAt: new Date().toISOString() }) as StarParticulierLoading;
     }
   },
-  async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "date" | "siteName" | "siteId"> & { siteId: string }) {
+  async updateStarParticulierLoading(id: string, data: Omit<StarParticulierLoading, "id" | "type" | "siteName" | "siteId"> & { siteId: string }) {
     return (await request<{ entry: StarParticulierLoading }>(`/logistics/star-particulier/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).entry;
   },
   async deleteStarParticulierLoading(id: string, siteId: string) {

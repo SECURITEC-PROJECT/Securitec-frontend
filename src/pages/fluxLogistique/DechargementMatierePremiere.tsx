@@ -61,6 +61,7 @@ interface MatierePremiereEntry {
   id: string;
   date: string;
   heurePointe?: string | null;
+  immatriculationVehicule?: string | null;
   vehicule?: string | null;
   designation?: string | null;
   quantite?: number | string | null;
@@ -79,6 +80,7 @@ export default function DechargementMatierePremiere() {
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
   const [date, setDate] = useState(today);
   const [heurePointe, setHeurePointe] = useState(nowTime);
+  const [immatriculationVehicule, setImmatriculationVehicule] = useState("");
   const [vehicule, setVehicule] = useState("");
   const [designation, setDesignation] = useState("");
   const [quantite, setQuantite] = useState("");
@@ -129,7 +131,7 @@ export default function DechargementMatierePremiere() {
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
   const filteredEntries = entries.filter((entry) => {
     const matchesDate = !searchDate || entry.date?.slice(0, 10) === searchDate;
-    const matchesText = [entry.date, entry.heurePointe, entry.vehicule, entry.designation, entry.document, entry.provenance]
+    const matchesText = [entry.date, entry.heurePointe, entry.immatriculationVehicule, entry.vehicule, entry.designation, entry.document, entry.provenance]
       .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
     return matchesDate && matchesText;
   });
@@ -137,6 +139,7 @@ export default function DechargementMatierePremiere() {
   const clearForm = () => {
     setDate(today());
     setHeurePointe(nowTime());
+    setImmatriculationVehicule("");
     setVehicule("");
     setDesignation("");
     setQuantite("");
@@ -149,6 +152,7 @@ export default function DechargementMatierePremiere() {
     setEditingId(entry.id);
     setDate(entry.date.slice(0, 10));
     setHeurePointe(entry.heurePointe || "");
+    setImmatriculationVehicule(entry.immatriculationVehicule || "");
     setVehicule(entry.vehicule || "");
     setDesignation(entry.designation || "");
     setQuantite(entry.quantite == null ? "" : String(entry.quantite));
@@ -165,6 +169,7 @@ export default function DechargementMatierePremiere() {
         type: "MATIERE_PREMIERE",
         date,
         heurePointe,
+        immatriculationVehicule: immatriculationVehicule.trim(),
         vehicule: vehicule.trim(),
         designation: designation.trim(),
         quantite: Number(quantite),
@@ -227,6 +232,7 @@ export default function DechargementMatierePremiere() {
     printRecord("Déchargement matière première", selectedSiteName, [
       ["Date", displayDate],
       ["Heure de pointe", entry.heurePointe || "—"],
+      ["Immatriculation du camion", entry.immatriculationVehicule || "—"],
       ["Véhicule", entry.vehicule || "—"],
       ["Désignation", entry.designation || "—"],
       ["Quantité", entry.quantite == null ? "—" : String(entry.quantite)],
@@ -255,6 +261,7 @@ export default function DechargementMatierePremiere() {
                 setSiteName(name);
                 setSiteType(type);
                 setVehicule("");
+                setImmatriculationVehicule("");
               }}
             />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -269,6 +276,10 @@ export default function DechargementMatierePremiere() {
               <div className="space-y-2">
                 <Label htmlFor="matiere-vehicule">Véhicule</Label>
                 <Input id="matiere-vehicule" required maxLength={160} autoComplete="off" placeholder="Saisir le véhicule" value={vehicule} onChange={(event) => setVehicule(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="matiere-immatriculation">Immatriculation du camion</Label>
+                <Input id="matiere-immatriculation" required maxLength={100} autoComplete="off" placeholder="Saisir l’immatriculation" value={immatriculationVehicule} onChange={(event) => setImmatriculationVehicule(event.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiere-designation">Désignation</Label>
@@ -325,7 +336,7 @@ export default function DechargementMatierePremiere() {
             <Input
               aria-label="Rechercher dans le registre"
               className="border-0 px-0 shadow-none focus-visible:ring-0"
-              placeholder="Rechercher véhicule, désignation, document…"
+              placeholder="Rechercher immatriculation, véhicule, désignation…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -349,12 +360,13 @@ export default function DechargementMatierePremiere() {
           <p className="raw-material-screen text-sm text-destructive">{entriesError}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border raw-material-screen">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[1000px] text-left text-sm">
               <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Heure de pointe</th>
                   <th className="px-4 py-3">Véhicule</th>
+                  <th className="px-4 py-3">Immatriculation camion</th>
                   <th className="px-4 py-3">Désignation</th>
                   <th className="px-4 py-3">Quantité</th>
                   <th className="px-4 py-3">Bon de livraison / facture</th>
@@ -364,9 +376,9 @@ export default function DechargementMatierePremiere() {
               </thead>
               <tbody className="divide-y">
                 {loadingEntries ? (
-                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={8}>Chargement du registre…</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={9}>Chargement du registre…</td></tr>
                 ) : filteredEntries.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={8}>
+                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={9}>
                     {entries.length === 0 ? "Aucun déchargement enregistré." : "Aucun résultat pour ces critères."}
                   </td></tr>
                 ) : filteredEntries.map((entry) => (
@@ -374,6 +386,7 @@ export default function DechargementMatierePremiere() {
                     <td className="whitespace-nowrap px-4 py-3">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td className="px-4 py-3">{entry.heurePointe || "—"}</td>
                     <td className="px-4 py-3">{entry.vehicule || "—"}</td>
+                    <td className="px-4 py-3">{entry.immatriculationVehicule || "—"}</td>
                     <td className="px-4 py-3">{entry.designation || "—"}</td>
                     <td className="px-4 py-3">{entry.quantite ?? "—"}</td>
                     <td className="px-4 py-3">{entry.document || "—"}</td>
@@ -427,7 +440,7 @@ export default function DechargementMatierePremiere() {
             <table>
               <thead>
                 <tr>
-                  {["Date", "Heure de pointe", "Véhicule", "Désignation", "Quantité", "Bon de livraison / facture", "Provenance"].map((heading) => (
+                  {["Date", "Heure de pointe", "Véhicule", "Immatriculation camion", "Désignation", "Quantité", "Bon de livraison / facture", "Provenance"].map((heading) => (
                     <th key={heading}>{heading}</th>
                   ))}
                 </tr>
@@ -438,6 +451,7 @@ export default function DechargementMatierePremiere() {
                     <td>{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td>{entry.heurePointe || "—"}</td>
                     <td>{entry.vehicule || "—"}</td>
+                    <td>{entry.immatriculationVehicule || "—"}</td>
                     <td>{entry.designation || "—"}</td>
                     <td>{entry.quantite ?? "—"}</td>
                     <td>{entry.document || "—"}</td>
