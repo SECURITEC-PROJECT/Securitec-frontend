@@ -12,7 +12,7 @@ export default function PresentsSurSite({
   onExit,
 }: {
   visitors: VisitorRecord[];
-  onExit: (id: string) => Promise<void>;
+  onExit: (id: string) => Promise<boolean>;
 }) {
   const [exitingId, setExitingId] = useState<string | null>(null);
   // Anomalies : visiteurs encore présents après la fermeture du site
@@ -28,9 +28,12 @@ export default function PresentsSurSite({
   const handleExit = async (id: string | number, name: string) => {
     setExitingId(String(id));
     try {
-      await onExit(String(id));
-      rafraichirAnomalies();
-      toast.success(`Sortie enregistrée pour ${name}`);
+      const pendingSync = await onExit(String(id));
+      if (pendingSync) toast.info(`Sortie enregistrée sur cet appareil, en attente de synchronisation pour ${name}.`);
+      else {
+        rafraichirAnomalies();
+        toast.success(`Sortie enregistrée pour ${name}`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sortie impossible");
     } finally {
@@ -85,11 +88,12 @@ export default function PresentsSurSite({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={exitingId === String(v.id)}
+                  disabled={exitingId === String(v.id) || v.id.startsWith("pending-")}
+                  title={v.id.startsWith("pending-") ? "Synchronisez l’entrée avant d’enregistrer la sortie" : undefined}
                   onClick={() => void handleExit(v.id, v.full_name)}
                 >
                   <LogOut className="mr-1 h-4 w-4" />
-                  {exitingId === String(v.id) ? "Enregistrement…" : "Sortir"}
+                  {exitingId === String(v.id) ? "Enregistrement…" : v.id.startsWith("pending-") ? "À synchroniser" : "Sortir"}
                 </Button>
               </li>
             ))}

@@ -6,8 +6,7 @@ import { toast } from "sonner";
 import FormPriseDePoste, { type ShiftFormData } from "./FormPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
-import { API_URL, authHeaders } from "@/lib/api";
-import { requestCachedApi } from "@/lib/service-api";
+import { serviceApi } from "@/lib/service-api";
 
 const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
 
@@ -21,33 +20,51 @@ export default function PriseDePoste() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-    requestCachedApi<Shift[]>("/shifts", { signal: controller.signal })
+    let active = true;
+    const refresh = () => serviceApi.listShifts(undefined, { includePending: true })
       .then((data) => {
-        if (Array.isArray(data)) setShifts(data);
+        if (!active) return;
+        setShifts(data);
+        for (const shift of data) {
+          if (!shift.ended_at || shift.pendingSync || !shift.siteId || !shift.posteId) continue;
+          for (const key of [`securitec-active-shift:${shift.siteId}:${shift.posteId}`, `securitec-logistics-shift:${shift.siteId}:${shift.posteId}`]) {
+            if (localStorage.getItem(key) === (shift.serviceId || shift.id)) localStorage.removeItem(key);
+          }
+        }
+        const activeShift = data.find((shift) => !shift.ended_at && !shift.pendingSync && shift.siteId && shift.posteId && shift.serviceId);
+        const serviceId = activeShift?.serviceId;
+        if (activeShift && serviceId && !localStorage.getItem(`securitec-active-shift:${activeShift.siteId}:${activeShift.posteId}`)) {
+          localStorage.setItem(`securitec-active-post:${activeShift.siteId}`, activeShift.posteId);
+          localStorage.setItem(`securitec-active-shift:${activeShift.siteId}:${activeShift.posteId}`, serviceId);
+          localStorage.setItem(`securitec-logistics-shift:${activeShift.siteId}:${activeShift.posteId}`, serviceId);
+        }
       })
       .catch((err) => {
-        if (err.name !== "AbortError") {
+        if (active) {
           console.error("Erreur chargement shifts:", err);
           toast.error(err instanceof Error ? err.message : "Chargement des prises de poste impossible.");
         }
       });
-    return () => controller.abort();
+    const refreshQueued = () => { void refresh(); };
+    void refresh();
+    window.addEventListener("securitec-offline-queue-changed", refreshQueued);
+    window.addEventListener("online", refreshQueued);
+    return () => {
+      active = false;
+      window.removeEventListener("securitec-offline-queue-changed", refreshQueued);
+      window.removeEventListener("online", refreshQueued);
+    };
   }, []);
 
   const handleStart = async (data: ShiftFormData): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_URL}/shifts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(data),
-      });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Erreur serveur");
-
+      const result = await serviceApi.startShift({ ...data });
       const newShifts: Shift[] = Array.isArray(result.shifts) ? result.shifts : [result];
       setShifts((prev) => [...newShifts, ...prev]);
+      if (result.pendingSync) {
+        toast.info("Prise de poste enregistrée sur cet appareil. Elle sera confirmée après synchronisation.");
+        return true;
+      }
       if (result.serviceId) {
         localStorage.setItem(`securitec-active-post:${data.siteId}`, data.posteId);
         localStorage.setItem(`securitec-active-shift:${data.siteId}:${data.posteId}`, result.serviceId);
@@ -104,33 +121,37 @@ export default function PriseDePoste() {
   const handleChoiceTerminateOnly = async () => {
     if (!selectedShiftForEnd) return;
     const serviceId = selectedShiftForEnd.serviceId || selectedShiftForEnd.id;
-    const ended = await executeEndService(serviceId);
+    const ended = await executeEndService(serviceId, selectedShiftForEnd);
     if (!ended) return;
     setIsModalOpen(false);
     setSelectedShiftForEnd(null);
-    toast.success(`Service terminé pour ${selectedShiftForEnd.nom} ${selectedShiftForEnd.prenom}`);
+    if (ended === "pending") {
+      toast.info("Clôture enregistrée sur cet appareil. Le service reste en attente de confirmation serveur.");
+    } else {
+      toast.success(`Service terminé pour ${selectedShiftForEnd.nom} ${selectedShiftForEnd.prenom}`);
+    }
   };
 
-  const executeEndService = async (serviceId: string): Promise<boolean> => {
+  const executeEndService = async (serviceId: string, shift: Shift): Promise<"confirmed" | "pending" | false> => {
     try {
-      const response = await fetch(`${API_URL}/shifts/${serviceId}/end`, {
-        method: "PUT",
-        headers: authHeaders(),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Erreur lors de la clôture du service.");
+      const result = await serviceApi.endShift(serviceId, shift.siteId || "");
       setShifts((prev) => prev.map((shift) => (
         shift.serviceId === serviceId || shift.id === serviceId
-          ? { ...shift, ended_at: result.ended_at }
+          ? {
+            ...shift,
+            ended_at: result.pendingSync ? null : result.ended_at,
+            pendingSync: Boolean(result.pendingSync),
+            pendingSyncAction: result.pendingSync ? "end" : undefined,
+            pendingSyncStatus: result.pendingSync ? "pending" : undefined,
+          }
           : shift
       )));
-      const endedService = shifts.find((shift) => shift.serviceId === serviceId || shift.id === serviceId);
-      if (endedService?.siteId && endedService.posteId) {
-        for (const key of [`securitec-active-shift:${endedService.siteId}:${endedService.posteId}`, `securitec-logistics-shift:${endedService.siteId}:${endedService.posteId}`]) {
+      if (!result.pendingSync && shift.siteId && shift.posteId) {
+        for (const key of [`securitec-active-shift:${shift.siteId}:${shift.posteId}`, `securitec-logistics-shift:${shift.siteId}:${shift.posteId}`]) {
           if (localStorage.getItem(key) === serviceId) localStorage.removeItem(key);
         }
       }
-      return true;
+      return result.pendingSync ? "pending" : "confirmed";
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur lors de la clôture du service.");
       return false;

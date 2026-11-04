@@ -26,6 +26,10 @@ interface PendingOfflineWrite {
 }
 
 const offlineWriteLabel = (path = "") => {
+  if (path === "/documents") return "Document à importer";
+  if (path === "/register-attachments") return "Association d’un document";
+  if (path.startsWith("/register-attachments/")) return "Retrait d’une pièce jointe";
+  if (path.endsWith("/attachments")) return "Pièce jointe logistique";
   if (path.includes("/access-control/alcohol-checks")) return "Contrôle alcool";
   if (path.startsWith("/courrier-movements/") && path.endsWith("/exit")) return "Sortie courrier";
   if (path.startsWith("/courrier-movements/")) return "Mouvement courrier";

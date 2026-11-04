@@ -12,6 +12,9 @@ export interface CameraItem {
   siteId: string;
   siteName: string;
   accessLevel: number;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 interface GrilleCamerasProps {
@@ -40,6 +43,9 @@ export default function GrilleCameras({ count, cameras, onSelect, onEdit, onStat
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{camera.name}</p>
           <p className="truncate text-xs text-muted-foreground">{camera.siteName} · {camera.zoneName}</p>
+          {camera.pendingSync && <p className={`text-xs ${camera.pendingSyncStatus === "rejected" || camera.pendingSyncStatus === "conflict" ? "text-destructive" : "text-amber-700"}`}>
+            {camera.pendingSyncStatus === "conflict" ? "Conflit de synchronisation" : camera.pendingSyncStatus === "rejected" ? "Synchronisation rejetée" : "En attente de synchronisation"}
+          </p>}
         </div>
         <Button variant="ghost" size="icon" aria-label={`Modifier ${camera.name}`} title="Modifier" onClick={() => onEdit(camera)}><Pencil /></Button>
         <Button variant="ghost" size="icon" aria-label={camera.status === "MAINTENANCE" ? `Remettre ${camera.name} en service` : `Mettre ${camera.name} en maintenance`} title={camera.status === "MAINTENANCE" ? "Remettre en service" : "Maintenance"} onClick={() => onStatus(camera)}><Power /></Button>

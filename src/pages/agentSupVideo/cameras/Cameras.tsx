@@ -63,11 +63,14 @@ export default function Cameras() {
     if (!siteId) { toast.error("Sélectionnez d’abord un site."); return; }
     setSaving(true);
     try {
-      const payload = { ...form, siteId, accessLevel: Number(form.accessLevel) };
-      if (editing) await serviceApi.updateCamera(editing.id, payload);
-      else await serviceApi.createCamera(payload);
+      const payload = { ...form, siteId, siteName: sites.find((site) => site.id === siteId)?.name || "", accessLevel: Number(form.accessLevel) };
+      const saved = editing
+        ? await serviceApi.updateCamera(editing.id, payload)
+        : await serviceApi.createCamera(payload);
       setDialogOpen(false);
-      toast.success(editing ? "Caméra mise à jour." : "Caméra ajoutée.");
+      toast[saved.pendingSync ? "info" : "success"](saved.pendingSync
+        ? "Caméra enregistrée sur cet appareil, en attente de synchronisation. Le flux peut rester inaccessible hors connexion."
+        : editing ? "Caméra mise à jour." : "Caméra ajoutée.");
       await refresh();
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Enregistrement de la caméra impossible."); }
     finally { setSaving(false); }
@@ -75,19 +78,23 @@ export default function Cameras() {
   const toggleStatus = async (camera: CameraItem) => {
     const status = camera.status === "MAINTENANCE" ? "EN_SERVICE" : "MAINTENANCE";
     try {
-      await serviceApi.setCameraStatus(camera.id, status);
+      const result = await serviceApi.setCameraStatus(camera.id, status, siteId);
       setCameras((current) => current.map((item) => item.id === camera.id ? { ...item, status } : item));
       setSelected((current) => current?.id === camera.id ? { ...current, status } : current);
-      toast.success(status === "MAINTENANCE" ? "Caméra mise en maintenance." : "Caméra remise en service.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "État enregistré sur cet appareil, en attente de synchronisation."
+        : status === "MAINTENANCE" ? "Caméra mise en maintenance." : "Caméra remise en service.");
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Modification de l’état impossible."); }
   };
   const deleteCamera = async (camera: CameraItem) => {
     if (!(await confirmDeletion(`Supprimer la caméra « ${camera.name} » ?`))) return;
     try {
-      await serviceApi.deleteCamera(camera.id);
+      const result = await serviceApi.deleteCamera(camera.id, siteId);
       setCameras((current) => current.filter((item) => item.id !== camera.id));
       setSelected((current) => current?.id === camera.id ? null : current);
-      toast.success("Caméra supprimée.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée sur cet appareil, en attente de synchronisation."
+        : "Caméra supprimée.");
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Suppression de la caméra impossible."); }
   };
 

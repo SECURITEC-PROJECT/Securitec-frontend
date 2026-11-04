@@ -21,4 +21,7 @@ export interface VisitorRecord {
   exited_at?: string | Date | null;
   site_name?: string;
   site_banned?: boolean;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }

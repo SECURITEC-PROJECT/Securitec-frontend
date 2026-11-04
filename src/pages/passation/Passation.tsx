@@ -6,8 +6,7 @@ import FormPassation, { type PassationFormData } from "./FormPassation";
 import ListPassation from "./ListPassation";
 import { useSites } from "@/hooks/useSites";
 
-import { API_URL, authHeaders } from "@/lib/api";
-import { requestCachedApi } from "@/lib/service-api";
+import { serviceApi } from "@/lib/service-api";
 
 type Handover = {
   id: string;
@@ -29,6 +28,9 @@ type Handover = {
   poste_nom?: string;
   site_id?: string | null;
   created_at: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 };
 
 export default function Passation() {
@@ -49,88 +51,75 @@ export default function Passation() {
   const [handovers, setHandovers] = useState<Handover[]>([]);
 
   useEffect(() => {
-    requestCachedApi<Handover[]>("/handovers")
-      .then((data) => {
-        if (Array.isArray(data)) setHandovers(data);
-      })
-      .catch((err) => console.error("Erreur chargement passations:", err));
-  }, []);
+    let active = true;
+    const refresh = () => serviceApi.listHandovers(siteId)
+      .then((data) => { if (active) setHandovers(data); })
+      .catch((err) => { if (active) console.error("Erreur chargement passations:", err); });
+    const refreshQueued = () => { void refresh(); };
+    void refresh();
+    window.addEventListener("securitec-offline-queue-changed", refreshQueued);
+    window.addEventListener("online", refreshQueued);
+    return () => {
+      active = false;
+      window.removeEventListener("securitec-offline-queue-changed", refreshQueued);
+      window.removeEventListener("online", refreshQueued);
+    };
+  }, [siteId]);
 
   const handleSave = async (f: PassationFormData) => {
     try {
-      // 1. Enregistrer la passation
-      const responseHandover = await fetch(`${API_URL}/handovers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          agent_sortant_nom: agentSortantNom,
-          agent_sortant_prenom: agentSortantPrenom,
-          agent_sortant_matricule: routeState?.agentSortant?.matricule,
-          agent_sortant_id: agentSortantId,
-          incoming_matricule: f.incoming_matricule,
-          incoming_nom: f.incoming_nom,
-          incoming_prenom: f.incoming_prenom,
-          equipment: f.equipment,
-          ongoing_events: f.ongoing_events,
-          instructions: f.instructions,
-          inventaire: f.inventaire,
-          documents_retenus: f.documents_retenus,
-          confirmation_sortant: f.confirmation_sortant,
-          confirmation_entrant: f.confirmation_entrant,
-        }),
-      });
+      if (!routeState?.agentSortant?.serviceId || !routeState.agentSortant.siteId || !routeState.agentSortant.posteId || !routeState.agentSortant.shiftType) {
+        throw new Error("Le service sortant doit être chargé depuis l’historique avant de valider la passation.");
+      }
+      const shiftData = {
+        matricule: f.incoming_matricule,
+        nom: f.incoming_nom,
+        prenom: f.incoming_prenom,
+        prestataire: f.incoming_prestataire || "",
+        site_de_travail: routeState?.agentSortant?.site || "",
+        siteId,
+        posteId: routeState?.agentSortant?.posteId || "",
+        posteNom: routeState?.agentSortant?.posteNom || "",
+        shiftType: routeState?.agentSortant?.shiftType || "",
+        chefMatricule: f.incoming_matricule,
+        agentMatricules: [],
+        notes: "Prise de poste automatique suite à la passation.",
+      };
+      const result = await serviceApi.completeHandover({
+        agent_sortant_nom: agentSortantNom,
+        agent_sortant_prenom: agentSortantPrenom,
+        agent_sortant_matricule: routeState?.agentSortant?.matricule,
+        agent_sortant_id: routeState?.agentSortant?.serviceId || agentSortantId,
+        incoming_matricule: f.incoming_matricule,
+        incoming_nom: f.incoming_nom,
+        incoming_prenom: f.incoming_prenom,
+        equipment: f.equipment,
+        ongoing_events: f.ongoing_events,
+        instructions: f.instructions,
+        inventaire: f.inventaire,
+        documents_retenus: f.documents_retenus,
+        confirmation_sortant: f.confirmation_sortant,
+        confirmation_entrant: f.confirmation_entrant,
+        shiftData,
+      }, siteId);
 
-      if (!responseHandover.ok) {
-        const errData = await responseHandover.json().catch(() => ({}));
-        throw new Error(errData.error || "Erreur enregistrement passation");
+      if (result.pendingSync) {
+        setHandovers(await serviceApi.listHandovers(siteId));
+        toast.info("Passation enregistrée sur cet appareil. La clôture et l’ouverture des services seront validées ensemble après synchronisation.");
+        navigate("/dashboard/prise-de-poste");
+        return;
       }
 
-      const newHandover = await responseHandover.json();
-      setHandovers((prev) => [newHandover, ...prev]);
-
-      // 2. METTRE L'AGENT MONTANT EN SERVICE (même site que l'agent sortant)
-      const responseShift = await fetch(`${API_URL}/shifts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          matricule: f.incoming_matricule,
-          nom: f.incoming_nom,
-          prenom: f.incoming_prenom,
-          prestataire: f.incoming_prestataire || "SECURITEC",
-          site_de_travail: routeState?.agentSortant?.site || "Usine Antsirabe",
-          siteId: routeState?.agentSortant?.siteId,
-          posteId: routeState?.agentSortant?.posteId,
-          shiftType: routeState?.agentSortant?.shiftType,
-          chefMatricule: f.incoming_matricule,
-          agentMatricules: [],
-          replacesServiceId: routeState?.agentSortant?.serviceId,
-          notes: "Prise de poste automatique suite à la passation.",
-        }),
-      });
-
-      if (!responseShift.ok) {
-        const errData = await responseShift.json().catch(() => ({}));
-        // L'agent sortant reste en service tant que l'agent montant n'est pas enregistré
-        throw new Error(errData.error || "Impossible de mettre l'agent montant en service.");
-      }
-      const incomingShift = await responseShift.json();
+      const newHandover = result.handover;
+      if (newHandover) setHandovers((prev) => [newHandover, ...prev]);
+      const incomingShift = result.shift;
+      if (!incomingShift?.serviceId) throw new Error("Le serveur n’a pas confirmé le service entrant.");
       if (incomingShift.serviceId && routeState?.agentSortant?.siteId) {
         const posteId = incomingShift.posteId || routeState.agentSortant.posteId;
         if (posteId) {
           localStorage.setItem(`securitec-active-post:${routeState.agentSortant.siteId}`, posteId);
           localStorage.setItem(`securitec-active-shift:${routeState.agentSortant.siteId}:${posteId}`, incomingShift.serviceId);
           localStorage.setItem(`securitec-logistics-shift:${routeState.agentSortant.siteId}:${posteId}`, incomingShift.serviceId);
-        }
-      }
-
-      // 3. CLÔTURER LE SERVICE DE L'AGENT SORTANT (si son ID a été transmis)
-      if (agentSortantId) {
-        const responseEnd = await fetch(`${API_URL}/shifts/${agentSortantId}/end`, {
-          method: "PUT",
-          headers: authHeaders(),
-        });
-        if (!responseEnd.ok) {
-          toast.warning("L'agent montant est en service, mais le service de l'agent sortant n'a pas pu être clôturé.");
         }
       }
 

@@ -1,7 +1,6 @@
 import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { API_URL, authHeaders } from "@/lib/api";
-import type { AccessBadge } from "./ControleAcces";
+import { serviceApi, type AccessBadge } from "@/lib/service-api";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,13 +20,7 @@ export default function BadgeListPanel({ rows, onChanged }: Props) {
     }
     setUpdatingId(badge.id);
     try {
-      const response = await fetch(`${API_URL}/badges/${badge.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ active: !badge.active }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Modification du badge impossible.");
+      await serviceApi.updateBadgeStatus(badge.id, !badge.active);
       await onChanged();
       toast.success(badge.active ? "Badge révoqué." : "Badge réactivé.");
     } catch (error) {

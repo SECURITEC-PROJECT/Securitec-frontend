@@ -31,6 +31,7 @@ interface DechetsEntry {
   vehicule?: string | null;
   transporteur?: string | null;
   siteName?: string | null;
+  pendingSync?: boolean;
 }
 
 const formatDate = (value: string) => {
@@ -82,22 +83,31 @@ export default function DechetsLevee() {
     let active = true;
     const requestedSiteId = site?.id;
     if (!requestedSiteId) return () => { active = false; };
-    serviceApi.listLogistics(requestedSiteId)
-      .then((result) => {
-        if (active) setRegistry({
-          siteId: requestedSiteId,
-          entries: result.filter((entry) => entry.type === "DECHETS"),
-          error: "",
+    const refresh = () => {
+      void serviceApi.listLogistics(requestedSiteId)
+        .then((result) => {
+          if (active) setRegistry({
+            siteId: requestedSiteId,
+            entries: result.filter((entry) => entry.type === "DECHETS"),
+            error: "",
+          });
+        })
+        .catch((error) => {
+          if (active) setRegistry({
+            siteId: requestedSiteId,
+            entries: [],
+            error: error instanceof Error ? error.message : "Chargement du registre impossible.",
+          });
         });
-      })
-      .catch((error) => {
-        if (active) setRegistry({
-          siteId: requestedSiteId,
-          entries: [],
-          error: error instanceof Error ? error.message : "Chargement du registre impossible.",
-        });
-      });
-    return () => { active = false; };
+    };
+    refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", refresh);
+    };
   }, [site?.id]);
 
   useEffect(() => {
@@ -217,7 +227,9 @@ export default function DechetsLevee() {
           ...current,
           entries: current.entries.map((item) => item.id === editingId ? { ...item, ...entry } : item),
         }));
-        toast.success("Sortie de drèche modifiée.");
+        toast[entry.pendingSync ? "info" : "success"](entry.pendingSync
+          ? "Modification enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+          : "Sortie de drèche modifiée.");
       } else {
         const result = await serviceApi.createLogistics({ ...payload, type: "DECHETS" });
         if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
@@ -239,10 +251,12 @@ export default function DechetsLevee() {
     if (!(await confirmDeletion(`Supprimer la sortie de drèche « ${entry.numeroPesage || entry.id} » ? Cette action est définitive.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteWasteLogistics(entry.id, selectedSiteId);
+      const result = await serviceApi.deleteWasteLogistics(entry.id, selectedSiteId);
       setRegistry((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== entry.id) }));
       if (editingId === entry.id) clearForm();
-      toast.success("Sortie supprimée du registre.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Sortie supprimée du registre.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
