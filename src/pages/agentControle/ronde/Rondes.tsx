@@ -16,6 +16,8 @@ type Checkpoint = { name: string; at: string | null };
 type Patrol = {
   id: string; route_name: string; started_at: string; ended_at: string | null;
   checkpoints: Checkpoint[]; anomalies: string | null; siteId: string; site_name?: string;
+  pendingSync?: boolean; pendingFinish?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected"; pendingSyncError?: string;
 };
 
 export default function Rondes() {
@@ -30,12 +32,20 @@ export default function Rondes() {
 
   useEffect(() => {
     let active = true;
-    serviceApi.listPatrols(selectedSiteId || undefined)
+    const refresh = () => serviceApi.listPatrols(selectedSiteId || undefined)
       .then((entries) => { if (active) setPatrols(entries); })
       .catch((error) => {
         if (active) toast.error(error instanceof Error ? error.message : "Chargement des rondes impossible.");
       });
-    return () => { active = false; };
+    const refreshQueued = () => { void refresh(); };
+    void refresh();
+    window.addEventListener("securitec-offline-queue-changed", refreshQueued);
+    window.addEventListener("online", refreshQueued);
+    return () => {
+      active = false;
+      window.removeEventListener("securitec-offline-queue-changed", refreshQueued);
+      window.removeEventListener("online", refreshQueued);
+    };
   }, [selectedSiteId]);
 
   const refreshPatrols = async () => {
@@ -48,12 +58,14 @@ export default function Rondes() {
     if (!selectedSiteId) return;
     setSaving(true);
     try {
-      await serviceApi.startPatrol({
+      const patrol = await serviceApi.startPatrol({
         routeName: route,
         siteId: selectedSiteId,
+        siteName: site?.name || "",
         checkpoints: POINTS.map((name) => ({ name, at: null })),
       });
-      toast.success("Ronde démarrée.");
+      if (patrol.pendingSync) toast.info("Démarrage enregistré sur cet appareil. La ronde sera confirmée après synchronisation.");
+      else toast.success("Ronde démarrée.");
       await refreshPatrols();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible de démarrer la ronde.");
@@ -67,7 +79,8 @@ export default function Rondes() {
       : point);
     setSaving(true);
     try {
-      await serviceApi.updatePatrol(active.id, checkpoints);
+      const result = await serviceApi.updatePatrol(active.id, checkpoints, selectedSiteId);
+      if (result.pendingSync) toast.info("Point de contrôle enregistré sur cet appareil, en attente de synchronisation.");
       await refreshPatrols();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Mise à jour du point impossible.");
@@ -78,9 +91,10 @@ export default function Rondes() {
     if (!active) return;
     setSaving(true);
     try {
-      await serviceApi.finishPatrol(active.id, observations);
+      const result = await serviceApi.finishPatrol(active.id, observations, selectedSiteId);
       setObservations("");
-      toast.success("Ronde clôturée.");
+      if (result.pendingSync) toast.info("Clôture enregistrée sur cet appareil. La ronde reste active sur le serveur jusqu’à sa confirmation.");
+      else toast.success("Ronde clôturée.");
       await refreshPatrols();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Clôture de la ronde impossible.");

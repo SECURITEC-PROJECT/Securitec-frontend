@@ -1969,12 +1969,18 @@ export const serviceApi = {
           const replayBody = item.path === "/vigilance"
             ? item.payload.entries
             : { ...item.payload, clientRequestId: item.requestId };
-          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; handover?: { id?: string }; shift?: { serviceId?: string }; serviceId?: string; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
+          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; handover?: { id?: string }; shift?: { serviceId?: string }; patrol?: { id?: string }; serviceId?: string; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
             method: item.method || "POST", body: body(replayBody),
           });
-          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.handover?.id && !result.shift?.serviceId && !result.serviceId && !result.id && !result.linked && !result.unlinked
+          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.handover?.id && !result.shift?.serviceId && !result.patrol?.id && !result.serviceId && !result.id && !result.linked && !result.unlinked
             && !(Array.isArray(result.entries) && result.entries.length)) {
             throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
+          }
+          if (item.path === "/patrols" && item.payload.finishAfterSync && result.patrol?.id) {
+            await request<{ patrol: { id: string } }>(`/patrols/${encodeURIComponent(result.patrol.id)}/finish`, {
+              method: "POST",
+              body: body({ observations: item.payload.observations || "" }),
+            });
           }
           for (const file of item.files) {
             const upload = await serviceApi.uploadDocument(
@@ -2382,10 +2388,115 @@ export const serviceApi = {
     const params = new URLSearchParams({ siteId });
     return request<{ id: string; deleted: boolean }>(`/logistics/incidents/${encodeURIComponent(id)}?${params}`, { method: "DELETE" });
   },
-  async listPatrols(siteId?: string) { return (await request<{ patrols: any[] }>(`/patrols${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).patrols; },
-  async startPatrol(data: unknown) { return (await request<{ patrol: any }>("/patrols", { method: "POST", body: body(data) })).patrol; },
-  async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[]) { return (await request<{ patrol: any }>(`/patrols/${id}`, { method: "PATCH", body: body({ checkpoints }) })).patrol; },
-  async finishPatrol(id: string, observations: string) { return (await request<{ patrol: any }>(`/patrols/${id}/finish`, { method: "POST", body: body({ observations }) })).patrol; },
+  async listPatrols(siteId?: string) {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: any[] = [];
+    try {
+      entries = (await request<{ patrols: any[] }>(`/patrols${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).patrols;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+    }
+    const queued = (await getQueuedLogisticsWrites(siteId)).filter((item) => item.path?.startsWith("/patrols"));
+    const pending = new Map<string, any>();
+    for (const item of queued) {
+      if (item.path === "/patrols") {
+        const patrolId = `pending-${item.requestId}`;
+        pending.set(patrolId, {
+          id: patrolId,
+          route_name: item.payload.routeName,
+          started_at: item.createdAt,
+          ended_at: null,
+          checkpoints: item.payload.checkpoints || [],
+          anomalies: item.payload.finishAfterSync ? String(item.payload.observations || "") : null,
+          siteId: item.siteId,
+          site_name: String(item.payload.siteName || ""),
+          pendingSync: true,
+          pendingFinish: Boolean(item.payload.finishAfterSync),
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        });
+        continue;
+      }
+      const path = item.path || "";
+      const id = decodeURIComponent(path.split("/")[2] || "");
+      const patrol = entries.find((entry) => entry.id === id);
+      if (patrol) {
+        const next = pending.get(id) || { ...patrol };
+        if (path.endsWith("/finish")) {
+          next.pendingFinish = true;
+          next.pendingFinishObservations = item.payload.observations || "";
+        } else if (item.method === "PATCH" && Array.isArray(item.payload.checkpoints)) {
+          next.checkpoints = item.payload.checkpoints;
+        }
+        next.pendingSync = true;
+        next.pendingSyncStatus = item.status || "pending";
+        next.pendingSyncError = item.lastError;
+        pending.set(id, next);
+      }
+    }
+    return [...pending.values(), ...entries.filter((entry) => !pending.has(entry.id))];
+  },
+  async startPatrol(data: Record<string, unknown>) {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    try {
+      return (await request<{ patrol: any }>("/patrols", { method: "POST", body: body(payload) })).patrol;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      const siteId = String(data.siteId || "");
+      if (!siteId) throw new Error("Un site est nécessaire pour enregistrer une ronde hors connexion.");
+      await queueLogisticsWrite(requestId, siteId, payload, [], "/patrols", "POST");
+      return {
+        id: `pending-${requestId}`,
+        route_name: data.routeName,
+        started_at: new Date().toISOString(),
+        ended_at: null,
+        checkpoints: data.checkpoints || [],
+        siteId,
+        pendingSync: true,
+        pendingSyncStatus: "pending",
+      };
+    }
+  },
+  async updatePatrol(id: string, checkpoints: { name: string; at: string | null }[], siteId: string) {
+    if (id.startsWith("pending-")) {
+      const requestId = id.slice("pending-".length);
+      const queued = (await getQueuedLogisticsWrites(siteId)).find((item) => item.requestId === requestId && item.path === "/patrols");
+      if (!queued) throw new Error("La ronde en attente est introuvable sur cet appareil.");
+      const payload = { ...queued.payload, checkpoints };
+      await updateQueuedLogisticsWrite(requestId, { payload });
+      return { id, checkpoints, pendingSync: true };
+    }
+    const path = `/patrols/${encodeURIComponent(id)}`;
+    const requestId = crypto.randomUUID();
+    try {
+      return (await request<{ patrol: any }>(path, { method: "PATCH", body: body({ checkpoints }) })).patrol;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { checkpoints }, [], path, "PATCH");
+      return { id, checkpoints, pendingSync: true, pendingSyncStatus: "pending" };
+    }
+  },
+  async finishPatrol(id: string, observations: string, siteId: string) {
+    if (id.startsWith("pending-")) {
+      const requestId = id.slice("pending-".length);
+      const queued = (await getQueuedLogisticsWrites(siteId)).find((item) => item.requestId === requestId && item.path === "/patrols");
+      if (!queued) throw new Error("La ronde en attente est introuvable sur cet appareil.");
+      await updateQueuedLogisticsWrite(requestId, {
+        payload: { ...queued.payload, finishAfterSync: true, observations },
+      });
+      return { id, ended_at: null, anomalies: observations, pendingSync: true, pendingFinish: true };
+    }
+    const path = `/patrols/${encodeURIComponent(id)}/finish`;
+    const requestId = crypto.randomUUID();
+    try {
+      return (await request<{ patrol: any }>(path, { method: "POST", body: body({ observations }) })).patrol;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { observations }, [], path, "POST");
+      return { id, ended_at: null, pendingSync: true, pendingFinish: true, pendingSyncStatus: "pending" };
+    }
+  },
   async listVigilance(siteId?: string) {
     if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
     const entries = (await request<{ entries: VigilanceEntry[] }>(`/vigilance${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).entries;
