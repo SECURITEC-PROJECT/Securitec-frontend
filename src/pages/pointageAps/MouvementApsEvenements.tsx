@@ -101,7 +101,9 @@ export default function MouvementApsEvenements({
           : [saved, ...(current[registryKey] ?? [])],
       }));
       resetForm();
-      toast.success(wasEditing ? "Mouvement modifié." : "Mouvement enregistré.");
+      toast[saved.pendingSync ? "info" : "success"](saved.pendingSync
+        ? "Mouvement enregistré sur cet appareil, en attente de synchronisation."
+        : wasEditing ? "Mouvement modifié." : "Mouvement enregistré.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -122,13 +124,15 @@ export default function MouvementApsEvenements({
   const deleteEntry = async (entry: ApsMovementEvent) => {
     if (!(await confirmDeletion("Supprimer définitivement ce mouvement ?"))) return;
     try {
-      await serviceApi.deleteApsMovementEvent(entry.id, activeSiteId);
+      const result = await serviceApi.deleteApsMovementEvent(entry.id, activeSiteId);
       setEntriesByKey((current) => ({
         ...current,
         [registryKey]: (current[registryKey] ?? []).filter((item) => item.id !== entry.id),
       }));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Mouvement supprimé.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée sur cet appareil, en attente de synchronisation."
+        : "Mouvement supprimé.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     }
@@ -235,7 +239,7 @@ export default function MouvementApsEvenements({
           <tbody>
             {filteredEntries.map((entry) => (
               <tr key={entry.id} className="hover:bg-muted/30">
-                <td className="border-b px-4 py-3">{entry.heureEntree}</td>
+                <td className="border-b px-4 py-3">{entry.heureEntree}{entry.pendingSync && <span className={`mt-1 block text-xs ${entry.pendingSyncStatus === "pending" ? "text-amber-700" : "text-destructive"}`} title={entry.pendingSyncError}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                 <td className="border-b px-4 py-3 whitespace-pre-wrap">{entry.mouvement}</td>
                 <td className="border-b px-4 py-3 whitespace-pre-wrap">{entry.observation || "—"}</td>
                 <td className="border-b px-4 py-3">{entry.heureSortie || "—"}</td>

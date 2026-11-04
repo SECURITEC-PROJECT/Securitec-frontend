@@ -537,6 +537,33 @@ export interface ApsMovementEvent {
   observation: string;
   heureSortie: string | null;
   siteId: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
+}
+
+export interface CameraRecord {
+  id: string;
+  name: string;
+  streamUrl: string;
+  status: "EN_SERVICE" | "MAINTENANCE";
+  zoneId: string;
+  zoneName: string;
+  siteId: string;
+  siteName: string;
+  accessLevel: number;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
+}
+
+export interface CameraZone {
+  id: string;
+  name: string;
+  siteId: string;
+  siteName: string;
+  accessLevel: number;
+  pendingSync?: boolean;
 }
 
 export interface ApsServiceHandover {
@@ -555,6 +582,9 @@ export interface ApsServiceHandover {
   cpMontantMatricule: string;
   controleur: string;
   siteId: string;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export type ApsServiceHandoverInput = Omit<ApsServiceHandover, "id" | "controleur">;
@@ -1969,10 +1999,10 @@ export const serviceApi = {
           const replayBody = item.path === "/vigilance"
             ? item.payload.entries
             : { ...item.payload, clientRequestId: item.requestId };
-          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; handover?: { id?: string }; shift?: { serviceId?: string }; patrol?: { id?: string }; serviceId?: string; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
+          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; handover?: { id?: string }; camera?: { id?: string }; shift?: { serviceId?: string }; patrol?: { id?: string }; serviceId?: string; id?: string; saved?: boolean; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
             method: item.method || "POST", body: body(replayBody),
           });
-          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.handover?.id && !result.shift?.serviceId && !result.patrol?.id && !result.serviceId && !result.id && !result.linked && !result.unlinked
+          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.handover?.id && !result.camera?.id && !result.shift?.serviceId && !result.patrol?.id && !result.serviceId && !result.id && result.saved !== true && !result.linked && !result.unlinked
             && !(Array.isArray(result.entries) && result.entries.length)) {
             throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
           }
@@ -2954,11 +2984,49 @@ export const serviceApi = {
       return { id, deleted: true, pendingSync: true };
     }
   },
-  async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string) {
-    return request<{ data: Record<string, any[]> | null; postes: ApsPostConfiguration[] | null }>(`/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`);
+  async getApsAttendance(date: string, service: "jour" | "nuit", siteId: string): Promise<{
+    data: Record<string, any[]> | null;
+    postes: ApsPostConfiguration[] | null;
+    pendingSync?: boolean;
+    pendingSyncStatus?: "pending" | "conflict" | "rejected";
+    pendingSyncError?: string;
+  }> {
+    const path = `/aps-attendance?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let result: { data: Record<string, any[]> | null; postes: ApsPostConfiguration[] | null } = { data: null, postes: null };
+    let readError: unknown;
+    try { result = await request<typeof result>(path); }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      readError = error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const attendance = queued.find((item) => item.path === "/aps-attendance"
+      && item.payload.date === date && item.payload.service === service);
+    const configuration = queued.find((item) => item.path === "/aps-attendance/posts"
+      && item.payload.service === service);
+    if (!attendance && !configuration) {
+      if (readError) throw readError;
+      return result;
+    }
+    return {
+      data: attendance?.payload.data as Record<string, any[]> | undefined ?? result.data,
+      postes: (attendance?.payload.postes || configuration?.payload.postes || result.postes) as ApsPostConfiguration[] | null,
+      pendingSync: true,
+      pendingSyncStatus: attendance?.status || configuration?.status || "pending",
+      pendingSyncError: attendance?.lastError || configuration?.lastError,
+    };
   },
-  async saveApsPostConfiguration(data: { service: "jour" | "nuit"; siteId: string; postes: ApsPostConfiguration[] }) {
-    return request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-attendance/posts", { method: "PUT", body: body(data) });
+  async saveApsPostConfiguration(data: { service: "jour" | "nuit"; siteId: string; postes: ApsPostConfiguration[] }): Promise<{ saved: boolean; postes: ApsPostConfiguration[]; pendingSync?: boolean }> {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return await request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-attendance/posts", { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/aps-attendance/posts", "PUT");
+      return { saved: true, postes: data.postes, pendingSync: true };
+    }
   },
   async lookupEmployeeByMatricule(matricule: string, signal?: AbortSignal) {
     try {
@@ -2968,19 +3036,59 @@ export const serviceApi = {
       throw error;
     }
   },
-  async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]>; postes: ApsPostConfiguration[] }) {
-    return request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(data) });
+  async saveApsAttendance(data: { date: string; service: "jour" | "nuit"; siteId: string; data: Record<string, any[]>; postes: ApsPostConfiguration[] }): Promise<{ saved: boolean; updatedAt: string; pendingSync?: boolean }> {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return await request<{ saved: boolean; updatedAt: string }>("/aps-attendance", { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/aps-attendance", "PUT");
+      return { saved: true, updatedAt: new Date().toISOString(), pendingSync: true };
+    }
   },
-  async getApsMovements(date: string, service: "jour" | "nuit", siteId: string) {
-    return request<{ data: ApsMovementData | null; postes: ApsPostConfiguration[] | null }>(
-      `/aps-movements?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`,
-    );
+  async getApsMovements(date: string, service: "jour" | "nuit", siteId: string): Promise<{
+    data: ApsMovementData | null;
+    postes: ApsPostConfiguration[] | null;
+    pendingSync?: boolean;
+    pendingSyncStatus?: "pending" | "conflict" | "rejected";
+    pendingSyncError?: string;
+  }> {
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const path = `/aps-movements?date=${encodeURIComponent(date)}&service=${service}&siteId=${encodeURIComponent(siteId)}`;
+    let result: { data: ApsMovementData | null; postes: ApsPostConfiguration[] | null } = { data: null, postes: null };
+    let readError: unknown;
+    try { result = await request<typeof result>(path); }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      readError = error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const movement = queued.find((item) => item.path === "/aps-movements"
+      && item.payload.date === date && item.payload.service === service);
+    const configuration = queued.find((item) => item.path === "/aps-movements/posts");
+    if (!movement && !configuration) {
+      if (readError) throw readError;
+      return result;
+    }
+    return {
+      data: (movement?.payload.data as ApsMovementData | undefined) ?? result.data,
+      postes: (movement?.payload.postes || configuration?.payload.postes || result.postes) as ApsPostConfiguration[] | null,
+      pendingSync: true,
+      pendingSyncStatus: movement?.status || configuration?.status || "pending",
+      pendingSyncError: movement?.lastError || configuration?.lastError,
+    };
   },
-  async saveApsMovementPostConfiguration(data: { siteId: string; postes: ApsPostConfiguration[] }) {
-    return request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-movements/posts", {
-      method: "PUT",
-      body: body(data),
-    });
+  async saveApsMovementPostConfiguration(data: { siteId: string; postes: ApsPostConfiguration[] }): Promise<{ saved: boolean; postes: ApsPostConfiguration[]; pendingSync?: boolean }> {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return await request<{ saved: boolean; postes: ApsPostConfiguration[] }>("/aps-movements/posts", { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/aps-movements/posts", "PUT");
+      return { saved: true, postes: data.postes, pendingSync: true };
+    }
   },
   async saveApsMovements(data: {
     date: string;
@@ -2988,64 +3096,311 @@ export const serviceApi = {
     siteId: string;
     data: ApsMovementData;
     postes: ApsPostConfiguration[];
-  }) {
-    return request<{ saved: boolean; updatedAt: string }>("/aps-movements", {
-      method: "PUT",
-      body: body(data),
-    });
+  }): Promise<{ saved: boolean; updatedAt: string; pendingSync?: boolean }> {
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return await request<{ saved: boolean; updatedAt: string }>("/aps-movements", { method: "PUT", body: body(payload) });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/aps-movements", "PUT");
+      return { saved: true, updatedAt: new Date().toISOString(), pendingSync: true };
+    }
   },
   async listApsMovementEvents(siteId: string, date: string) {
-    return (await request<{ entries: ApsMovementEvent[] }>(
-      `/aps-movements/events?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
-    )).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: ApsMovementEvent[] = [];
+    try {
+      entries = (await request<{ entries: ApsMovementEvent[] }>(`/aps-movements/events?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`)).entries;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const result = new Map(entries.map((entry) => [entry.id, entry]));
+    for (const item of queued.filter((write) => write.path?.startsWith("/aps-movements/events"))) {
+      if (item.path === "/aps-movements/events" && item.payload.date === date) {
+        const id = `pending-${item.requestId}`;
+        result.set(id, { ...item.payload, id, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError } as unknown as ApsMovementEvent);
+        continue;
+      }
+      const path = item.path || "";
+      const id = decodeURIComponent(path.split("?")[0].split("/")[3] || "");
+      const entry = result.get(id);
+      if (item.method === "DELETE") {
+        if (item.status === "conflict" || item.status === "rejected") {
+          if (entry) result.set(id, { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError });
+        } else result.delete(id);
+      } else if (item.method === "PUT") {
+        if (item.payload.date !== date) result.delete(id);
+        else result.set(id, {
+          ...(entry || {}),
+          ...item.payload,
+          id,
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        } as ApsMovementEvent);
+      }
+    }
+    return [...result.values()];
   },
   async createApsMovementEvent(data: Omit<ApsMovementEvent, "id">) {
-    return (await request<{ entry: ApsMovementEvent }>("/aps-movements/events", {
-      method: "POST",
-      body: body(data),
-    })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: ApsMovementEvent }>("/aps-movements/events", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/aps-movements/events", "POST");
+      return { ...data, id: `pending-${requestId}`, pendingSync: true } as ApsMovementEvent;
+    }
   },
   async updateApsMovementEvent(id: string, data: Omit<ApsMovementEvent, "id">) {
-    return (await request<{ entry: ApsMovementEvent }>(`/aps-movements/events/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      body: body(data),
-    })).entry;
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement avant de le modifier.");
+    const path = `/aps-movements/events/${encodeURIComponent(id)}`;
+    try {
+      return (await request<{ entry: ApsMovementEvent }>(path, { method: "PUT", body: body(data) })).entry;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      const requestId = crypto.randomUUID();
+      await queueLogisticsWrite(requestId, data.siteId, data as unknown as Record<string, unknown>, [], path, "PUT");
+      return { ...data, id, pendingSync: true } as ApsMovementEvent;
+    }
   },
-  async deleteApsMovementEvent(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(
-      `/aps-movements/events/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
-      { method: "DELETE" },
-    );
+  async deleteApsMovementEvent(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const path = `/aps-movements/events/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}&clientRequestId=${requestId}`;
+    try { return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" }); }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async listApsServiceHandovers(siteId: string, date: string) {
-    return (await request<{ entries: ApsServiceHandover[] }>(
-      `/aps-movements/service-handovers?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`,
-    )).entries;
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let entries: ApsServiceHandover[] = [];
+    try {
+      entries = (await request<{ entries: ApsServiceHandover[] }>(`/aps-movements/service-handovers?siteId=${encodeURIComponent(siteId)}&date=${encodeURIComponent(date)}`)).entries;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const result = new Map(entries.map((entry) => [entry.id, entry]));
+    for (const item of queued.filter((write) => write.path?.startsWith("/aps-movements/service-handovers"))) {
+      if (item.path === "/aps-movements/service-handovers" && item.payload.date === date) {
+        const id = `pending-${item.requestId}`;
+        result.set(id, { ...item.payload, id, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError } as unknown as ApsServiceHandover);
+        continue;
+      }
+      const path = item.path || "";
+      const id = decodeURIComponent(path.split("?")[0].split("/")[3] || "");
+      const entry = result.get(id);
+      if (item.method === "DELETE") {
+        if (item.status === "conflict" || item.status === "rejected") {
+          if (entry) result.set(id, { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError });
+        } else result.delete(id);
+      } else if (item.method === "PUT") {
+        if (item.payload.date !== date) result.delete(id);
+        else result.set(id, {
+          ...(entry || {}),
+          ...item.payload,
+          id,
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        } as ApsServiceHandover);
+      }
+    }
+    return [...result.values()];
   },
   async createApsServiceHandover(data: ApsServiceHandoverInput) {
-    return (await request<{ entry: ApsServiceHandover }>("/aps-movements/service-handovers", {
-      method: "POST",
-      body: body(data),
-    })).entry;
+    const requestId = crypto.randomUUID();
+    const payload = { ...data, clientRequestId: requestId };
+    try {
+      return (await request<{ entry: ApsServiceHandover }>("/aps-movements/service-handovers", { method: "POST", body: body(payload) })).entry;
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, data.siteId, payload, [], "/aps-movements/service-handovers", "POST");
+      return { ...data, id: `pending-${requestId}`, pendingSync: true } as ApsServiceHandover;
+    }
   },
   async updateApsServiceHandover(id: string, data: ApsServiceHandoverInput) {
-    return (await request<{ entry: ApsServiceHandover }>(`/aps-movements/service-handovers/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      body: body(data),
-    })).entry;
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de la passation avant de la modifier.");
+    const path = `/aps-movements/service-handovers/${encodeURIComponent(id)}`;
+    try { return (await request<{ entry: ApsServiceHandover }>(path, { method: "PUT", body: body(data) })).entry; }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      const requestId = crypto.randomUUID();
+      await queueLogisticsWrite(requestId, data.siteId, data as unknown as Record<string, unknown>, [], path, "PUT");
+      return { ...data, id, pendingSync: true } as ApsServiceHandover;
+    }
   },
-  async deleteApsServiceHandover(id: string, siteId: string) {
-    return request<{ id: string; deleted: boolean }>(
-      `/aps-movements/service-handovers/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`,
-      { method: "DELETE" },
-    );
+  async deleteApsServiceHandover(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const path = `/aps-movements/service-handovers/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}&clientRequestId=${requestId}`;
+    try { return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" }); }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
-  async listCameras(siteId?: string) { return (await request<{ cameras: any[] }>(`/cameras${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).cameras; },
-  async listCameraZones(siteId?: string) { return (await request<{ zones: any[] }>(`/camera-zones${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).zones; },
-  async createCamera(data: unknown) { return (await request<{ camera: any }>("/cameras", { method: "POST", body: body(data) })).camera; },
-  async updateCamera(id: string, data: unknown) { return (await request<{ camera: any }>(`/cameras/${id}`, { method: "PUT", body: body(data) })).camera; },
-  async setCameraStatus(id: string, status: "EN_SERVICE" | "MAINTENANCE") { return (await request<{ camera: any }>(`/cameras/${id}`, { method: "PATCH", body: body({ status }) })).camera; },
-  async deleteCamera(id: string) { return request<{ id: string; deleted: boolean }>(`/cameras/${id}`, { method: "DELETE" }); },
+  async listCameras(siteId?: string): Promise<CameraRecord[]> {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    let cameras: CameraRecord[] = [];
+    let readError: unknown;
+    try { cameras = (await request<{ cameras: CameraRecord[] }>(`/cameras${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).cameras; }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      readError = error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    if (readError && !cameras.length && !queued.some((item) => item.path === "/cameras" && item.method === "POST")) throw readError;
+    const rows = new Map(cameras.map((camera) => [camera.id, camera]));
+    for (const item of queued.filter((write) => write.path?.startsWith("/cameras"))) {
+      const path = item.path || "";
+      if (path === "/cameras" && item.method === "POST") {
+        const id = `pending-${item.requestId}`;
+        rows.set(id, {
+          ...item.payload,
+          id,
+          name: String(item.payload.name || ""),
+          streamUrl: String(item.payload.streamUrl || ""),
+          status: item.payload.status === "MAINTENANCE" ? "MAINTENANCE" : "EN_SERVICE",
+          zoneId: "",
+          zoneName: String(item.payload.zoneName || ""),
+          siteId: item.siteId,
+          siteName: String(item.payload.siteName || ""),
+          accessLevel: Number(item.payload.accessLevel || 0),
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        });
+        continue;
+      }
+      const cameraId = decodeURIComponent(path.split("?")[0].split("/")[2] || "");
+      const existing = rows.get(cameraId);
+      if (!existing) continue;
+      if (item.method === "DELETE" && item.status !== "conflict" && item.status !== "rejected") rows.delete(cameraId);
+      else rows.set(cameraId, {
+        ...existing,
+        ...(item.method === "PATCH" ? { status: item.payload.status === "MAINTENANCE" ? "MAINTENANCE" : "EN_SERVICE" } : item.payload),
+        pendingSync: true,
+        pendingSyncStatus: item.status || "pending",
+        pendingSyncError: item.lastError,
+      });
+    }
+    return [...rows.values()];
+  },
+  async listCameraZones(siteId?: string): Promise<CameraZone[]> {
+    let zones: CameraZone[] = [];
+    let readError: unknown;
+    try { zones = (await request<{ zones: CameraZone[] }>(`/camera-zones${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).zones; }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      readError = error;
+    }
+    const queued = await getQueuedLogisticsWrites(siteId);
+    if (readError && !zones.length && !queued.some((item) => item.path === "/cameras" && item.method === "POST")) throw readError;
+    const known = new Set(zones.map((zone) => String(zone.name).toLocaleLowerCase("fr")));
+    for (const item of queued.filter((write) => write.path === "/cameras" && write.method === "POST")) {
+      const name = String(item.payload.zoneName || "").trim();
+      if (!name || known.has(name.toLocaleLowerCase("fr"))) continue;
+      known.add(name.toLocaleLowerCase("fr"));
+      zones.push({ id: `pending-${item.requestId}`, name, siteId: item.siteId, siteName: String(item.payload.siteName || ""), accessLevel: Number(item.payload.accessLevel || 0), pendingSync: true });
+    }
+    return zones;
+  },
+  async createCamera(data: Record<string, unknown>): Promise<CameraRecord> {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    try { return (await request<{ camera: CameraRecord }>("/cameras", { method: "POST", body: body(payload) })).camera; }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      const siteId = String(data.siteId || "");
+      if (!siteId) throw new Error("Un site est nécessaire pour enregistrer une caméra hors connexion.");
+      await queueLogisticsWrite(requestId, siteId, payload, [], "/cameras", "POST");
+      return {
+        ...data,
+        id: `pending-${requestId}`,
+        status: "EN_SERVICE",
+        zoneId: "",
+        zoneName: String(data.zoneName || ""),
+        siteId,
+        siteName: String(data.siteName || ""),
+        accessLevel: Number(data.accessLevel || 0),
+        pendingSync: true,
+      } as CameraRecord;
+    }
+  },
+  async updateCamera(id: string, data: Record<string, unknown>): Promise<Pick<CameraRecord, "id"> & Partial<CameraRecord>> {
+    if (id.startsWith("pending-")) {
+      const requestId = id.slice("pending-".length);
+      const item = (await getQueuedLogisticsWrites(String(data.siteId || ""))).find((write) => write.requestId === requestId && write.path === "/cameras");
+      if (!item) throw new Error("La caméra en attente est introuvable sur cet appareil.");
+      await updateQueuedLogisticsWrite(requestId, { payload: { ...item.payload, ...data } });
+      return {
+        id,
+        name: String(data.name ?? item.payload.name ?? ""),
+        streamUrl: String(data.streamUrl ?? item.payload.streamUrl ?? ""),
+        status: item.payload.status === "MAINTENANCE" ? "MAINTENANCE" : "EN_SERVICE",
+        zoneId: "",
+        zoneName: String(data.zoneName ?? item.payload.zoneName ?? ""),
+        siteId: String(data.siteId ?? item.siteId),
+        siteName: String(data.siteName ?? item.payload.siteName ?? ""),
+        accessLevel: Number(data.accessLevel ?? item.payload.accessLevel ?? 0),
+        pendingSync: true,
+      };
+    }
+    const path = `/cameras/${encodeURIComponent(id)}`;
+    try { return (await request<{ camera: CameraRecord }>(path, { method: "PUT", body: body(data) })).camera; }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      const requestId = crypto.randomUUID();
+      await queueLogisticsWrite(requestId, String(data.siteId || ""), data, [], path, "PUT");
+      return { ...data, id, pendingSync: true } as Pick<CameraRecord, "id"> & Partial<CameraRecord>;
+    }
+  },
+  async setCameraStatus(id: string, status: "EN_SERVICE" | "MAINTENANCE", siteId: string): Promise<Pick<CameraRecord, "id" | "status" | "pendingSync">> {
+    if (id.startsWith("pending-")) {
+      const requestId = id.slice("pending-".length);
+      const item = (await getQueuedLogisticsWrites(siteId)).find((write) => write.requestId === requestId && write.path === "/cameras");
+      if (!item) throw new Error("La caméra en attente est introuvable sur cet appareil.");
+      await updateQueuedLogisticsWrite(requestId, { payload: { ...item.payload, status } });
+      return { id, status, pendingSync: true };
+    }
+    const path = `/cameras/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`;
+    try { return (await request<{ camera: Pick<CameraRecord, "id" | "status"> }>(path, { method: "PATCH", body: body({ status }) })).camera; }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      const requestId = crypto.randomUUID();
+      await queueLogisticsWrite(requestId, siteId, { status, siteId }, [], path, "PATCH");
+      return { id, status, pendingSync: true };
+    }
+  },
+  async deleteCamera(id: string, siteId: string): Promise<{ id: string; deleted: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const requestId = crypto.randomUUID();
+    const path = `/cameras/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}&clientRequestId=${requestId}`;
+    try { return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" }); }
+    catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      await queueLogisticsWrite(requestId, siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
+  },
   async listProviders() { return (await request<{ providers: Provider[] }>("/providers")).providers; },
   async createProvider(name: string) { return (await request<{ provider: Provider }>("/providers", { method: "POST", body: body({ name }) })).provider; },
   async updateProvider(id: string, data: { name: string; active?: boolean }) { return (await request<{ provider: Provider }>(`/providers/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).provider; },

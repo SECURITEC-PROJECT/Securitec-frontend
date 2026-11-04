@@ -149,7 +149,9 @@ export default function PassationServiceAPS({
         [registryKey]: [saved, ...(current[registryKey] ?? []).filter((item) => item.id !== saved.id)],
       }));
       resetForm();
-      toast.success(wasEditing ? "Passation modifiée." : "Passation enregistrée.");
+      toast[saved.pendingSync ? "info" : "success"](saved.pendingSync
+        ? "Passation enregistrée sur cet appareil, en attente de synchronisation."
+        : wasEditing ? "Passation modifiée." : "Passation enregistrée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de la passation impossible.");
     } finally {
@@ -178,7 +180,7 @@ export default function PassationServiceAPS({
   const deleteEntry = async (entry: ApsServiceHandover) => {
     if (!(await confirmDeletion("Supprimer définitivement cette passation de service ?"))) return;
     try {
-      await serviceApi.deleteApsServiceHandover(entry.id, activeSiteId);
+      const result = await serviceApi.deleteApsServiceHandover(entry.id, activeSiteId);
       setEntriesByKey((current) => ({
         ...current,
         ...Object.fromEntries(Object.entries(current).map(([key, items]) => [
@@ -187,7 +189,9 @@ export default function PassationServiceAPS({
         ])),
       }));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Passation supprimée.");
+      toast[result.pendingSync ? "info" : "success"](result.pendingSync
+        ? "Suppression enregistrée sur cet appareil, en attente de synchronisation."
+        : "Passation supprimée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression de la passation impossible.");
     }
@@ -351,7 +355,7 @@ export default function PassationServiceAPS({
           <tbody>
             {filteredEntries.map((entry) => (
               <tr key={entry.id} className="align-top hover:bg-muted/30">
-                <td className="whitespace-nowrap border-b px-3 py-3">{formatDate(entry.date)}</td>
+                <td className="whitespace-nowrap border-b px-3 py-3">{formatDate(entry.date)}{entry.pendingSync && <span className={`mt-1 block text-xs ${entry.pendingSyncStatus === "pending" ? "text-amber-700" : "text-destructive"}`} title={entry.pendingSyncError}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                 <td className="max-w-48 whitespace-pre-wrap border-b px-3 py-3">{entry.materiel || "—"}</td>
                 <td className="border-b px-3 py-3">{entry.chaineEst || "—"}</td>
                 <td className="border-b px-3 py-3">{entry.chaineOuest || "—"}</td>
