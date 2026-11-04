@@ -130,11 +130,13 @@ export default function FormPieton({
       if (editingVisitor) {
         const visitor = await serviceApi.updateVisitor(String(editingVisitor.id), payload);
         onUpdated(visitor);
-        toast.success("Passage visiteur modifié.");
+        if (visitor.pendingSync) toast.info("Modification enregistrée sur cet appareil, en attente de synchronisation.");
+        else toast.success("Passage visiteur modifié.");
       } else {
         const visitor = await serviceApi.createVisitor(payload);
         onCreated(visitor);
-        toast.success("Entrée visiteur enregistrée dans la base de données");
+        if (visitor.pendingSync) toast.info("Entrée visiteur enregistrée sur cet appareil, en attente de vérification et de synchronisation.");
+        else toast.success("Entrée visiteur enregistrée dans la base de données");
         setF(emptyForm);
       }
     } catch (error) {

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { serviceApi } from "@/lib/service-api";
 import { Download, Paperclip, Trash2, Upload } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 
 type Attachment = { id: string; documentId: string; name: string; extension: string; size: number; linkedAt: string };
@@ -40,11 +40,12 @@ export function RegistryAttachments({ entity, recordId, siteId }: { entity: stri
     }
     setBusy(true);
     try {
-      const document = await serviceApi.uploadDocument(siteId, file, "Pièce de registre");
-      await serviceApi.linkRegistryAttachment(entity, recordId, document.id);
+      const document = await serviceApi.addRegistryAttachment(entity, recordId, siteId, file);
       setLoaded(false);
       await reload();
-      toast.success("Pièce jointe ajoutée au registre.");
+      toast[document.pendingSync ? "info" : "success"](document.pendingSync
+        ? "Pièce jointe enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
+        : "Pièce jointe ajoutée au registre.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Ajout de la pièce jointe impossible.");
     } finally { setBusy(false); }
@@ -60,11 +61,35 @@ export function RegistryAttachments({ entity, recordId, siteId }: { entity: stri
 
   const unlink = async (attachment: Attachment) => {
     try {
-      await serviceApi.unlinkRegistryAttachment(attachment.id);
+      await serviceApi.unlinkRegistryAttachment(attachment.id, siteId);
       setAttachments((current) => current.filter((item) => item.id !== attachment.id));
       toast.success("Pièce retirée de cette fiche. Le document reste dans la bibliothèque du site.");
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : "Retrait impossible."); }
   };
+
+  useEffect(() => {
+    if (!open || !loaded) return;
+    let active = true;
+    const refresh = () => {
+      void serviceApi.listRegistryAttachments(entity, recordId)
+        .then((result) => {
+          if (active) {
+            setAttachments(result);
+            setError("");
+          }
+        })
+        .catch((reason) => {
+          if (active) setError(reason instanceof Error ? reason.message : "Chargement des pièces jointes impossible.");
+        });
+    };
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", refresh);
+    };
+  }, [open, loaded, entity, recordId]);
 
   return <div className="mt-1">
     <button type="button" className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline" onClick={() => void openList()}><Paperclip className="size-3" />Pièces jointes{loaded ? ` (${attachments.length})` : ""}</button>

@@ -3,7 +3,18 @@ import { Empty, Panel } from "@/components/PageHeader";
 type Cp = { name: string; at: string | null };
 
 interface PatrolHistoryPanelProps {
-  data: any[];
+  data: {
+    id: string;
+    route_name: string;
+    started_at: string;
+    ended_at: string | null;
+    checkpoints: Cp[];
+    anomalies: string | null;
+    pendingSync?: boolean;
+    pendingFinish?: boolean;
+    pendingSyncStatus?: "pending" | "conflict" | "rejected";
+    pendingSyncError?: string;
+  }[];
   fmt: (dateStr: string | null) => string;
 }
 
@@ -38,6 +49,10 @@ export default function PatrolHistoryPanel({ data, fmt }: PatrolHistoryPanelProp
                     )}
                   </span>
                 </div>
+                {p.pendingSync && <p className="text-xs text-amber-700">
+                  {p.pendingSyncStatus === "conflict" ? "Conflit de synchronisation" : p.pendingSyncStatus === "rejected" ? "Ronde rejetée par le serveur" : p.pendingFinish ? "Clôture en attente : ronde toujours active sur le serveur" : "Démarrage ou modification en attente de synchronisation"}
+                  {p.pendingSyncError ? ` · ${p.pendingSyncError}` : ""}
+                </p>}
               </li>
             );
           })}

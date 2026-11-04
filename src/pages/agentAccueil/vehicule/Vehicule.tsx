@@ -2,8 +2,6 @@ import { PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type VehicleMovement } from "@/lib/service-api";
-import { confirmDeletion } from "@/lib/deletion-toast";
-import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import FormVehicule from "./FormVehicule";
 import PresentsVehicules from "./PresentsVehicules";
@@ -24,18 +22,28 @@ export default function Vehicule() {
   useEffect(() => {
     let active = true;
     if (!site?.id) return () => { active = false; };
-    serviceApi.listVehicles(site.id)
-      .then((vehicles) => {
-        if (active) setRegistry({ siteId: site.id, vehicles, error: "" });
-      })
-      .catch((reason) => {
-        if (active) setRegistry({
-          siteId: site.id,
-          vehicles: [],
-          error: reason instanceof Error ? reason.message : "Chargement des mouvements impossible.",
+    const refresh = () => {
+      serviceApi.listVehicles(site.id)
+        .then((vehicles) => {
+          if (active) setRegistry({ siteId: site.id, vehicles, error: "" });
+        })
+        .catch((reason) => {
+          if (active) setRegistry({
+            siteId: site.id,
+            vehicles: [],
+            error: reason instanceof Error ? reason.message : "Chargement des mouvements impossible.",
+          });
         });
-      });
-    return () => { active = false; };
+    };
+    const onQueueChanged = () => refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", onQueueChanged);
+    refresh();
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", onQueueChanged);
+    };
   }, [site?.id]);
 
   const vehicles = registry.siteId === site?.id ? registry.vehicles : [];
@@ -55,22 +63,30 @@ export default function Vehicule() {
     setEditingVehicle(null);
   };
 
-  const exitVehicle = async (id: string, passengersOut: number) => {
+  const exitVehicle = async (id: string, passengersOut: number): Promise<boolean> => {
     const result = await serviceApi.exitVehicle(id, passengersOut, site?.id);
     setRegistry((current) => ({
       ...current,
       vehicles: current.vehicles.map((vehicle) => vehicle.id === id ? { ...vehicle, ...result } : vehicle),
     }));
+    return Boolean(result.pendingSync);
   };
 
-  const deleteVehicle = async (id: string) => {
-    if (!site?.id) return;
+  const deleteVehicle = async (id: string): Promise<boolean> => {
+    if (!site?.id) return false;
     const vehicle = vehicles.find((entry) => entry.id === id);
-    if (!vehicle || vehicle.annuleLe || !(await confirmDeletion(`Annuler le mouvement du véhicule « ${vehicle.plate} » ? Il restera dans l’historique.`))) return;
-    await serviceApi.deleteVehicle(id, site.id);
-    setRegistry((current) => ({ ...current, vehicles: current.vehicles.map((vehicle) => vehicle.id === id ? { ...vehicle, annuleLe: new Date().toISOString() } : vehicle) }));
-    if (editingVehicle?.id === id) setEditingVehicle(null);
-      toast.success("Mouvement véhicule annulé et conservé dans l’historique.");
+    if (!vehicle || vehicle.annuleLe) return false;
+    const result = await serviceApi.deleteVehicle(id, site.id);
+      setRegistry((current) => ({
+        ...current,
+        vehicles: id.startsWith("pending-")
+          ? current.vehicles.filter((entry) => entry.id !== id)
+          : current.vehicles.map((entry) => entry.id === id
+            ? { ...entry, annuleLe: new Date().toISOString(), pendingSync: Boolean(result.pendingSync) }
+            : entry),
+      }));
+      if (editingVehicle?.id === id) setEditingVehicle(null);
+      return Boolean(result.pendingSync);
   };
 
   return (
@@ -93,6 +109,20 @@ export default function Vehicule() {
       {(error || siteError) && (
         <Panel title="Erreur de chargement">
           <p className="text-sm text-destructive">{error || siteError}</p>
+        </Panel>
+      )}
+      {vehicles.some((vehicle) => vehicle.pendingSync) && (
+        <Panel title="Synchronisation hors ligne">
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>{vehicles.filter((vehicle) => vehicle.pendingSync).length} mouvement(s) véhicule en attente ou à vérifier.</p>
+            <ul className="list-inside list-disc">
+              {vehicles.filter((vehicle) => vehicle.pendingSync).map((vehicle) => (
+                <li key={vehicle.id}>
+                  {vehicle.plate}: {vehicle.pendingSyncError || (vehicle.pendingSyncStatus === "pending" ? "en attente de synchronisation" : "à vérifier")}
+                </li>
+              ))}
+            </ul>
+          </div>
         </Panel>
       )}
       {!loading && (

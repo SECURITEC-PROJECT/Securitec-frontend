@@ -56,6 +56,7 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
   const [service, setService] = useState<"jour" | "nuit">("jour");
   const [postSearch, setPostSearch] = useState("");
   const [dataByKey, setDataByKey] = useState<Record<string, ApsMovementData>>({});
+  const [pendingStatusByKey, setPendingStatusByKey] = useState<Record<string, { status: string; error?: string } | undefined>>({});
   const [loadingKeys, setLoadingKeys] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [savingConfiguration, setSavingConfiguration] = useState(false);
@@ -90,8 +91,12 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
     let active = true;
     setLoadingKeys((current) => ({ ...current, [contextKey]: true }));
     serviceApi.getApsMovements(date, service, activeSiteId)
-      .then(({ data, postes }) => {
+      .then(({ data, postes, pendingSync, pendingSyncStatus, pendingSyncError }) => {
         if (!active) return;
+        setPendingStatusByKey((current) => ({
+          ...current,
+          [contextKey]: pendingSync ? { status: pendingSyncStatus || "pending", error: pendingSyncError } : undefined,
+        }));
         setDataByKey((current) => ({
           ...current,
           [contextKey]: normalizeData(data, postes),
@@ -129,11 +134,13 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
     }
     setSavingConfiguration(true);
     try {
-      await serviceApi.saveApsMovementPostConfiguration({
+      const saved = await serviceApi.saveApsMovementPostConfiguration({
         siteId: activeSiteId,
         postes: Object.entries(nextAgents).map(([name, rows]) => ({ name, count: rows.length })),
       });
       setDataByKey((current) => ({ ...current, [contextKey]: nextAgents }));
+      setPendingStatusByKey((current) => ({ ...current, [contextKey]: saved.pendingSync ? { status: "pending" } : undefined }));
+      if (saved.pendingSync) toast.info("Configuration des postes enregistrée sur cet appareil, en attente de synchronisation.");
       return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement des postes impossible.");
@@ -150,14 +157,16 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
     }
     setSaving(true);
     try {
-      await serviceApi.saveApsMovements({
+      const result = await serviceApi.saveApsMovements({
         date,
         service,
         siteId: activeSiteId,
         data: agents,
         postes: Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length })),
       });
-      toast.success(`Mouvements APS du service ${service} enregistrés.`);
+      setPendingStatusByKey((current) => ({ ...current, [contextKey]: result.pendingSync ? { status: "pending" } : undefined }));
+      if (result.pendingSync) toast.info(`Mouvements APS du service ${service} enregistrés sur cet appareil, en attente de synchronisation.`);
+      else toast.success(`Mouvements APS du service ${service} enregistrés.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement des mouvements APS impossible.");
     } finally {
@@ -253,6 +262,9 @@ export default function MouvementsAPS({ canManagePassations = false }: { canMana
       </section>
 
       {loading && <p className="text-sm text-muted-foreground">Chargement des mouvements APS…</p>}
+      {pendingStatusByKey[contextKey] && <p className={`text-sm ${pendingStatusByKey[contextKey].status === "pending" ? "text-amber-700" : "text-destructive"}`} title={pendingStatusByKey[contextKey].error}>
+        {pendingStatusByKey[contextKey].status === "conflict" ? "Conflit : les mouvements APS n’ont pas été confirmés par le serveur." : pendingStatusByKey[contextKey].status === "rejected" ? "Mouvements APS rejetés par le serveur. Vérifiez les données avant de réessayer." : "Mouvements enregistrés sur cet appareil, en attente de synchronisation."}
+      </p>}
       <div className="relative w-full max-w-sm print:hidden">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <input

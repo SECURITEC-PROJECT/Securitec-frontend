@@ -63,6 +63,7 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
   const [service, setService] = useState<"jour" | "nuit">("jour");
   const [postSearch, setPostSearch] = useState("");
   const [agentsByKey, setAgentsByKey] = useState<Record<string, Record<string, Agent[]>>>({});
+  const [pendingStatusByKey, setPendingStatusByKey] = useState<Record<string, { status: string; error?: string } | undefined>>({});
   const [saving, setSaving] = useState(false);
   const [savingConfiguration, setSavingConfiguration] = useState(false);
   const activeSiteId = siteId || sites[0]?.id || "";
@@ -95,8 +96,12 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
     if (!activeSiteId) return;
     let active = true;
     serviceApi.getApsAttendance(date, service, activeSiteId)
-      .then(({ data, postes: configuredPostes }) => {
+      .then(({ data, postes: configuredPostes, pendingSync, pendingSyncStatus, pendingSyncError }) => {
         if (!active) return;
+        setPendingStatusByKey((current) => ({
+          ...current,
+          [contextKey]: pendingSync ? { status: pendingSyncStatus || "pending", error: pendingSyncError } : undefined,
+        }));
         setAgentsByKey((current) => ({
           ...current,
           [contextKey]: normalizeAgents(data ?? {}, service, configuredPostes),
@@ -119,12 +124,14 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
   const persistConfiguration = async (nextAgents: Record<string, Agent[]>) => {
     setSavingConfiguration(true);
     try {
-      await serviceApi.saveApsPostConfiguration({
+      const saved = await serviceApi.saveApsPostConfiguration({
         service,
         siteId: activeSiteId,
         postes: Object.entries(nextAgents).map(([name, rows]) => ({ name, count: rows.length })),
       });
       setAgentsByKey((current) => ({ ...current, [contextKey]: nextAgents }));
+      setPendingStatusByKey((current) => ({ ...current, [contextKey]: saved.pendingSync ? { status: "pending" } : undefined }));
+      if (saved.pendingSync) toast.info("Configuration enregistrée sur cet appareil, en attente de synchronisation.");
       return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement des postes impossible.");
@@ -135,14 +142,16 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
     if (!activeSiteId) { toast.error("Selectionnez un site avant enregistrement."); return; }
     setSaving(true);
     try {
-      await serviceApi.saveApsAttendance({
+      const result = await serviceApi.saveApsAttendance({
         date,
         service,
         siteId: activeSiteId,
         data: agents,
         postes: Object.entries(agents).map(([name, rows]) => ({ name, count: rows.length })),
       });
-      toast.success(`Pointage ${service} enregistre dans la base de donnees.`);
+      setPendingStatusByKey((current) => ({ ...current, [contextKey]: result.pendingSync ? { status: "pending" } : undefined }));
+      if (result.pendingSync) toast.info(`Pointage ${service} enregistré sur cet appareil, en attente de synchronisation.`);
+      else toast.success(`Pointage ${service} enregistre dans la base de donnees.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement du pointage impossible.");
     } finally { setSaving(false); }
@@ -218,6 +227,9 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
       </p>
     </section>
     {loading && <p className="text-sm text-muted-foreground">Chargement du pointage enregistre...</p>}
+    {pendingStatusByKey[contextKey] && <p className={`text-sm ${pendingStatusByKey[contextKey].status === "pending" ? "text-amber-700" : "text-destructive"}`} title={pendingStatusByKey[contextKey].error}>
+      {pendingStatusByKey[contextKey].status === "conflict" ? "Conflit : le pointage APS n’a pas été confirmé par le serveur." : pendingStatusByKey[contextKey].status === "rejected" ? "Pointage rejeté par le serveur. Vérifiez les données avant de réessayer." : "Pointage enregistré sur cet appareil, en attente de synchronisation."}
+    </p>}
     <div className="relative w-full max-w-sm print:hidden">
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
       <input

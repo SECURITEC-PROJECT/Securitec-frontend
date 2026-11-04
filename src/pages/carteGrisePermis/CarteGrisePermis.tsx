@@ -47,6 +47,7 @@ interface FormData {
 
 interface CarteGriseRecord {
   id: string;
+  site_id?: string;
   document_type?: string;
   zone?: string;
   full_name?: string;
@@ -172,10 +173,11 @@ export default function CarteGrisePermis() {
     setExitingId(record.id);
     setRegistryError("");
     try {
-      await serviceApi.exitVisitor(record.id, { equipmentOut: true, extraEquipment: "" });
+      const result = await serviceApi.exitVisitor(record.id, { equipmentOut: true, extraEquipment: "" }, record.site_id);
       const visitors = await serviceApi.listVisitors();
       setRecords(visitors.filter(isCarteGriseRecord));
-      toast.success("Sortie enregistrée dans l'historique");
+      if (result.pendingSync) toast.info("Sortie enregistrée sur cet appareil, en attente de synchronisation.");
+      else toast.success("Sortie enregistrée dans l'historique");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Enregistrement de la sortie impossible";
       setRegistryError(message);

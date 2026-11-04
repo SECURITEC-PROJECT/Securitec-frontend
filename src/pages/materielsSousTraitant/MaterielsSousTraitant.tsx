@@ -72,10 +72,18 @@ export default function MaterielsSousTraitant() {
     if (!site?.id) { setEntries([]); setLoadedSiteId(""); return; }
     let active = true;
     setLoadedSiteId("");
-    serviceApi.listSubcontractorMaterials(site.id)
+    const refresh = () => serviceApi.listSubcontractorMaterials(site.id)
       .then((rows) => { if (active) { setEntries(rows); setLoadedSiteId(site.id); } })
       .catch((error) => { if (active) { setEntries([]); setLoadedSiteId(site.id); toast.error(error instanceof Error ? error.message : "Chargement du registre impossible."); } });
-    return () => { active = false; };
+    const onQueueChanged = () => { void refresh(); };
+    window.addEventListener("online", onQueueChanged);
+    window.addEventListener("securitec-offline-queue-changed", onQueueChanged);
+    void refresh();
+    return () => {
+      active = false;
+      window.removeEventListener("online", onQueueChanged);
+      window.removeEventListener("securitec-offline-queue-changed", onQueueChanged);
+    };
   }, [site?.id]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -91,6 +99,7 @@ export default function MaterielsSousTraitant() {
         materiels: form.materiels.trim(),
         nombre,
         prestataireId: form.prestataireId,
+        providerName: providers.find((provider) => provider.id === form.prestataireId)?.name || "",
         siteId: site.id,
       };
       const entry = editingId
@@ -100,7 +109,8 @@ export default function MaterielsSousTraitant() {
         ? current.map((row) => row.id === entry.id ? entry : row)
         : [entry, ...current]);
       resetForm();
-      toast.success(editingId ? "Mouvement modifié." : "Entrée du matériel enregistrée.");
+      if (entry.pendingSync) toast.info("Mouvement enregistré sur cet appareil, en attente de synchronisation.");
+      else toast.success(editingId ? "Mouvement modifié." : "Entrée du matériel enregistrée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally { setSaving(false); }
@@ -122,10 +132,14 @@ export default function MaterielsSousTraitant() {
     if (!site?.id || entry.annuleLe || !(await confirmDeletion(`Annuler le mouvement de ${entry.provider} ? Il restera dans l’historique.`))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteSubcontractorMaterial(entry.id, site.id);
-      setEntries((current) => current.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row));
+      const result = await serviceApi.deleteSubcontractorMaterial(entry.id, site.id);
+      setEntries((current) => entry.id.startsWith("pending-")
+        ? current.filter((row) => row.id !== entry.id)
+        : current.map((row) => row.id === entry.id ? { ...row, annuleLe: result.annuleLe || new Date().toISOString(), pendingSync: Boolean(result.pendingSync) } : row));
       if (editingId === entry.id) resetForm();
-      toast.success("Mouvement annulé et conservé dans l’historique.");
+      if (entry.id.startsWith("pending-")) toast.info("Entrée non synchronisée supprimée de cet appareil.");
+      else if (result.pendingSync) toast.info("Annulation en attente de synchronisation.");
+      else toast.success("Mouvement annulé et conservé dans l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally { setDeletingId(null); }
@@ -137,7 +151,8 @@ export default function MaterielsSousTraitant() {
     try {
       const result = await serviceApi.exitSubcontractorMaterial(entry.id, site.id);
       setEntries((current) => current.map((row) => row.id === entry.id ? { ...row, ...result } : row));
-      toast.success("Heure de sortie enregistrée.");
+      if (result.pendingSync) toast.info("Sortie enregistrée sur cet appareil, en attente de synchronisation.");
+      else toast.success("Heure de sortie enregistrée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de la sortie impossible.");
     } finally { setExitingId(null); }
@@ -170,6 +185,13 @@ export default function MaterielsSousTraitant() {
         onChange={(name, type) => { setSiteName(name); setSiteType(type); if (editingId) resetForm(); }} />
       {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
     </div>
+    {entries.some((entry) => entry.pendingSync) && <Panel title="Synchronisation hors ligne">
+      <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
+        {entries.filter((entry) => entry.pendingSync).map((entry) => <li key={entry.id}>
+          {entry.provider || entry.materiels}: {entry.pendingSyncError || (entry.pendingSyncStatus === "pending" ? "en attente de synchronisation" : "à vérifier")}
+        </li>)}
+      </ul>
+    </Panel>}
 
     <Panel title={editingId ? "Modifier le mouvement" : "Nouvelle entrée de matériel"}>
       <form onSubmit={(event) => void submit(event)} className="space-y-5">
@@ -223,11 +245,11 @@ export default function MaterielsSousTraitant() {
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
             <td className="px-3 py-3"><div className="flex items-center gap-1">
               <Button type="button" variant="ghost" size="icon" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
-              {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>}
-              {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title="Annuler" className="text-destructive hover:text-destructive" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
-              <RegistryAuditHistory entity="materiel_sous_traitant" recordId={entry.id} />
-              <RegistryAttachments entity="materiel_sous_traitant" recordId={entry.id} siteId={site?.id} />
-              {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
+              {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" disabled={entry.pendingSync} aria-label="Modifier le mouvement" title="Modifier après synchronisation" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>}
+              {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title={entry.id.startsWith("pending-") ? "Supprimer l’entrée non synchronisée" : "Annuler"} className="text-destructive hover:text-destructive" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
+              {!entry.id.startsWith("pending-") && <RegistryAuditHistory entity="materiel_sous_traitant" recordId={entry.id} />}
+              {!entry.id.startsWith("pending-") && <RegistryAttachments entity="materiel_sous_traitant" recordId={entry.id} siteId={site?.id} />}
+              {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id || entry.id.startsWith("pending-")} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : entry.id.startsWith("pending-") ? "À synchroniser" : "Sortie"}</Button>}
               {entry.heureSortie && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Package className="size-3" />Sorti</span>}
             </div></td>
           </tr>)}

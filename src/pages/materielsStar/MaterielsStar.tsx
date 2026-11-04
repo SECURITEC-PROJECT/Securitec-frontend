@@ -97,7 +97,7 @@ export default function MaterielsStar() {
   useEffect(() => {
     if (!site?.id) return;
     let active = true;
-    serviceApi.listStarMaterials(site.id)
+    const refresh = () => serviceApi.listStarMaterials(site.id)
       .then((rows) => {
         if (active) setRegistry({ siteId: site.id, entries: rows, error: "" });
       })
@@ -108,7 +108,15 @@ export default function MaterielsStar() {
           error: reason instanceof Error ? reason.message : "Chargement du registre impossible.",
         });
       });
-    return () => { active = false; };
+    const onQueueChanged = () => { void refresh(); };
+    window.addEventListener("online", onQueueChanged);
+    window.addEventListener("securitec-offline-queue-changed", onQueueChanged);
+    void refresh();
+    return () => {
+      active = false;
+      window.removeEventListener("online", onQueueChanged);
+      window.removeEventListener("securitec-offline-queue-changed", onQueueChanged);
+    };
   }, [site?.id]);
 
   const resetForm = () => {
@@ -144,6 +152,8 @@ export default function MaterielsStar() {
         prenom: form.prenom.trim(),
         matricule: form.matricule.trim(),
         prestataireId: form.prestataireId,
+        providerName: providers.find((provider) => provider.id === form.prestataireId)?.name || "",
+        siteName: selectedSiteName,
         items,
         siteId: site.id,
       };
@@ -158,7 +168,8 @@ export default function MaterielsStar() {
         error: "",
       }));
       resetForm();
-      toast.success(editing ? "Mouvement modifié." : "Entrée de matériel enregistrée.");
+      if (entry.pendingSync) toast.info("Mouvement enregistré sur cet appareil, en attente de synchronisation.");
+      else toast.success(editing ? "Mouvement modifié." : "Entrée de matériel enregistrée.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Enregistrement impossible.");
     } finally {
@@ -188,7 +199,8 @@ export default function MaterielsStar() {
         ...current,
         entries: current.entries.map((row) => row.id === entry.id ? { ...row, ...result } : row),
       }));
-      toast.success(`Heure de sortie enregistrée pour ${entry.prenom}.`);
+      if (result.pendingSync) toast.info("Sortie enregistrée sur cet appareil, en attente de synchronisation.");
+      else toast.success(`Heure de sortie enregistrée pour ${entry.prenom}.`);
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Impossible d’enregistrer la sortie.");
     } finally {
@@ -197,17 +209,24 @@ export default function MaterielsStar() {
   };
 
   const deleteEntry = async (entry: StarMaterialEntry) => {
-    if (!site?.id || !entry.heureSortie || entry.annuleLe) return;
-    if (!(await confirmDeletion(`Annuler le mouvement de ${entry.prenom} (${entry.matricule}) ? Il restera dans l’historique.`))) return;
+    if (!site?.id || (!entry.heureSortie && !entry.id.startsWith("pending-")) || entry.annuleLe) return;
+    const confirmation = entry.id.startsWith("pending-")
+      ? `Supprimer l’entrée non synchronisée de ${entry.prenom} (${entry.matricule}) de cet appareil ?`
+      : `Annuler le mouvement de ${entry.prenom} (${entry.matricule}) ? Il restera dans l’historique.`;
+    if (!(await confirmDeletion(confirmation))) return;
     setDeletingId(entry.id);
     try {
-      await serviceApi.deleteStarMaterial(entry.id, site.id);
+      const result = await serviceApi.deleteStarMaterial(entry.id, site.id);
       setRegistry((current) => ({
         ...current,
-        entries: current.entries.map((row) => row.id === entry.id ? { ...row, annuleLe: new Date().toISOString() } : row),
+        entries: entry.id.startsWith("pending-")
+          ? current.entries.filter((row) => row.id !== entry.id)
+          : current.entries.map((row) => row.id === entry.id ? { ...row, annuleLe: result.annuleLe || new Date().toISOString(), pendingSync: Boolean(result.pendingSync) } : row),
       }));
       if (editing?.id === entry.id) resetForm();
-      toast.success("Mouvement annulé et conservé dans l’historique.");
+      if (entry.id.startsWith("pending-")) toast.info("Entrée non synchronisée supprimée de cet appareil.");
+      else if (result.pendingSync) toast.info("Annulation en attente de synchronisation.");
+      else toast.success("Mouvement annulé et conservé dans l’historique.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression impossible.");
     } finally {
@@ -253,6 +272,13 @@ export default function MaterielsStar() {
           <p className="text-sm text-destructive">{error || siteError}</p>
         </Panel>
       )}
+      {entries.some((entry) => entry.pendingSync) && <Panel title="Synchronisation hors ligne">
+        <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
+          {entries.filter((entry) => entry.pendingSync).map((entry) => <li key={entry.id}>
+            {entry.prenom || entry.matricule}: {entry.pendingSyncError || (entry.pendingSyncStatus === "pending" ? "en attente de synchronisation" : "à vérifier")}
+          </li>)}
+        </ul>
+      </Panel>}
       {!loading && (
         <>
           <Panel title={editing ? "Modifier un mouvement" : "Enregistrer une entrée de matériel"}>
@@ -355,11 +381,11 @@ export default function MaterielsStar() {
                             <td className="whitespace-nowrap px-3 py-3">
                               <div className="flex items-center gap-1">
                                 <Button type="button" variant="ghost" size="icon" aria-label="Imprimer ce mouvement" title="Imprimer" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
-                                {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Modifier le mouvement" title="Modifier" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>}
-                                {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title={entry.heureSortie ? "Annuler" : "Enregistrez d’abord la sortie pour annuler"} className="text-destructive hover:text-destructive" disabled={!entry.heureSortie || deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
-                                <RegistryAuditHistory entity="materiel_star" recordId={entry.id} />
-                                <RegistryAttachments entity="materiel_star" recordId={entry.id} siteId={site?.id} />
-                                {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : "Sortie"}</Button>}
+                                {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" disabled={entry.pendingSync} aria-label="Modifier le mouvement" title="Modifier après synchronisation" onClick={() => beginEdit(entry)}><Pencil className="size-4" /></Button>}
+                                {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title={entry.id.startsWith("pending-") ? "Supprimer l’entrée non synchronisée" : entry.heureSortie ? "Annuler" : "Enregistrez d’abord la sortie pour annuler"} className="text-destructive hover:text-destructive" disabled={(!entry.heureSortie && !entry.id.startsWith("pending-")) || deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
+                                {!entry.id.startsWith("pending-") && <RegistryAuditHistory entity="materiel_star" recordId={entry.id} />}
+                                {!entry.id.startsWith("pending-") && <RegistryAttachments entity="materiel_star" recordId={entry.id} siteId={site?.id} />}
+                                {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id || entry.id.startsWith("pending-")} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : entry.id.startsWith("pending-") ? "À synchroniser" : "Sortie"}</Button>}
                                 {entry.heureSortie && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Package className="size-3" />Sorti</span>}
                               </div>
                             </td>

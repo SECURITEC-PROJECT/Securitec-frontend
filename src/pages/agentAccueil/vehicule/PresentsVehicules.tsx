@@ -11,7 +11,7 @@ export default function PresentsVehicules({
   onExit,
 }: {
   rows: VehicleMovement[];
-  onExit: (id: string, passengersOut: number) => Promise<void>;
+  onExit: (id: string, passengersOut: number) => Promise<boolean>;
 }) {
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [passengerCounts, setPassengerCounts] = useState<Record<string, string>>({});
@@ -26,8 +26,9 @@ export default function PresentsVehicules({
     }
     setExitingId(vehicle.id);
     try {
-      await onExit(vehicle.id, count);
-      toast.success(`Sortie enregistrée pour ${vehicle.plate}.`);
+      const pendingSync = await onExit(vehicle.id, count);
+      if (pendingSync) toast.info(`Sortie enregistrée sur cet appareil, en attente de synchronisation pour ${vehicle.plate}.`);
+      else toast.success(`Sortie enregistrée pour ${vehicle.plate}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sortie impossible.");
     } finally {
@@ -65,9 +66,9 @@ export default function PresentsVehicules({
                     onChange={(event) => setPassengerCounts((current) => ({ ...current, [vehicle.id]: event.target.value }))}
                   />
                 </label>
-                <Button size="sm" disabled={exitingId === vehicle.id} onClick={() => void handleExit(vehicle)}>
+                <Button size="sm" disabled={exitingId === vehicle.id || vehicle.id.startsWith("pending-")} title={vehicle.id.startsWith("pending-") ? "Synchronisez l’entrée avant d’enregistrer la sortie" : undefined} onClick={() => void handleExit(vehicle)}>
                   <LogOut aria-hidden="true" />
-                  {exitingId === vehicle.id ? "Enregistrement…" : "Enregistrer la sortie"}
+                  {exitingId === vehicle.id ? "Enregistrement…" : vehicle.id.startsWith("pending-") ? "À synchroniser" : "Enregistrer la sortie"}
                 </Button>
               </div>
             </li>
