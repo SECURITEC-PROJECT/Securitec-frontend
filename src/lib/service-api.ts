@@ -105,6 +105,17 @@ export interface AppNotification {
   entityId: string | null;
 }
 
+export interface AccessBadge {
+  id: string;
+  uid: string;
+  holder: string;
+  zone: string;
+  level: string;
+  active: boolean;
+  siteBanned: boolean;
+  validite: string;
+}
+
 export interface EmptyBottleDelivery {
   id: string;
   date: string;
@@ -166,6 +177,9 @@ export interface VehicleMovement {
   siteId?: string | null;
   site_name?: string | null;
   annuleLe?: string | null;
+  pendingSync?: boolean;
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 export interface CourrierMovement {
@@ -642,6 +656,161 @@ function applyPendingLogisticsWrites<T extends { id: string }>(
   return result;
 }
 
+function pendingVisitor(item: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>[number]): VisitorRecord {
+  const entryDate = String(item.payload.entryDate || item.payload.entry_date || item.createdAt.slice(0, 10));
+  const entryTime = String(item.payload.entryTime || item.payload.entry_time || item.createdAt.slice(11, 16));
+  return {
+    ...item.payload,
+    id: `pending-${item.requestId}`,
+    site_id: item.siteId,
+    full_name: String(item.payload.full_name || ""),
+    company: String(item.payload.company || ""),
+    reason: String(item.payload.reason || ""),
+    entered_at: `${entryDate}T${entryTime}:00`,
+    exited_at: null,
+    pendingSync: true,
+    pendingSyncStatus: item.status || "pending",
+    pendingSyncError: item.lastError,
+  } as VisitorRecord;
+}
+
+function applyPendingVisitorWrites(
+  entries: VisitorRecord[],
+  queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
+): VisitorRecord[] {
+  let result = [...entries];
+  for (const item of queued.filter((entry) => entry.path === "/visitors" || entry.path?.startsWith("/visitors/"))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const path = item.path || "";
+    if (path === "/visitors" && item.method === "POST") {
+      result.unshift(pendingVisitor(item));
+      continue;
+    }
+    const id = path.match(/^\/visitors\/([^/?]+)/)?.[1];
+    if (!id) continue;
+    const visitorId = decodeURIComponent(id);
+    if (item.method === "DELETE") {
+      if (item.status === "conflict" || item.status === "rejected") {
+        result = result.map((entry) => entry.id === visitorId
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : entry);
+      } else {
+        result = result.filter((entry) => entry.id !== visitorId);
+      }
+    } else if (item.method === "PUT") {
+      result = result.map((entry) => entry.id === visitorId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : {
+          ...entry,
+          full_name: String(item.payload.full_name || entry.full_name),
+          company: String(item.payload.company || ""),
+          reason: String(item.payload.reason || ""),
+          badge: String(item.payload.badge || ""),
+          entered_at: `${String(item.payload.entryDate || "")}T${String(item.payload.entryTime || "")}:00`,
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        }
+        : entry);
+    } else if (item.method === "PATCH" && path.endsWith("/exit")) {
+      result = result.map((entry) => entry.id === visitorId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : {
+          ...entry,
+          exited_at: item.createdAt,
+          exit_notes: item.payload.extraEquipment ? `Autre matériel déclaré à la sortie : ${item.payload.extraEquipment}` : "Sortie visiteur enregistrée.",
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        }
+        : entry);
+    }
+  }
+  return result;
+}
+
+function pendingVehicle(item: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>[number]): VehicleMovement {
+  const date = String(item.payload.date || item.createdAt.slice(0, 10));
+  const time = String(item.payload.entryTime || item.createdAt.slice(11, 16));
+  return {
+    ...item.payload,
+    id: `pending-${item.requestId}`,
+    plate: String(item.payload.plate || ""),
+    category: String(item.payload.category || ""),
+    ownerName: String(item.payload.ownerName || ""),
+    passengersEntry: Number(item.payload.passengersEntry || 0),
+    passengersOut: null,
+    entryDate: date,
+    entryTime: time,
+    entered_at: `${date}T${time}:00`,
+    exited_at: null,
+    siteId: item.siteId,
+    pendingSync: true,
+    pendingSyncStatus: item.status || "pending",
+    pendingSyncError: item.lastError,
+  } as VehicleMovement;
+}
+
+function applyPendingVehicleWrites(
+  entries: VehicleMovement[],
+  queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
+): VehicleMovement[] {
+  let result = [...entries];
+  for (const item of queued.filter((entry) => entry.path === "/vehicles" || entry.path?.startsWith("/vehicles/"))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    const path = item.path || "";
+    if (path === "/vehicles" && item.method === "POST") {
+      result.unshift(pendingVehicle(item));
+      continue;
+    }
+    const id = path.match(/^\/vehicles\/([^/?]+)/)?.[1];
+    if (!id) continue;
+    const vehicleId = decodeURIComponent(id);
+    if (item.method === "PUT") {
+      result = result.map((entry) => entry.id === vehicleId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : {
+          ...entry,
+          plate: String(item.payload.plate || entry.plate),
+          ownerName: String(item.payload.ownerName || entry.ownerName),
+          category: String(item.payload.category || entry.category),
+          passengersEntry: Number(item.payload.passengersEntry ?? entry.passengersEntry),
+          entryDate: String(item.payload.date || entry.entryDate),
+          entryTime: String(item.payload.entryTime || entry.entryTime),
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        }
+        : entry);
+    } else if (item.method === "PATCH" && path.endsWith("/exit")) {
+      result = result.map((entry) => entry.id === vehicleId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : {
+          ...entry,
+          exited_at: item.createdAt,
+          exitDate: item.createdAt.slice(0, 10),
+          exitTime: item.createdAt.slice(11, 16),
+          passengersOut: item.payload.passengersOut == null ? entry.passengersOut : Number(item.payload.passengersOut),
+          pendingSync: true,
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        }
+        : entry);
+    } else if (item.method === "DELETE") {
+      result = result.map((entry) => entry.id === vehicleId
+        ? item.status === "conflict" || item.status === "rejected"
+          ? { ...entry, pendingSync: true, pendingSyncStatus: item.status, pendingSyncError: item.lastError }
+          : { ...entry, annuleLe: item.createdAt, pendingSync: true, pendingSyncStatus: item.status || "pending", pendingSyncError: item.lastError }
+        : entry);
+    }
+  }
+  return result;
+}
+
 function applyPendingStarLoadings(
   entries: StarParticulierLoading[],
   queued: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>,
@@ -996,24 +1165,196 @@ export const serviceApi = {
   async deleteJournalConsigne(id: string, siteId: string) {
     return request<{ id: string; deleted: boolean }>(`/consignes-journal/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" });
   },
-  async listVisitors(siteId?: string) { return (await request<{ visitors: VisitorRecord[] }>(`/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).visitors; },
-  async createVisitor(data: unknown) { return (await request<{ visitor: VisitorRecord }>("/visitors", { method: "POST", body: body(data) })).visitor; },
-  async updateVisitor(id: string, data: unknown) { return (await request<{ visitor: VisitorRecord }>(`/visitors/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).visitor; },
+  async listVisitors(siteId?: string) {
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const path = `/visitors${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`;
+    let entries: VisitorRecord[] = [];
+    try {
+      entries = (await request<{ visitors: VisitorRecord[] }>(path)).visitors;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !queued.some((item) => item.path === "/visitors" || item.path?.startsWith("/visitors/"))) throw error;
+    }
+    return applyPendingVisitorWrites(entries, queued);
+  },
+  async createVisitor(data: unknown) {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const serialized = body(payload);
+    try {
+      return (await request<{ visitor: VisitorRecord }>("/visitors", { method: "POST", body: serialized })).visitor;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const queuedPayload = JSON.parse(serialized) as Record<string, unknown>;
+      const siteId = String(queuedPayload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, queuedPayload, [], "/visitors");
+      return pendingVisitor({
+        requestId, userId: sessionStorage.getItem("securitec-session-user-id") || "", siteId,
+        path: "/visitors", method: "POST", payload: queuedPayload, files: [],
+        createdAt: new Date().toISOString(),
+      });
+    }
+  },
+  async updateVisitor(id: string, data: unknown) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée visiteur avant de la modifier.");
+    const path = `/visitors/${encodeURIComponent(id)}`;
+    const payload = JSON.parse(body(data)) as Record<string, unknown>;
+    try {
+      return (await request<{ visitor: VisitorRecord }>(path, { method: "PUT", body: JSON.stringify(payload) })).visitor;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      const requestId = crypto.randomUUID();
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PUT");
+      return {
+        id,
+        full_name: String(payload.full_name || ""),
+        company: String(payload.company || ""),
+        reason: String(payload.reason || ""),
+        badge: String(payload.badge || ""),
+        entered_at: `${String(payload.entryDate || "")}T${String(payload.entryTime || "")}:00`,
+        pendingSync: true,
+        pendingSyncStatus: "pending" as const,
+      };
+    }
+  },
   async deleteVisitor(id: string, siteId?: string) {
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
-    return request<{ id: string; deleted: boolean }>(`/visitors/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: true, pendingSync: true };
+    }
+    const path = `/visitors/${encodeURIComponent(id)}${query}`;
+    try {
+      return await request<{ id: string; deleted: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: true, pendingSync: true };
+    }
   },
   async setVisitorSiteBan(id: string, siteId: string, banned: boolean) {
     return request<{ visitorId: string; siteId: string; banned: boolean }>(`/visitors/${encodeURIComponent(id)}/site-ban`, { method: "PUT", body: body({ siteId, banned }) });
   },
-  async exitVisitor(id: string, data: unknown) { return (await request<{ visitor: any }>(`/visitors/${id}/exit`, { method: "PATCH", body: body(data) })).visitor; },
-  async listVehicles(siteId?: string) { return (await request<{ vehicles: VehicleMovement[] }>(`/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`)).vehicles; },
-  async createVehicle(data: unknown) { return (await request<{ vehicle: VehicleMovement }>("/vehicles", { method: "POST", body: body(data) })).vehicle; },
-  async updateVehicle(id: string, data: unknown) { return (await request<{ vehicle: VehicleMovement }>(`/vehicles/${encodeURIComponent(id)}`, { method: "PUT", body: body(data) })).vehicle; },
-  async deleteVehicle(id: string, siteId: string) { return request<{ id: string; deleted: boolean }>(`/vehicles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" }); },
+  async exitVisitor(id: string, data: unknown, siteId?: string): Promise<Partial<VisitorRecord>> {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée visiteur avant d’enregistrer sa sortie.");
+    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+    const path = `/visitors/${encodeURIComponent(id)}/exit${query}`;
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(JSON.parse(body(data)), requestId);
+    const serialized = body(payload);
+    try {
+      return (await request<{ visitor: VisitorRecord }>(path, { method: "PATCH", body: serialized })).visitor;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, exited_at: new Date().toISOString(), pendingSync: true, pendingSyncStatus: "pending" };
+    }
+  },
+  async listVehicles(siteId?: string) {
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const queued = await getQueuedLogisticsWrites(siteId);
+    const path = `/vehicles${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ""}`;
+    let entries: VehicleMovement[] = [];
+    try {
+      entries = (await request<{ vehicles: VehicleMovement[] }>(path)).vehicles;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !queued.some((item) => item.path === "/vehicles" || item.path?.startsWith("/vehicles/"))) throw error;
+    }
+    return applyPendingVehicleWrites(entries, queued);
+  },
+  async createVehicle(data: unknown) {
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    const serialized = body(payload);
+    try {
+      return (await request<{ vehicle: VehicleMovement }>("/vehicles", { method: "POST", body: serialized })).vehicle;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const queuedPayload = JSON.parse(serialized) as Record<string, unknown>;
+      const siteId = String(queuedPayload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, queuedPayload, [], "/vehicles");
+      return pendingVehicle({
+        requestId, userId: sessionStorage.getItem("securitec-session-user-id") || "", siteId,
+        path: "/vehicles", method: "POST", payload: queuedPayload, files: [],
+        createdAt: new Date().toISOString(),
+      });
+    }
+  },
+  async updateVehicle(id: string, data: unknown) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation du mouvement véhicule avant de le modifier.");
+    const path = `/vehicles/${encodeURIComponent(id)}`;
+    const payload = JSON.parse(body(data)) as Record<string, unknown>;
+    try {
+      return (await request<{ vehicle: VehicleMovement }>(path, { method: "PUT", body: JSON.stringify(payload) })).vehicle;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      const siteId = String(payload.siteId || "");
+      if (!siteId) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, payload, [], path, "PUT");
+      return {
+        id,
+        plate: String(payload.plate || ""),
+        category: String(payload.category || ""),
+        ownerName: String(payload.ownerName || ""),
+        passengersEntry: Number(payload.passengersEntry || 0),
+        passengersOut: payload.passengersOut == null ? null : Number(payload.passengersOut),
+        entryDate: String(payload.date || ""),
+        entryTime: String(payload.entryTime || ""),
+        exitTime: payload.exitTime == null ? null : String(payload.exitTime),
+        entered_at: `${String(payload.date || "")}T${String(payload.entryTime || "")}:00`,
+        exited_at: null,
+        pendingSync: true,
+        pendingSyncStatus: "pending" as const,
+      };
+    }
+  },
+  async deleteVehicle(id: string, siteId: string): Promise<{ id: string; deleted: boolean; cancelled?: boolean; pendingSync?: boolean }> {
+    if (id.startsWith("pending-")) {
+      await removeQueuedLogisticsWrite(id.slice("pending-".length));
+      return { id, deleted: false, cancelled: true, pendingSync: true };
+    }
+    const path = `/vehicles/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`;
+    try {
+      return await request<{ id: string; deleted: boolean; cancelled?: boolean }>(path, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      await queueLogisticsWrite(crypto.randomUUID(), siteId, { siteId }, [], path, "DELETE");
+      return { id, deleted: false, cancelled: true, pendingSync: true };
+    }
+  },
   async exitVehicle(id: string, passengersOut?: number, siteId?: string) {
+    if (id.startsWith("pending-")) throw new Error("Attendez la synchronisation de l’entrée véhicule avant d’enregistrer sa sortie.");
     const params = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
-    return (await request<{ vehicle: Partial<VehicleMovement> }>(`/vehicles/${encodeURIComponent(id)}/exit${params}`, { method: "PATCH", body: body(passengersOut === undefined ? {} : { passengersOut }) })).vehicle;
+    const path = `/vehicles/${encodeURIComponent(id)}/exit${params}`;
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(passengersOut === undefined ? {} : { passengersOut }, requestId);
+    const serialized = body(payload);
+    try {
+      return (await request<{ vehicle: Partial<VehicleMovement> }>(path, { method: "PATCH", body: serialized })).vehicle;
+    } catch (error) {
+      if (!(error instanceof TypeError) || !siteId) throw error;
+      await queueLogisticsWrite(requestId, siteId, payload, [], path, "PATCH");
+      return { id, exited_at: new Date().toISOString(), passengersOut: passengersOut ?? null, pendingSync: true };
+    }
+  },
+  async listBadges() {
+    return request<AccessBadge[]>("/badges");
+  },
+  async scanBadge(uid: string) {
+    return request<{ allowed: boolean; title: string; text: string; badge?: AccessBadge }>("/badges/scan", {
+      method: "POST",
+      body: body({ uid }),
+    });
+  },
+  async updateBadgeStatus(id: string, active: boolean) {
+    return request<AccessBadge>(`/badges/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: body({ active }),
+    });
   },
   async listKeyTypes() { return (await request<{ keyTypes: string[] }>("/access-control/key-types")).keyTypes; },
   async listKeyEmployees(keyType: string, siteId: string) {
@@ -1327,10 +1668,10 @@ export const serviceApi = {
           const replayBody = item.path === "/vigilance"
             ? item.payload.entries
             : { ...item.payload, clientRequestId: item.requestId };
-          const result = await request<{ entry?: any; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
+          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
             method: item.method || "POST", body: body(replayBody),
           });
-          if (!result.entry?.id && !result.id && !result.linked && !result.unlinked
+          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.id && !result.linked && !result.unlinked
             && !(Array.isArray(result.entries) && result.entries.length)) {
             throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
           }

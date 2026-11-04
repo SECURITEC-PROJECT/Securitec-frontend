@@ -96,7 +96,8 @@ export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancel
         : await serviceApi.createVehicle(payload);
       onSaved(vehicle);
       setForm(newMovement());
-      toast.success(editingVehicle ? "Mouvement véhicule modifié." : "Entrée du véhicule enregistrée.");
+      if (vehicle.pendingSync) toast.info("Mouvement enregistré sur cet appareil, en attente de synchronisation.");
+      else toast.success(editingVehicle ? "Mouvement véhicule modifié." : "Entrée du véhicule enregistrée.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {

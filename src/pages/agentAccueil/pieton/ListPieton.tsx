@@ -156,13 +156,13 @@ export default function ListPieton({
                 <td className="whitespace-nowrap py-2 pr-3 font-mono text-xs">{formatTime(visitor.exited_at)}</td>
                 <td className="whitespace-nowrap py-2">
                   <div className="flex items-center gap-1">
-                    {canManageSiteBans && <Button type="button" size="icon" variant="ghost" className={`h-8 w-8 ${visitor.site_banned ? "text-destructive" : ""}`} aria-label={visitor.site_banned ? "Lever l’interdiction sur le site" : "Interdire l’accès au site"} title={visitor.site_banned ? "Lever l’interdiction sur le site" : "Interdire l’accès au site"} onClick={() => void onToggleSiteBan(visitor, !visitor.site_banned)}>
+                    {canManageSiteBans && <Button type="button" size="icon" variant="ghost" disabled={visitor.pendingSync} className={`h-8 w-8 ${visitor.site_banned ? "text-destructive" : ""}`} aria-label={visitor.site_banned ? "Lever l’interdiction sur le site" : "Interdire l’accès au site"} title={visitor.site_banned ? "Lever l’interdiction sur le site" : "Interdire l’accès au site"} onClick={() => void onToggleSiteBan(visitor, !visitor.site_banned)}>
                       {visitor.site_banned ? <ShieldCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
                     </Button>}
                     <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le passage" title="Imprimer au format 80 × 80 mm" onClick={() => printVisitor(visitor)}>
                       <Printer className="h-4 w-4" />
                     </Button>
-                    <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le passage" title="Modifier le passage" onClick={() => onEdit(visitor)}>
+                    <Button type="button" size="icon" variant="ghost" disabled={visitor.pendingSync} className="h-8 w-8" aria-label="Modifier le passage" title="Modifier le passage après synchronisation" onClick={() => onEdit(visitor)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
@@ -170,9 +170,9 @@ export default function ListPieton({
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      aria-label={visitor.exited_at ? "Supprimer le passage" : "La sortie doit être enregistrée avant la suppression"}
-                      title={visitor.exited_at ? "Supprimer le passage" : "Enregistrez la sortie avant de supprimer ce passage"}
-                      disabled={!visitor.exited_at}
+                      aria-label={visitor.exited_at || visitor.id.startsWith("pending-") ? "Supprimer le passage" : "La sortie doit être enregistrée avant la suppression"}
+                      title={visitor.exited_at ? "Supprimer le passage" : visitor.id.startsWith("pending-") ? "Supprimer cette entrée non synchronisée" : "Enregistrez la sortie avant de supprimer ce passage"}
+                      disabled={!visitor.exited_at && !visitor.id.startsWith("pending-")}
                       onClick={() => void onDelete(visitor)}
                     >
                       <Trash2 className="h-4 w-4" />

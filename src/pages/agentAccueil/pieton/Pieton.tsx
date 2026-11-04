@@ -1,5 +1,4 @@
 import { PageHeader, Panel } from "@/components/PageHeader";
-import { rafraichirAnomalies } from "@/hooks/useAnomalies";
 import { useSites } from "@/hooks/useSites";
 import SitePicker from "@/components/SitePicker";
 import { serviceApi } from "@/lib/service-api";
@@ -30,28 +29,38 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
   useEffect(() => {
     let active = true;
     if (!site?.id) return () => { active = false; };
-    serviceApi.listVisitors(site.id)
-      .then((rows) => { if (active) setRegistry({ siteId: site.id, visitors: rows, error: "" }); })
-      .catch((reason) => {
-        if (active) setRegistry({
-          siteId: site.id,
-          visitors: [],
-          error: reason instanceof Error ? reason.message : "Chargement du registre impossible.",
+    const refresh = () => {
+      serviceApi.listVisitors(site.id)
+        .then((rows) => { if (active) setRegistry({ siteId: site.id, visitors: rows, error: "" }); })
+        .catch((reason) => {
+          if (active) setRegistry({
+            siteId: site.id,
+            visitors: [],
+            error: reason instanceof Error ? reason.message : "Chargement du registre impossible.",
+          });
         });
-      });
-    return () => { active = false; };
+    };
+    const onQueueChanged = () => refresh();
+    window.addEventListener("online", refresh);
+    window.addEventListener("securitec-offline-queue-changed", onQueueChanged);
+    refresh();
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("securitec-offline-queue-changed", onQueueChanged);
+    };
   }, [site?.id]);
 
-  const exit = async (id: string): Promise<void> => {
+  const exit = async (id: string): Promise<boolean> => {
     try {
-      const { visitor: exitedVisitor } = await serviceApi.exitVisitor(id, { equipmentOut: false, extraEquipment: "" });
+      const exitedVisitor = await serviceApi.exitVisitor(id, { equipmentOut: false, extraEquipment: "" }, selectedSiteId);
       setRegistry((current) => ({
         ...current,
         visitors: current.visitors.map((visitor) => visitor.id === id
-          ? { ...visitor, exited_at: exitedVisitor.exited_at }
+          ? { ...visitor, exited_at: exitedVisitor.exited_at, pendingSync: exitedVisitor.pendingSync }
           : visitor),
       }));
-      rafraichirAnomalies(); // retire tout de suite l'alerte de la cloche
+      return Boolean(exitedVisitor.pendingSync);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Sortie impossible";
       setRegistry((current) => ({ ...current, error: message }));
@@ -65,7 +74,7 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
       await serviceApi.deleteVisitor(String(visitor.id), visitor.site_id);
       setRegistry((current) => ({ ...current, visitors: current.visitors.filter((entry) => entry.id !== visitor.id) }));
       if (editingVisitor?.id === visitor.id) setEditingVisitor(null);
-      toast.success("Passage visiteur supprimé.");
+      toast.success(visitor.pendingSync ? "Entrée visiteur en attente supprimée de cet appareil." : "Passage visiteur supprimé.");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Suppression du passage impossible.");
     }
@@ -107,6 +116,20 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
       {(error || siteError) && (
         <Panel title="Connexion backend">
           <p className="text-sm text-destructive">{error || siteError}</p>
+        </Panel>
+      )}
+      {visitors.some((visitor) => visitor.pendingSync) && (
+        <Panel title="Synchronisation hors ligne">
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>{visitors.filter((visitor) => visitor.pendingSync).length} mouvement(s) visiteur en attente ou à vérifier. Les décisions d’interdiction de site restent exclusivement en ligne.</p>
+            <ul className="list-inside list-disc">
+              {visitors.filter((visitor) => visitor.pendingSync).map((visitor) => (
+                <li key={visitor.id}>
+                  {visitor.full_name}: {visitor.pendingSyncError || (visitor.pendingSyncStatus === "pending" ? "en attente de synchronisation" : "à vérifier")}
+                </li>
+              ))}
+            </ul>
+          </div>
         </Panel>
       )}
       {loading ? (

@@ -26,7 +26,7 @@ export default function RegistreVehicules({
   rows: VehicleMovement[];
   siteName?: string;
   onEdit: (vehicle: VehicleMovement) => void;
-  onDelete: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<boolean>;
 }) {
   const [search, setSearch] = useState("");
   const [periodStart, setPeriodStart] = useState("");
@@ -58,11 +58,16 @@ export default function RegistreVehicules({
   };
 
   const deleteEntry = async (vehicle: VehicleMovement) => {
-    if (vehicle.annuleLe || !(await confirmDeletion(`Annuler le mouvement du véhicule « ${vehicle.plate} » ? Il restera dans l’historique.`))) return;
+    const message = vehicle.id.startsWith("pending-")
+      ? `Supprimer l’entrée véhicule non synchronisée « ${vehicle.plate} » de cet appareil ?`
+      : `Annuler le mouvement du véhicule « ${vehicle.plate} » ? Il restera dans l’historique.`;
+    if (vehicle.annuleLe || !(await confirmDeletion(message))) return;
     setDeletingId(vehicle.id);
     try {
-      await onDelete(vehicle.id);
-      toast.success("Mouvement véhicule annulé et conservé dans l’historique.");
+      const pendingSync = await onDelete(vehicle.id);
+      if (vehicle.id.startsWith("pending-")) toast.info("Entrée véhicule non synchronisée supprimée de cet appareil.");
+      else if (pendingSync) toast.info("Annulation enregistrée sur cet appareil, en attente de synchronisation.");
+      else toast.success("Mouvement véhicule annulé et conservé dans l’historique.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
@@ -121,7 +126,7 @@ export default function RegistreVehicules({
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le mouvement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(vehicle)}>
                         <Printer className="h-4 w-4" />
                       </Button>
-                      {!vehicle.annuleLe && <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement" onClick={() => onEdit(vehicle)}>
+                      {!vehicle.annuleLe && <Button type="button" size="icon" variant="ghost" disabled={vehicle.pendingSync} className="h-8 w-8" aria-label="Modifier le mouvement" title="Modifier le mouvement après synchronisation" onClick={() => onEdit(vehicle)}>
                         <Pencil className="h-4 w-4" />
                       </Button>}
                       {!vehicle.annuleLe && <Button
@@ -131,13 +136,13 @@ export default function RegistreVehicules({
                         className="h-8 w-8 text-destructive hover:text-destructive"
                         aria-label={vehicle.exited_at ? "Annuler le mouvement" : "La sortie doit être enregistrée avant l’annulation"}
                         title={vehicle.exited_at ? "Annuler le mouvement" : "Enregistrez la sortie avant d’annuler ce mouvement"}
-                        disabled={!vehicle.exited_at || deletingId === vehicle.id}
+                        disabled={(!vehicle.exited_at && !vehicle.id.startsWith("pending-")) || deletingId === vehicle.id}
                         onClick={() => void deleteEntry(vehicle)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>}
-                      <RegistryAuditHistory entity="passage_vehicule" recordId={vehicle.id} />
-                      <RegistryAttachments entity="passage_vehicule" recordId={vehicle.id} siteId={vehicle.siteId} />
+                      {!vehicle.id.startsWith("pending-") && <RegistryAuditHistory entity="passage_vehicule" recordId={vehicle.id} />}
+                      {!vehicle.id.startsWith("pending-") && <RegistryAttachments entity="passage_vehicule" recordId={vehicle.id} siteId={vehicle.siteId} />}
                     </div>
                   </td>
                 </tr>
