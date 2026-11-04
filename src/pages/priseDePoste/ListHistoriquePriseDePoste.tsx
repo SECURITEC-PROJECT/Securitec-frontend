@@ -22,6 +22,11 @@ export interface Shift {
   ended_at: string | null;
   checks?: Record<string, boolean>;
   notes?: string;
+  pendingAgentCount?: number;
+  pendingSync?: boolean;
+  pendingSyncAction?: "open" | "end";
+  pendingSyncStatus?: "pending" | "conflict" | "rejected";
+  pendingSyncError?: string;
 }
 
 interface ListHistoriquePriseDePosteProps {
@@ -46,7 +51,8 @@ export default function ListHistoriquePriseDePoste({
     serviceId,
     agents: members,
   }));
-  const activeShifts = groups.filter((shift) => shift.ended_at === null);
+  const pendingStartShifts = groups.filter((shift) => shift.pendingSyncAction === "open");
+  const activeShifts = groups.filter((shift) => shift.ended_at === null && shift.pendingSyncAction !== "open");
   const finishedShifts = groups.filter((shift) => shift.ended_at !== null);
 
   const todayStr = new Date().toLocaleDateString("fr-FR", { timeZone: MADAGASCAR_TIME_ZONE });
@@ -79,8 +85,14 @@ export default function ListHistoriquePriseDePoste({
                   <p className="font-semibold text-base">{s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</p>
                   <p className="text-sm">Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
                   <p className="text-xs text-muted-foreground">
-                    {s.site_de_travail} · {s.agents?.length || 1} agent(s) · {s.agents?.filter((agent) => agent.fonctionService !== "CHEF").map((agent) => `${agent.prenom} ${agent.nom}`).join(", ") || "aucun autre agent"}
+                    {s.site_de_travail} · {s.pendingAgentCount || s.agents?.length || 1} agent(s) · {s.agents?.filter((agent) => agent.fonctionService !== "CHEF").map((agent) => `${agent.prenom} ${agent.nom}`).join(", ") || "aucun autre agent"}
                   </p>
+                  {s.pendingSync && <p className="mt-1 text-xs text-amber-700">
+                    {s.pendingSyncAction === "end"
+                      ? `Clôture non confirmée — service toujours ouvert sur le serveur${s.pendingSyncStatus === "conflict" ? " (conflit)" : s.pendingSyncStatus === "rejected" ? " (rejetée)" : ""}`
+                      : s.pendingSyncStatus === "conflict" ? "Conflit de synchronisation" : s.pendingSyncStatus === "rejected" ? "Prise de poste rejetée" : "En attente de synchronisation"}
+                    {s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}
+                  </p>}
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Début : <span className="font-mono">{fmt(s.started_at)}</span>
                   </p>
@@ -89,6 +101,7 @@ export default function ListHistoriquePriseDePoste({
                   variant="destructive"
                   size="sm"
                   onClick={() => onOpenEndDialog(s, activeShifts.length === 1)}
+                  disabled={s.pendingSync}
                 >
                   Terminer
                 </Button>
@@ -99,6 +112,23 @@ export default function ListHistoriquePriseDePoste({
           <p className="text-sm text-muted-foreground italic">Aucun agent actuellement en service.</p>
         )}
       </div>
+
+      {pendingStartShifts.length > 0 && <div className="mb-6">
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-700">
+          Prises de poste à confirmer ({pendingStartShifts.length})
+        </h3>
+        <ul className="space-y-3">
+          {pendingStartShifts.map((s) => <li key={s.id} className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <p className="font-semibold">{s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : "Jour"}</p>
+            <p>Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
+            <p className="text-xs text-muted-foreground">{s.site_de_travail} · {s.pendingAgentCount || 1} agent(s)</p>
+            <p className="mt-1 text-xs text-amber-700">
+              {s.pendingSyncStatus === "conflict" ? "Conflit : le serveur n’a pas ouvert ce service" : s.pendingSyncStatus === "rejected" ? "Rejetée : le serveur n’a pas ouvert ce service" : "En attente : ce service n’est pas encore ouvert sur le serveur"}
+              {s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}
+            </p>
+          </li>)}
+        </ul>
+      </div>}
 
       <div>
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -117,6 +147,9 @@ export default function ListHistoriquePriseDePoste({
                     Départ : <strong className="text-foreground">{fmtFull(s.ended_at)}</strong>
                   </span>
                 </div>
+                {s.pendingSync && <p className="text-xs text-amber-700">
+                  Clôture en attente de synchronisation{s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}
+                </p>}
               </li>
             ))}
           </ul>

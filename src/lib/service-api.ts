@@ -625,6 +625,10 @@ function addClientRequestId(data: unknown, requestId: string): Record<string, un
   return { clientRequestId: requestId };
 }
 
+function isNetworkFailure(error: unknown): boolean {
+  return !(error instanceof ApiResponseError) && (!navigator.onLine || error instanceof TypeError);
+}
+
 function pendingDocument(item: Awaited<ReturnType<typeof getQueuedLogisticsWrites>>[number]): SiteDocument {
   const file = item.files[0];
   const name = file?.name || String(item.payload.name || "document");
@@ -1286,16 +1290,157 @@ export const serviceApi = {
   async deleteEmergencyContact(id: string, siteId: string) { return request<{ id: string; deactivated: boolean }>(`/emergency-contacts/${encodeURIComponent(id)}?siteId=${encodeURIComponent(siteId)}`, { method: "DELETE" }); },
   async createSite(data: { name: string; type: "USINE" | "AGENCE"; address?: string }) { return (await request<{ site: { id: string; name: string; type: "USINE" | "AGENCE" } }>("/sites", { method: "POST", body: body(data) })).site; },
   async archiveSite(id: string) { return request<{ id: string; archived: boolean }>(`/sites/${id}`, { method: "DELETE" }); },
-  async listShifts(siteId?: string) {
+  async listShifts(siteId?: string, options: { includePending?: boolean } = {}) {
+    if (navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
     const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
     const result = await request<{ shifts?: any[] } | any[]>(`/shifts${query}`);
-    return Array.isArray(result) ? result : result.shifts || [];
+    const shifts = Array.isArray(result) ? result : result.shifts || [];
+    if (!options.includePending) return shifts;
+    const queued = await getQueuedLogisticsWrites(siteId);
+    for (const item of queued) {
+      if (item.path === "/shifts") {
+        const data = item.payload;
+        const pendingId = `pending-${item.requestId}`;
+        shifts.unshift({
+          id: pendingId,
+          serviceId: pendingId,
+          clientRequestId: item.requestId,
+          matricule: data.chefMatricule,
+          nom: data.nom,
+          prenom: data.prenom,
+          prestataire: data.prestataire || "",
+          site_de_travail: data.site_de_travail || "",
+          siteId: item.siteId,
+          posteId: data.posteId,
+          posteNom: data.posteNom,
+          shiftType: data.shiftType,
+          fonctionService: "CHEF",
+          started_at: item.createdAt,
+          ended_at: null,
+          pendingAgentCount: Array.isArray(data.agentMatricules) ? data.agentMatricules.length + 1 : 1,
+          pendingSync: true,
+          pendingSyncAction: "open",
+          pendingSyncStatus: item.status || "pending",
+          pendingSyncError: item.lastError,
+        });
+      } else if (item.path?.startsWith("/shifts/") && item.path.endsWith("/end")) {
+        const serviceId = decodeURIComponent(item.path.split("/")[2] || "");
+        for (const shift of shifts.filter((row) => row.serviceId === serviceId || row.id === serviceId)) {
+          shift.pendingSync = true;
+          shift.pendingSyncAction = "end";
+          shift.pendingSyncStatus = item.status || "pending";
+          shift.pendingSyncError = item.lastError;
+        }
+      }
+    }
+    return shifts;
   },
   async listShiftPosts(siteId: string) {
     return (await request<{ posts: { id: string; nom: string }[] }>(`/shifts/posts?siteId=${encodeURIComponent(siteId)}`)).posts;
   },
-  async startShift(data: unknown) { return (await request<{ shift: any }>("/shifts", { method: "POST", body: body(data) })).shift; },
-  async endShift(id: string) { return (await request<{ shift: any }>(`/shifts/${id}/end`, { method: "POST", body: "{}" })).shift; },
+  async startShift(data: Record<string, unknown>) {
+    const siteId = String(data.siteId || "");
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    try {
+      return await request<any>("/shifts", { method: "POST", body: JSON.stringify(payload) });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      if (!siteId) throw new Error("Un site est nécessaire pour enregistrer la prise de poste hors connexion.");
+      await queueLogisticsWrite(requestId, siteId, payload, [], "/shifts", "POST");
+      const pendingId = `pending-${requestId}`;
+      return {
+        serviceId: pendingId,
+        posteId: data.posteId,
+        posteNom: data.posteNom,
+        shiftType: data.shiftType,
+        pendingSync: true,
+        shifts: [{
+          id: pendingId,
+          serviceId: pendingId,
+          matricule: data.chefMatricule,
+          nom: data.nom,
+          prenom: data.prenom,
+          prestataire: data.prestataire || "",
+          site_de_travail: data.site_de_travail || "",
+          siteId,
+          posteId: data.posteId,
+          posteNom: data.posteNom,
+          shiftType: data.shiftType,
+          fonctionService: "CHEF",
+          started_at: new Date().toISOString(),
+          ended_at: null,
+          pendingAgentCount: Array.isArray(data.agentMatricules) ? data.agentMatricules.length + 1 : 1,
+          pendingSync: true,
+          pendingSyncAction: "open",
+          pendingSyncStatus: "pending",
+        }],
+      };
+    }
+  },
+  async endShift(id: string, siteId: string) {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const requestId = crypto.randomUUID();
+    const payload = { clientRequestId: requestId };
+    try {
+      return await request<any>(`/shifts/${encodeURIComponent(id)}/end`, {
+        method: "PUT",
+        body: body(payload),
+      });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      if (!siteId) throw new Error("Un site est nécessaire pour enregistrer la clôture hors connexion.");
+      await queueLogisticsWrite(requestId, siteId, payload, [], `/shifts/${encodeURIComponent(id)}/end`, "PUT");
+      return { id, ended_at: new Date().toISOString(), pendingSync: true };
+    }
+  },
+  async listHandovers(siteId?: string) {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const result = await request<any[]>("/handovers");
+    const handovers = Array.isArray(result) ? result : [];
+    const queued = await getQueuedLogisticsWrites(siteId);
+    for (const item of queued) {
+      if (item.path !== "/handovers/complete") continue;
+      const data = item.payload;
+      handovers.unshift({
+        id: `pending-${item.requestId}`,
+        agent_sortant_nom: data.agent_sortant_nom,
+        agent_sortant_prenom: data.agent_sortant_prenom,
+        agent_sortant_matricule: data.agent_sortant_matricule,
+        incoming_nom: data.incoming_nom,
+        incoming_prenom: data.incoming_prenom,
+        incoming_matricule: data.incoming_matricule,
+        equipment: data.equipment,
+        ongoing_events: data.ongoing_events,
+        instructions: data.instructions,
+        inventaire: data.inventaire,
+        documents_retenus: data.documents_retenus,
+        confirmation_sortant: data.confirmation_sortant,
+        confirmation_entrant: data.confirmation_entrant,
+        poste_nom: data.shiftData && typeof data.shiftData === "object" ? (data.shiftData as Record<string, unknown>).posteNom : "",
+        site_id: item.siteId,
+        created_at: item.createdAt,
+        pendingSync: true,
+        pendingSyncStatus: item.status || "pending",
+        pendingSyncError: item.lastError,
+      });
+    }
+    return handovers;
+  },
+  async completeHandover(data: Record<string, unknown>, siteId: string) {
+    if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
+    const requestId = crypto.randomUUID();
+    const payload = addClientRequestId(data, requestId);
+    try {
+      return await request<any>("/handovers/complete", { method: "POST", body: body(payload) });
+    } catch (error) {
+      if (!isNetworkFailure(error)) throw error;
+      if (!siteId) throw new Error("Un site est nécessaire pour enregistrer la passation hors connexion.");
+      await queueLogisticsWrite(requestId, siteId, payload, [], "/handovers/complete", "POST");
+      return { pendingSync: true, clientRequestId: requestId };
+    }
+  },
   async listPassations() { return (await request<{ passations: any[] }>("/passations")).passations; },
   async createPassation(data: unknown) { return (await request<{ passation: any }>("/passations", { method: "POST", body: body(data) })).passation; },
   async listJournalConsignes(siteId: string, activeOnly = false) {
@@ -1824,10 +1969,10 @@ export const serviceApi = {
           const replayBody = item.path === "/vigilance"
             ? item.payload.entries
             : { ...item.payload, clientRequestId: item.requestId };
-          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
+          const result = await request<{ entry?: any; visitor?: { id?: string }; vehicle?: { id?: string }; handover?: { id?: string }; shift?: { serviceId?: string }; serviceId?: string; id?: string; entries?: unknown[]; linked?: boolean; unlinked?: boolean }>(item.path || "/logistics", {
             method: item.method || "POST", body: body(replayBody),
           });
-          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.id && !result.linked && !result.unlinked
+          if (!result.entry?.id && !result.visitor?.id && !result.vehicle?.id && !result.handover?.id && !result.shift?.serviceId && !result.serviceId && !result.id && !result.linked && !result.unlinked
             && !(Array.isArray(result.entries) && result.entries.length)) {
             throw new Error("Le serveur n’a pas confirmé la saisie hors connexion.");
           }
