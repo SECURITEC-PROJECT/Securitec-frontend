@@ -22,7 +22,7 @@ export default function ControleAcces() {
   }, [siteId, sites]);
 
   return (
-    <div className="space-y-6">
+    <div className="keys-module space-y-5">
       <PageHeader
         title="Mouvements des clés"
         subtitle="Enregistrement des sorties et suivi des retours de clés pour le site sélectionné."

@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ContactRound, Handshake, LogOut, PhoneCall, Search, ShieldCheck, Users } from "lucide-react";
+import { ContactRound, Handshake, LogOut, PhoneCall, Search, ShieldCheck, Users } from "lucide-react";
 import type { AuthenticatedUser } from "@/lib/auth-api";
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
@@ -96,25 +96,14 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
   }, [search, user, activePostId, circuitItems, registerItems, providerItems, isPontBasculePost]);
 
   return (
-    <aside className={`${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-64 shrink-0 flex-col border-r bg-sidebar px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
-      <Link to={homeRouteForRole(user?.role ?? 0)} className="mb-6 flex items-center gap-2.5 px-2 text-sidebar-primary">
-        <img src={logoSecuritec} alt="SECURITEC Surveillance" className="h-12 w-11 rounded-md object-contain" />
-        <div>
-          <span className="text-lg font-bold">SECURITEC<span className="text-primary">.</span></span>
-          <p className="text-[10px] font-medium text-muted-foreground">GESTION DU POSTE DE GARDE</p>
+    <aside className={`app-sidebar ${open ? "fixed inset-y-0 left-0 z-50 flex" : "hidden"} w-52 shrink-0 flex-col border-r bg-sidebar px-3 py-4 lg:sticky lg:top-0 lg:flex lg:h-screen`}>
+      <Link to={homeRouteForRole(user?.role ?? 0)} className="app-sidebar-site mb-4 flex items-center gap-2.5 rounded-md px-2 py-1 text-foreground">
+        <img src={logoSecuritec} alt="SECURITEC Surveillance" className="h-9 w-9 rounded-md object-contain" />
+        <div className="min-w-0">
+          <span className="block truncate text-[13px] font-bold">{user?.siteNom || "SECURITEC"}</span>
+          <p className="truncate text-[10px] text-muted-foreground">{activePostId ? activePostName : "Sites suivis par SECURITEC"}</p>
         </div>
       </Link>
-
-      <div className="mb-5 flex items-center gap-2 rounded-md border bg-background p-3">
-        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-primary">
-          <ShieldCheck className="h-4 w-4" />
-        </span>
-        <div className="flex-1">
-          <p className="text-xs font-semibold">{user?.siteNom || "Site non associé"}</p>
-          <p className="text-[10px] text-muted-foreground">{activePostId ? activePostName : role}</p>
-        </div>
-        <ChevronDown className="h-3 w-3 text-muted-foreground" />
-      </div>
 
       <div className="relative mb-4">
         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

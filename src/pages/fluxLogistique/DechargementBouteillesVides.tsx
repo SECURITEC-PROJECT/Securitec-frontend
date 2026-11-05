@@ -325,7 +325,7 @@ export default function DechargementBouteillesVides() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="empty-bottles-module space-y-5">
       <PageHeader
         title="Déchargement de bouteilles vides"
         subtitle="Enregistrement des réceptions de bouteilles vides, par véhicule, format et quantité."
@@ -333,8 +333,8 @@ export default function DechargementBouteillesVides() {
       <div className="max-w-xl"><SitePicker {...siteProps} /></div>
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
 
-      <form onSubmit={(event) => void submit(event)} className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="border-b bg-muted/30 px-5 py-4">
+      <form onSubmit={(event) => void submit(event)} className="empty-bottles-form overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="empty-bottles-form-heading border-b px-5 py-4">
           <h2 className="font-semibold text-primary">{editingEntry ? "Modifier une réception" : "Enregistrer une réception"}</h2>
           <p className="mt-1 text-sm text-muted-foreground">Renseignez les informations du véhicule et les quantités reçues.</p>
         </div>
@@ -483,7 +483,7 @@ export default function DechargementBouteillesVides() {
         </div>
       </form>
 
-      <section id="empty-bottles-print-area" className="space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+      <section id="empty-bottles-print-area" className="empty-bottles-registry space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-3">
           <div>
             <h2 className="font-semibold text-primary">Registre des réceptions</h2>
@@ -491,7 +491,7 @@ export default function DechargementBouteillesVides() {
           </div>
           <div className="flex flex-wrap items-center gap-2 empty-bottles-screen">
             <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">{filteredEntries.length} réception{filteredEntries.length === 1 ? "" : "s"}</span>
-            <Button type="button" variant="outline" className="print:hidden" disabled={!site?.id || !entries.length} onClick={handlePrint}>
+            <Button type="button" variant="outline" className="empty-bottles-print-button print:hidden" disabled={!site?.id || !entries.length} onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
             </Button>
           </div>
@@ -507,8 +507,8 @@ export default function DechargementBouteillesVides() {
           />
         </div>
         <div className="max-h-[520px] overflow-auto empty-bottles-screen">
-          <table className="w-full min-w-[1400px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 bg-muted">
+          <table className="empty-bottles-table w-full min-w-[1400px] border-collapse text-left text-sm">
+            <thead className="empty-bottles-table-head sticky top-0 bg-muted">
               <tr>
                 {["Date", "HE", "HS", "Immatriculation", "Nom du chauffeur", "N° titre", "N° plomb", "Comptage", "Provenance", "Poids", "Actions"].map((heading) => (
                   <th key={heading} className="border-b px-3 py-2 font-medium">{heading}</th>
@@ -517,7 +517,7 @@ export default function DechargementBouteillesVides() {
             </thead>
             <tbody>
               {filteredEntries.map((entry) => (
-                <tr key={entry.id} className="border-b last:border-0">
+                <tr key={entry.id} className={`empty-bottles-table-row border-b last:border-0 ${entry.pendingSync ? "empty-bottles-table-row--pending" : ""}`}>
                   <td className="px-3 py-2">{displayDate(entry.date)}{entry.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                   <td className="px-3 py-2">{entry.heureArrivee || "—"}</td>
                   <td className="px-3 py-2">{entry.heureFin || "—"}</td>
@@ -536,10 +536,10 @@ export default function DechargementBouteillesVides() {
                   <td className="px-3 py-2">{entry.poids}</td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer la réception" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
+                      <Button type="button" size="icon" variant="ghost" className="empty-bottles-row-action h-8 w-8" aria-label="Imprimer la réception" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                         <Printer className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="Modifier la réception" title={entry.pendingSync ? "Disponible après synchronisation" : "Modifier la réception"} disabled={Boolean(entry.pendingSync)} onClick={() => editEntry(entry)}>
+                      <Button type="button" size="icon" variant="ghost" className="empty-bottles-row-action h-8 w-8" aria-label="Modifier la réception" title={entry.pendingSync ? "Disponible après synchronisation" : "Modifier la réception"} disabled={Boolean(entry.pendingSync)} onClick={() => editEntry(entry)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Supprimer la réception" title={entry.pendingSync ? "Disponible après synchronisation" : "Supprimer la réception"} disabled={Boolean(entry.pendingSync) || deletingId === entry.id} onClick={() => void deleteEntry(entry)}>

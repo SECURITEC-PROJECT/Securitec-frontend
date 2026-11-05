@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 
 export default function ApercuSite() {
   return (
-    <section>
+    <section className="dashboard-panel rounded-xl border bg-card p-4">
       <div className="mb-3 flex justify-between">
         <h2 className="text-sm font-semibold">Aperçu du site</h2>
         <Link to="/dashboard/cameras" className="flex items-center gap-1 text-xs text-primary"><Video className="h-3 w-3" /> Mur caméras</Link>
