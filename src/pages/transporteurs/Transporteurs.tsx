@@ -137,10 +137,10 @@ export default function Transporteurs() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="transporters-module space-y-5">
       <PageHeader title="Transporteurs" subtitle="Enregistrez les transporteurs et les véhicules associés à chaque site." />
 
-      <div className="w-full space-y-1.5">
+      <div className="transporters-site w-full space-y-1.5">
         <label htmlFor="transporteur-site" className="text-sm font-medium">Site</label>
         <select id="transporteur-site" value={selectedSiteId} onChange={(event) => { setSiteId(event.target.value); setError(""); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
           {!sites.length && <option value="">Aucun site disponible</option>}
@@ -149,12 +149,12 @@ export default function Transporteurs() {
         {siteError && <p role="alert" className="text-sm text-destructive">{siteError}</p>}
       </div>
 
-      <section className="w-full space-y-4 rounded-lg border bg-card p-5">
+      <section className="transporters-form-card w-full space-y-4 rounded-lg border bg-card p-5">
         <div className="flex items-center gap-2">
           <Truck className="h-5 w-5 text-primary" />
           <h2 className="text-base font-semibold">{editingId ? "Modifier la fiche transporteur" : "Nouveau transporteur"}</h2>
         </div>
-        <form onSubmit={(event) => void submit(event)} className="space-y-4">
+        <form onSubmit={(event) => void submit(event)} className="transporters-form space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label htmlFor="transporteur-name" className="text-sm font-medium">Nom du transporteur *</label>
@@ -193,7 +193,7 @@ export default function Transporteurs() {
 
       {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
 
-      <section className="space-y-3">
+      <section className="transporters-registry space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold">Transporteurs enregistrés <span className="text-sm font-normal text-muted-foreground">({records.length})</span></h2>
           <div className="relative w-full sm:w-80">
@@ -201,9 +201,9 @@ export default function Transporteurs() {
             <Input aria-label="Rechercher un transporteur" placeholder="Nom, véhicule, matricule, téléphone, chauffeur…" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" />
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[850px] border-collapse text-left text-sm">
-            <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
+        <div className="transporters-table-wrap overflow-x-auto rounded-lg border">
+          <table className="transporters-table w-full min-w-[850px] border-collapse text-left text-sm">
+            <thead className="transporters-table-head bg-muted/60 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="border-b px-3 py-3">Transporteur</th>
                 <th className="border-b px-3 py-3">Véhicule</th>
@@ -218,7 +218,7 @@ export default function Transporteurs() {
               {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Chargement des transporteurs…</td></tr>
                 : filtered.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{records.length ? "Aucun transporteur ne correspond à la recherche." : "Aucun transporteur enregistré pour ce site."}</td></tr>
                   : filtered.map((entry) => (
-                    <tr key={entry.id} className="align-top hover:bg-muted/30">
+                    <tr key={entry.id} className="transporters-table-row align-top hover:bg-muted/30">
                       <td className="border-b px-3 py-3 font-medium">{entry.nomTransporteur}</td>
                       <td className="border-b px-3 py-3">{entry.vehicule}</td>
                       <td className="border-b px-3 py-3">{entry.matricule || "—"}</td>

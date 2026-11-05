@@ -332,7 +332,7 @@ export default function DeclarationObjets() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="object-declaration-module space-y-5">
       <PageHeader title="Déclaration objets" subtitle="Remplissez, enregistrez et imprimez la fiche de déclaration d’objets." />
       <div className="max-w-xl declaration-screen">
         <SitePicker
@@ -355,7 +355,7 @@ export default function DeclarationObjets() {
       ) : (
         <>
           <Panel title={editingId ? "Modifier une déclaration enregistrée" : "Nouvelle déclaration"}>
-            <form onSubmit={(event) => void submit(event)} className="space-y-4">
+            <form onSubmit={(event) => void submit(event)} className="object-declaration-form space-y-4">
               <div className="declaration-toolbar flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
                   Le numéro est attribué automatiquement. Imprimez ici trois fiches vierges.
@@ -379,6 +379,7 @@ export default function DeclarationObjets() {
             </form>
           </Panel>
 
+          <div className="object-declaration-registry">
           <Panel title="Historique des déclarations">
             <div className="mb-4 flex flex-wrap items-center gap-3 declaration-screen">
               <div className="relative min-w-[260px] flex-1">
@@ -406,14 +407,14 @@ export default function DeclarationObjets() {
             ) : records.length === 0 ? (
               <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Aucune déclaration enregistrée pour ce site.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[820px] text-left text-sm">
-                  <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
+              <div className="object-declaration-table-wrap overflow-x-auto rounded-lg border">
+                <table className="object-declaration-table w-full min-w-[820px] text-left text-sm">
+                  <thead className="object-declaration-table-head bg-muted/70 text-xs uppercase text-muted-foreground">
                     <tr>{["Date", "N°", "Prénom", "Société", "N° véhicule", "Objets", "Enregistré le", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y">
                     {filteredRecords.map((record) => (
-                      <tr key={record.id}>
+                      <tr key={record.id} className="object-declaration-table-row">
                         <td className="whitespace-nowrap px-3 py-3">{formatDate(record.data.date)}</td>
                         <td className="px-3 py-3">{record.data.referenceNumber || "—"}</td>
                         <td className="px-3 py-3">{record.data.firstName}</td>
@@ -435,6 +436,7 @@ export default function DeclarationObjets() {
               </div>
             )}
           </Panel>
+          </div>
         </>
       )}
 

@@ -178,7 +178,7 @@ export default function MaterielsSousTraitant() {
     ]);
   };
 
-  return <div className="space-y-6">
+  return <div className="subcontractor-materials-module space-y-5">
     <PageHeader title="Matériels sous-traitant" subtitle="Enregistrer les entrées de matériel et leur heure de sortie." />
     <div className="max-w-xl">
       <SitePicker id="materiel-sous-traitant-site" value={selectedSiteName} type={site?.type || siteType} sites={sites} canCreate={canCreateSite} onAdd={addSite}
@@ -194,7 +194,7 @@ export default function MaterielsSousTraitant() {
     </Panel>}
 
     <Panel title={editingId ? "Modifier le mouvement" : "Nouvelle entrée de matériel"}>
-      <form onSubmit={(event) => void submit(event)} className="space-y-5">
+      <form onSubmit={(event) => void submit(event)} className="subcontractor-materials-form space-y-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5"><Label htmlFor="materiel-date">Date</Label><Input id="materiel-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></div>
           <div className="space-y-1.5"><Label htmlFor="materiel-heure-entree">Heure d’entrée</Label><Input id="materiel-heure-entree" type="time" required value={form.heureEntree} onChange={(event) => setForm({ ...form, heureEntree: event.target.value })} /></div>
@@ -209,7 +209,7 @@ export default function MaterielsSousTraitant() {
       </form>
     </Panel>
 
-    <section id="subcontractor-materials-print-area">
+    <section id="subcontractor-materials-print-area" className="subcontractor-materials-registry">
     <Panel title="Registre des matériels sous-traitant">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 subcontractor-materials-screen">
         <div className="relative min-w-[260px] flex-1">
@@ -227,16 +227,16 @@ export default function MaterielsSousTraitant() {
           { label: "Matériel", value: (row) => row.materiels }, { label: "Nombre", value: (row) => row.nombre },
           { label: "Prestataire", value: (row) => row.provider }, { label: "Heure sortie", value: (row) => row.heureSortie }, { label: "Annulé le", value: (row) => row.annuleLe },
         ]} />
-        <Button type="button" variant="outline" className="print:hidden" disabled={loading || !entries.length} onClick={handlePrint}>
+        <Button type="button" variant="outline" className="subcontractor-materials-print-button print:hidden" disabled={loading || !entries.length} onClick={handlePrint}>
           <Printer className="mr-2 size-4" /> Imprimer le registre
         </Button>
       </div>
       {loading ? <div className="subcontractor-materials-screen"><Empty text="Chargement du registre…" /></div> : entries.length === 0 ? <div className="subcontractor-materials-screen"><Empty text="Aucun matériel enregistré sur ce site." /></div> : (
-        <div className="overflow-x-auto rounded-lg border subcontractor-materials-screen"><table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="bg-muted/70 text-xs uppercase text-muted-foreground"><tr>
+        <div className="subcontractor-materials-table-wrap overflow-x-auto rounded-lg border subcontractor-materials-screen"><table className="subcontractor-materials-table w-full min-w-[900px] text-left text-sm">
+          <thead className="subcontractor-materials-table-head bg-muted/70 text-xs uppercase text-muted-foreground"><tr>
             {["Date", "Heure d’entrée", "Matériels", "Nombre", "Prestataire", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}
           </tr></thead>
-          <tbody className="divide-y divide-border/70">{filteredEntries.map((entry) => <tr key={entry.id} className={`align-top hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+          <tbody className="divide-y divide-border/70">{filteredEntries.map((entry) => <tr key={entry.id} className={`subcontractor-materials-table-row align-top ${entry.annuleLe ? "subcontractor-materials-table-row--cancelled" : entry.pendingSync ? "subcontractor-materials-table-row--pending" : entry.heureSortie ? "subcontractor-materials-table-row--exited" : ""}`}>
             <td className="whitespace-nowrap px-3 py-3">{displayDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive">(annulé)</span>}</td>
             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
             <td className="whitespace-pre-wrap break-words px-3 py-3">{entry.materiels}</td>
@@ -249,7 +249,7 @@ export default function MaterielsSousTraitant() {
               {!entry.annuleLe && <Button type="button" variant="ghost" size="icon" aria-label="Annuler le mouvement" title={entry.id.startsWith("pending-") ? "Supprimer l’entrée non synchronisée" : "Annuler"} className="text-destructive hover:text-destructive" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>}
               {!entry.id.startsWith("pending-") && <RegistryAuditHistory entity="materiel_sous_traitant" recordId={entry.id} />}
               {!entry.id.startsWith("pending-") && <RegistryAttachments entity="materiel_sous_traitant" recordId={entry.id} siteId={site?.id} />}
-              {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" disabled={exitingId === entry.id || entry.id.startsWith("pending-")} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : entry.id.startsWith("pending-") ? "À synchroniser" : "Sortie"}</Button>}
+              {!entry.annuleLe && !entry.heureSortie && <Button type="button" variant="outline" size="sm" className="subcontractor-materials-exit-button" disabled={exitingId === entry.id || entry.id.startsWith("pending-")} onClick={() => void registerExit(entry)}><LogOut className="mr-2 size-4" />{exitingId === entry.id ? "Sortie…" : entry.id.startsWith("pending-") ? "À synchroniser" : "Sortie"}</Button>}
               {entry.heureSortie && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Package className="size-3" />Sorti</span>}
             </div></td>
           </tr>)}

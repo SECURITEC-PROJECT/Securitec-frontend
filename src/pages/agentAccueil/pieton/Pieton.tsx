@@ -96,7 +96,7 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
   };
 
   return (
-    <div className="space-y-5">
+    <div className="visitor-access-module space-y-5">
       <PageHeader title="Contrôle des passages" subtitle="Registre des entrées et sorties visiteurs, relié au site et au journal des mouvements." />
       <div className="max-w-xl">
         <SitePicker

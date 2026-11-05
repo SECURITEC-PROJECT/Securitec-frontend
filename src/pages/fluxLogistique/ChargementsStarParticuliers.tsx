@@ -265,7 +265,7 @@ export default function ChargementsStarParticuliers() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="star-loading-module space-y-5">
       <PageHeader title="Chargements STAR, particuliers et palettes" subtitle="Enregistrement et suivi des chargements sortants." />
       <div className="max-w-xl">
         <SitePicker
@@ -289,8 +289,9 @@ export default function ChargementsStarParticuliers() {
       )}
 
       <Panel title={editing ? "Modifier un chargement" : "Enregistrer un chargement"}>
-        <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+        <form className="star-loading-form space-y-5" onSubmit={(event) => void submit(event)}>
           <Tabs
+            className="star-loading-tabs"
             value={form.typeChargement}
             onValueChange={(value) => setForm((current) => ({
               ...current,
@@ -300,7 +301,7 @@ export default function ChargementsStarParticuliers() {
                 : (paletteDesignations.includes(current.designation) ? "" : current.designation),
             }))}
           >
-            <TabsList aria-label="Type de chargement">
+            <TabsList className="star-loading-tab-list" aria-label="Type de chargement">
               <TabsTrigger value="STAR">STAR</TabsTrigger>
               <TabsTrigger value="PARTICULIER">Particulier</TabsTrigger>
               <TabsTrigger value="PALETTE">Palette</TabsTrigger>
@@ -425,7 +426,7 @@ export default function ChargementsStarParticuliers() {
         </form>
       </Panel>
 
-      <section id="star-loading-print-area">
+      <section id="star-loading-print-area" className="star-loading-registry">
       <Panel title={`Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : form.typeChargement === "PALETTE" ? "Palette" : "Particuliers"}`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 star-loading-screen">
           <div className="relative min-w-[260px] flex-1">
@@ -438,20 +439,20 @@ export default function ChargementsStarParticuliers() {
               className="min-h-11 pl-9"
             />
           </div>
-          <Button type="button" variant="outline" className="print:hidden" disabled={loading || !visibleEntries.length} onClick={handlePrint}>
+          <Button type="button" variant="outline" className="star-loading-print-button print:hidden" disabled={loading || !visibleEntries.length} onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
           </Button>
         </div>
         {filteredEntries.length ? (
           <div className="overflow-hidden rounded-lg border star-loading-screen">
             <div className="max-h-[560px] overflow-auto">
-              <table className="w-full min-w-[1500px] text-left text-sm">
-                <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+              <table className="star-loading-table w-full min-w-[1500px] text-left text-sm">
+                <thead className="star-loading-table-head sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr>{["Date", "HE", "HS", "Véhicule", "Immatriculation camion", "Propriétaire", "Nom chauffeur", "Désignation", "Comptage", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb", "Chargement", "Actions"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
-                    <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
+                    <tr key={entry.id} className={`star-loading-table-row align-top ${entry.typeChargement === "STAR" ? "star-loading-table-row--star" : entry.typeChargement === "PALETTE" ? "star-loading-table-row--palette" : "star-loading-table-row--particulier"}`}>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureDebut || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
@@ -467,7 +468,7 @@ export default function ChargementsStarParticuliers() {
                       <td className="px-3 py-3 font-mono text-xs">{entry.lp}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.titre}</td>
                       <td className="px-3 py-3 font-mono text-xs">{entry.plomb}</td>
-                      <td className="px-3 py-3">{entry.typeChargement === "STAR" ? "STAR" : entry.typeChargement === "PALETTE" ? "Palette" : "Particulier"}</td>
+                      <td className="px-3 py-3"><span className={`loading-type-badge loading-type-badge--${entry.typeChargement.toLocaleLowerCase()}`}>{entry.typeChargement === "STAR" ? "STAR" : entry.typeChargement === "PALETTE" ? "Palette" : "Particulier"}</span></td>
                       <td className="whitespace-nowrap px-3 py-3">
                         <div className="flex items-center gap-1">
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label="Imprimer le chargement" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}><Printer className="h-4 w-4" /></Button>

@@ -312,7 +312,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     printWindow.document.close();
   };
 
-  return <div className="space-y-6">
+  return <div className={isScrap ? "scrap-module space-y-5" : "space-y-6"}>
     <PageHeader title={title} subtitle={`Saisie et consultation des ${isScrap ? "sorties de ferrailles" : "sorties d’ordures"} par employé.`} />
     <div className="max-w-xl">
       <SitePicker
@@ -331,7 +331,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     </div>
 
     <Panel title={editingId ? `Modifier un enregistrement ${isScrap ? "ferraille" : "ordure"}` : `Nouvel enregistrement ${isScrap ? "ferraille" : "ordure"}`}>
-      <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+      <form className={isScrap ? "scrap-form space-y-5" : "space-y-5"} onSubmit={(event) => void submit(event)}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor={`${kind}-date`}>Date</Label>
@@ -409,13 +409,13 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       </form>
     </Panel>
 
-    <Panel title={`Historique ${isScrap ? "ferrailles" : "ordures"} (${filteredEntries.length})`}>
+    <div className={isScrap ? "scrap-registry" : ""}><Panel title={`Historique ${isScrap ? "ferrailles" : "ordures"} (${filteredEntries.length})`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-[260px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input aria-label={`Rechercher dans le registre ${kind}`} placeholder={`Rechercher date, matricule, nom, section ou ${isScrap ? "désignation" : "observation"}…`} className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
-        <Button type="button" variant="outline" disabled={loading || !entries.length} onClick={printHistory}>
+        <Button type="button" variant="outline" className={isScrap ? "scrap-print-button" : ""} disabled={loading || !entries.length} onClick={printHistory}>
           <Printer className="mr-2 size-4" />
           Imprimer tout l’historique
         </Button>
@@ -424,13 +424,13 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         ? <Empty text="Chargement du registre…" />
         : currentLoadError ? <p className="py-6 text-center text-sm text-destructive">{currentLoadError}</p>
         : !entries.length ? <Empty text="Aucun enregistrement pour ce site." />
-          : <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[850px] text-left text-sm">
-              <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
+          : <div className={`${isScrap ? "scrap-table-wrap" : ""} overflow-x-auto rounded-lg border`}>
+            <table className={`${isScrap ? "scrap-table" : ""} w-full min-w-[850px] text-left text-sm`}>
+              <thead className={`${isScrap ? "scrap-table-head" : ""} bg-muted/70 text-xs uppercase text-muted-foreground`}>
                 <tr>{["Date", "Heure", "Prénom", "Matricule", "Section", isScrap ? "Désignation" : "Observation", ...(isScrap ? ["Nombre", "Motif"] : []), "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
               </thead>
               <tbody className="divide-y">
-                {filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+                {filteredEntries.map((entry) => <tr key={entry.id} className={isScrap ? "scrap-table-row align-top" : "align-top hover:bg-muted/30"}>
                   <td className="whitespace-nowrap px-3 py-3">{formatDate(entry.date)}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heure}</td>
                   <td className="px-3 py-3">{entry.prenom}</td>
@@ -450,6 +450,6 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
               </tbody>
             </table>
           </div>}
-    </Panel>
+    </Panel></div>
   </div>;
 }

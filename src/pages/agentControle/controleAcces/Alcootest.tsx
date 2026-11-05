@@ -295,9 +295,9 @@ export default function Alcootest() {
   };
 
   return (
-    <div id="alcohol-check-page" data-print-mode={printMode || ""} className="space-y-6">
+    <div id="alcohol-check-page" data-print-mode={printMode || ""} className="alcohol-check-module space-y-5">
       <PageHeader title="Alcootest" subtitle="Enregistrement et suivi des contrôles d’alcoolémie du personnel." />
-      <div className="max-w-xl space-y-1">
+      <div className="alcohol-check-site max-w-xl space-y-1">
         <Label htmlFor="alcohol-check-site">Site concerné</Label>
         <select
           id="alcohol-check-site"
@@ -323,8 +323,8 @@ export default function Alcootest() {
         </Panel>
       )}
 
-      <form className="space-y-4" onSubmit={(event) => void submit(event)}>
-      <section id="alcohol-protocol-print" className="rounded-lg border bg-white p-5 text-slate-900 shadow-sm sm:p-8">
+      <form className="alcohol-check-form space-y-4" onSubmit={(event) => void submit(event)}>
+      <section id="alcohol-protocol-print" className="alcohol-protocol-sheet rounded-lg border bg-white p-5 text-slate-900 shadow-sm sm:p-8">
         <div className="mx-auto max-w-5xl">
           <header className="mb-6 text-center">
             <div className="mb-5 text-2xl font-black tracking-widest text-red-800">STAR ★</div>
@@ -395,7 +395,7 @@ export default function Alcootest() {
               }}
             />
           </div>
-          <div className="mt-5 flex flex-wrap justify-end gap-2 print:hidden">
+          <div className="alcohol-protocol-actions mt-5 flex flex-wrap justify-end gap-2 print:hidden">
             {editing && <Button type="button" variant="outline" disabled={saving} onClick={resetForm}><X /> Annuler</Button>}
             <Button type="button" variant="outline" disabled={!siteId || saving} onClick={() => handlePrint("protocol")}><Printer /> Imprimer le PV</Button>
             <Button type="submit" disabled={saving || !siteId}>
@@ -407,7 +407,7 @@ export default function Alcootest() {
       </section>
       </form>
 
-      <section id="alcohol-registry-print-area">
+      <section id="alcohol-registry-print-area" className="alcohol-check-registry">
       <Panel title="Registre des alcootests">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 alcohol-registry-screen">
           <div className="relative min-w-[260px] flex-1">
@@ -432,9 +432,9 @@ export default function Alcootest() {
           </Button>
         </div>
         {filteredEntries.length ? (
-          <div className="overflow-hidden rounded-lg border alcohol-registry-screen">
+          <div className="alcohol-check-table-wrap overflow-hidden rounded-lg border alcohol-registry-screen">
             <div className="max-h-[560px] overflow-auto">
-              <table className="w-full table-fixed text-left text-sm">
+              <table className="alcohol-check-table w-full table-fixed text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr>
                     <th className="w-[12%] border-b px-3 py-3 font-medium">Date</th>
@@ -450,7 +450,7 @@ export default function Alcootest() {
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
-                    <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+                    <tr key={entry.id} className={`alcohol-check-table-row align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block font-sans text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heure}</td>
                       <td className="break-words px-3 py-3 font-mono text-xs">{entry.matricule || "—"}</td>

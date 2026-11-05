@@ -277,7 +277,7 @@ export default function QuestionnaireVisiteur() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="visitor-questionnaire-module space-y-5">
       <PageHeader
         title="Questionnaire visiteur BPH02"
         subtitle="Remplissez, enregistrez et consultez les questionnaires par site."
@@ -303,7 +303,7 @@ export default function QuestionnaireVisiteur() {
       ) : (
         <>
           <Panel title={editingId ? "Modifier un questionnaire enregistré" : "Nouveau questionnaire"}>
-            <form onSubmit={(event) => void submit(event)} className="space-y-4">
+            <form onSubmit={(event) => void submit(event)} className="visitor-questionnaire-form space-y-4">
               <div className="questionnaire-toolbar flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">Les pointillés du modèle sont remplacés par des champs. Les réponses se cochent une seule fois par question.</p>
                 <div className="flex flex-wrap gap-2">
@@ -377,6 +377,7 @@ export default function QuestionnaireVisiteur() {
             </form>
           </Panel>
 
+          <div className="visitor-questionnaire-registry">
           <Panel title="Historique des questionnaires">
             <div className="mb-4 flex flex-wrap items-center gap-3 questionnaire-screen">
               <div className="relative min-w-[260px] flex-1">
@@ -396,14 +397,14 @@ export default function QuestionnaireVisiteur() {
             ) : records.length === 0 ? (
               <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Aucun questionnaire enregistré pour ce site.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[850px] text-left text-sm">
-                  <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
+              <div className="visitor-questionnaire-table-wrap overflow-x-auto rounded-lg border">
+                <table className="visitor-questionnaire-table w-full min-w-[850px] text-left text-sm">
+                  <thead className="visitor-questionnaire-table-head bg-muted/70 text-xs uppercase text-muted-foreground">
                     <tr>{["Date", "Nom", "Prénom", "Motif", "Enregistré le", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y">
                     {filteredRecords.map((record) => (
-                      <tr key={record.id}>
+                      <tr key={record.id} className="visitor-questionnaire-table-row">
                         <td className="whitespace-nowrap px-3 py-3">{formatDate(record.data.date)}{record.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={record.pendingSyncError || undefined}>{record.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : record.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                         <td className="px-3 py-3">{record.data.lastName}</td>
                         <td className="px-3 py-3">{record.data.firstName}</td>
@@ -424,6 +425,7 @@ export default function QuestionnaireVisiteur() {
               </div>
             )}
           </Panel>
+          </div>
         </>
       )}
 
