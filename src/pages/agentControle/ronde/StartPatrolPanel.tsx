@@ -23,6 +23,6 @@ export default function StartPatrolPanel({ route, setRoute, sites, siteId, setSi
     <Label htmlFor="patrol-route">Nom du parcours</Label>
     <Input id="patrol-route" value={route} onChange={(event) => setRoute(event.target.value)} className="mb-3 mt-1" disabled={saving} />
     <p className="text-sm text-muted-foreground">L’heure de début est enregistrée au démarrage. À la fin, renseignez les observations puis clôturez la ronde. Ces informations correspondent à la rubrique « Patrouille ou ronde » du rapport Excel.</p>
-    <Button className="mt-4 w-full" onClick={onStart} disabled={saving || !sites.length || !route.trim()}>{saving ? "Démarrage…" : "Démarrer la ronde"}</Button>
+    <Button className="patrol-start-button mt-4 w-full" onClick={onStart} disabled={saving || !sites.length || !route.trim()}>{saving ? "Démarrage…" : "Démarrer la ronde"}</Button>
   </Panel>;
 }

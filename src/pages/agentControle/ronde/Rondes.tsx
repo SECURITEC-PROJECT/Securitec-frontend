@@ -112,9 +112,9 @@ export default function Rondes() {
     return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
   };
 
-  return <div className="space-y-6">
+  return <div className="patrol-module space-y-5">
     <PageHeader title="Patrouilles et rondes" subtitle="Suivi des rondes de sécurité du site" />
-    <div className="max-w-xl">
+    <div className="patrol-site-picker max-w-xl">
       <label htmlFor="patrol-site" className="mb-1 block text-sm font-medium">Site de travail</label>
       <select id="patrol-site" value={selectedSiteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
         {!sites.length && <option value="">Aucun site disponible</option>}
@@ -122,7 +122,7 @@ export default function Rondes() {
       </select>
       {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
     </div>
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="patrol-panels grid gap-4 lg:grid-cols-2">
       {active ? <ActivePatrolPanel active={active} checkpoints={active.checkpoints || []} observations={observations} setObservations={setObservations} onCheck={check} onFinish={finish} fmtTime={fmtTime} saving={saving} />
         : <StartPatrolPanel route={route} setRoute={setRoute} sites={sites} siteId={selectedSiteId} setSiteId={setSiteId} onStart={start} saving={saving} />}
       <PatrolHistoryPanel data={patrols} fmt={fmtTime} />

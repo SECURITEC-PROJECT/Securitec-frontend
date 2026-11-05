@@ -28,7 +28,7 @@ export default function PatrolHistoryPanel({ data, fmt }: PatrolHistoryPanelProp
             const doneCount = c.filter((x) => x.at).length;
 
             return (
-              <li key={p.id} className="py-2.5 text-sm space-y-1">
+              <li key={p.id} className={`patrol-history-card rounded-lg border p-3 text-sm space-y-2 ${p.pendingSync ? "patrol-history-card--pending" : ""}`}>
                 <div className="flex justify-between items-center font-medium">
                   <span className="text-primary font-semibold">{p.route_name}</span>
                   <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">

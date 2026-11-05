@@ -255,14 +255,14 @@ export default function DechargementMatierePremiere() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="raw-material-module space-y-5">
       <PageHeader
         title="Déchargement matière première"
         subtitle="Enregistrement des réceptions de matière première"
       />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
       <Panel title={editingId ? "Modifier un déchargement" : "Réception de matière première"}>
-          <form className="w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
+          <form className="raw-material-form w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
             <SitePicker
               id="matiere-site"
               value={selectedSiteName}
@@ -341,7 +341,7 @@ export default function DechargementMatierePremiere() {
             </div>
           </form>
       </Panel>
-      <section id="raw-material-print-area">
+      <section id="raw-material-print-area" className="raw-material-registry">
       <Panel title="Registre des déchargements">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 raw-material-screen">
           <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">
@@ -365,7 +365,7 @@ export default function DechargementMatierePremiere() {
               onChange={(event) => setSearchDate(event.target.value)}
             />
           </div>
-          <Button type="button" variant="outline" className="print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
+          <Button type="button" variant="outline" className="raw-material-print-button print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
           </Button>
         </div>
@@ -373,8 +373,8 @@ export default function DechargementMatierePremiere() {
           <p className="raw-material-screen text-sm text-destructive">{entriesError}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border raw-material-screen">
-            <table className="w-full min-w-[1000px] text-left text-sm">
-              <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
+            <table className="raw-material-table w-full min-w-[1000px] text-left text-sm">
+              <thead className="raw-material-table-head bg-muted/60 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Heure de pointe</th>
@@ -395,7 +395,7 @@ export default function DechargementMatierePremiere() {
                     {entries.length === 0 ? "Aucun déchargement enregistré." : "Aucun résultat pour ces critères."}
                   </td></tr>
                 ) : filteredEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-muted/30">
+                  <tr key={entry.id} className="raw-material-table-row">
                     <td className="whitespace-nowrap px-4 py-3">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td className="px-4 py-3">{entry.heurePointe || "—"}</td>
                     <td className="px-4 py-3">{entry.vehicule || "—"}</td>
@@ -410,6 +410,7 @@ export default function DechargementMatierePremiere() {
                           type="button"
                           variant="ghost"
                           size="icon"
+                          className="raw-material-row-action"
                           aria-label="Imprimer ce déchargement"
                           title="Imprimer"
                           onClick={() => printEntry(entry)}
@@ -420,6 +421,7 @@ export default function DechargementMatierePremiere() {
                           type="button"
                           variant="ghost"
                           size="icon"
+                          className="raw-material-row-action"
                           aria-label="Modifier ce déchargement"
                           title="Modifier"
                           disabled={Boolean(deletingId)}

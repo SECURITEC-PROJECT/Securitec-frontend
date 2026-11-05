@@ -96,14 +96,14 @@ export default function RegistreVehicules({
           { label: "Nombre sortie", value: (row) => row.passengersOut }, { label: "Heure sortie", value: (row) => row.exitTime },
           { label: "Annulé le", value: (row) => row.annuleLe },
         ]} />
-        <Button type="button" variant="outline" className="print:hidden" disabled={!rows.length} onClick={handlePrint}>
+        <Button type="button" variant="outline" className="vehicle-print-button print:hidden" disabled={!rows.length} onClick={handlePrint}>
           <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
         </Button>
       </div>
       <div className="overflow-hidden rounded-lg border vehicle-registry-screen">
         <div className="max-h-[560px] overflow-auto">
-          <table className="w-full min-w-[1050px] text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+          <table className="vehicle-registry-table w-full min-w-[1050px] text-left text-sm">
+            <thead className="vehicle-table-head sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
               <tr>
                 {["Date", "Matricule du véhicule", "Propriétaire (prénom)", "Type de propriétaire", "Personnes (entrée)", "Heure d’entrée", "Personnes (sortie)", "Heure de sortie", "Actions"].map((heading) => (
                   <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-medium">{heading}</th>
@@ -112,7 +112,7 @@ export default function RegistreVehicules({
             </thead>
             <tbody className="divide-y divide-border/70">
               {filtered.map((vehicle) => (
-                <tr key={vehicle.id} className={`transition-colors hover:bg-muted/30 ${vehicle.annuleLe ? "text-muted-foreground" : ""}`}>
+                <tr key={vehicle.id} className={`vehicle-table-row ${vehicle.annuleLe ? "vehicle-table-row--cancelled" : ""}`}>
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(vehicle.entryDate)}{vehicle.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-medium">{vehicle.plate}</td>
                   <td className="px-3 py-3">{vehicle.ownerName || "—"}</td>

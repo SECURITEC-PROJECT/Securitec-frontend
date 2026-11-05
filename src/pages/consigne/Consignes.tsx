@@ -130,7 +130,7 @@ export default function Consignes() {
     window.print();
   };
 
-  return <div className="space-y-6">
+  return <div className="consigne-module space-y-5">
     <PageHeader title="Consignes" subtitle="Saisir et consulter les consignes du site." />
     <div className="max-w-sm space-y-1.5">
       <label htmlFor="consigne-site" className="text-sm font-medium">Site</label>
@@ -141,12 +141,12 @@ export default function Consignes() {
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
     </div>
 
-    <section className="w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="flex items-center gap-3 border-b bg-muted/30 px-5 py-4">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ClipboardList className="size-5" /></span>
+    <section className="consigne-form-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="consigne-form-heading flex items-center gap-3 border-b px-5 py-4">
+        <span className="consigne-form-icon flex size-10 items-center justify-center rounded-lg"><ClipboardList className="size-5" /></span>
         <div><h2 className="font-semibold">{editingId ? "Modifier la consigne" : "Nouvelle consigne"}</h2><p className="text-sm text-muted-foreground">Indiquez quand, par qui et à qui la consigne est transmise.</p></div>
       </div>
-      <form onSubmit={(event) => void submit(event)} className="space-y-4 p-4 sm:p-6">
+      <form onSubmit={(event) => void submit(event)} className="consigne-form space-y-4 p-4 sm:p-6">
         <div className="space-y-1.5"><label htmlFor="consigne-date" className="text-sm font-medium">Date d’effet</label><input id="consigne-date" type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value, dateFin: current.dateFin === current.date ? event.target.value : current.dateFin }))} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="consigne-heure" className="text-sm font-medium">Heure</label><input id="consigne-heure" type="time" required value={form.heure} onChange={(event) => setForm({ ...form, heure: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="consigne-emetteur" className="text-sm font-medium">Émetteur</label><input id="consigne-emetteur" required maxLength={255} value={form.emetteur} onChange={(event) => setForm({ ...form, emetteur: event.target.value })} placeholder="Nom de l'émetteur" className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
@@ -166,12 +166,12 @@ export default function Consignes() {
       </form>
     </section>
 
-    <section id="consignes-print-area" className="space-y-3">
+    <section id="consignes-print-area" className="consigne-registry space-y-3">
       <div className="flex items-center justify-between print:hidden">
         <div><h2 className="text-lg font-semibold">Consignes enregistrées</h2><p className="text-sm text-muted-foreground">{entries.length} consigne(s)</p></div>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
-          <Button type="button" variant="outline" size="sm" disabled={loading || !entries.length} onClick={handlePrint}><Printer className="mr-2 size-4" />Imprimer le registre</Button>
+          <Button type="button" variant="outline" size="sm" className="consigne-toolbar-button" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
+          <Button type="button" variant="outline" size="sm" className="consigne-toolbar-button" disabled={loading || !entries.length} onClick={handlePrint}><Printer className="mr-2 size-4" />Imprimer le registre</Button>
         </div>
       </div>
       <div className="relative print:hidden">
@@ -184,13 +184,13 @@ export default function Consignes() {
           className="min-h-11 pl-9"
         />
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card print:hidden">
-        <table className="w-full min-w-[1150px] border-collapse text-left text-sm">
-          <thead className="bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
+      <div className="consigne-table-wrap overflow-x-auto rounded-xl border bg-card print:hidden">
+        <table className="consigne-table w-full min-w-[1150px] border-collapse text-left text-sm">
+          <thead className="consigne-table-head bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
             {(["Date", "Heure", "Postes visés", "Émetteur", "Destinataire", "Consigne", "Validité", "Suivi de lecture"] as const).map((heading) => <th key={heading} className="border-b px-4 py-3">{heading}</th>)}
             <th className="w-28 border-b px-4 py-3 text-right">Actions</th>
           </tr></thead>
-          <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+          <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className={`consigne-table-row align-top ${entry.lectures?.some((receipt) => !receipt.readAt) ? "consigne-table-row--unread" : "consigne-table-row--read"}`}>
             <td className="whitespace-nowrap border-b px-4 py-3">{String(entry.date).slice(0, 10)}</td>
             <td className="whitespace-nowrap border-b px-4 py-3">{entry.heure}</td>
             <td className="border-b px-4 py-3 text-xs">{entry.tousPostes ? "Tous les postes" : (entry.posteIds || []).map((id) => posts.find((post) => post.id === id)?.nom || id).join(", ") || entry.posteNom || "Tous les postes"}</td>
