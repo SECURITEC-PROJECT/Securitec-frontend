@@ -41,7 +41,7 @@ export default function ActivePatrolPanel({ active, checkpoints, observations, s
     </div>
     <div className="mb-4 space-y-2">
       <Label>Points de contrôle</Label>
-      {checkpoints.map((point, index) => <label key={`${point.name}-${index}`} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+      {checkpoints.map((point, index) => <label key={`${point.name}-${index}`} className={`patrol-checkpoint flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${point.at ? "patrol-checkpoint--done" : ""}`}>
         <input type="checkbox" checked={Boolean(point.at)} disabled={saving || active.pendingFinish} onChange={() => onCheck(index)} />
         <span className="flex-1">{point.name}</span>
         {point.at && <span className="text-xs text-muted-foreground">{fmtTime(point.at)}</span>}
@@ -49,6 +49,6 @@ export default function ActivePatrolPanel({ active, checkpoints, observations, s
     </div>
     <Label htmlFor="patrol-observations" className="mb-1 block">Observations</Label>
     <Textarea id="patrol-observations" value={observations} onChange={(event) => setObservations(event.target.value)} placeholder="Observations de la patrouille ou de la ronde…" disabled={saving || active.pendingFinish} />
-    <Button className="mt-4 w-full" onClick={onFinish} disabled={saving || active.pendingFinish}>{active.pendingFinish ? "Clôture en attente…" : saving ? "Enregistrement…" : "Enregistrer la fin de ronde"}</Button>
+    <Button className="patrol-finish-button mt-4 w-full" onClick={onFinish} disabled={saving || active.pendingFinish}>{active.pendingFinish ? "Clôture en attente…" : saving ? "Enregistrement…" : "Enregistrer la fin de ronde"}</Button>
   </Panel>;
 }

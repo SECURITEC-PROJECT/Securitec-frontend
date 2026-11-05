@@ -254,7 +254,7 @@ export default function MaterielsStar() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="star-materials-module space-y-5">
       <PageHeader title="Matériels Star" subtitle="Suivi des entrées et sorties de matériels Star." />
       <div className="max-w-xl">
         <SitePicker
@@ -282,7 +282,7 @@ export default function MaterielsStar() {
       {!loading && (
         <>
           <Panel title={editing ? "Modifier un mouvement" : "Enregistrer une entrée de matériel"}>
-            <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+            <form className="star-materials-form space-y-5" onSubmit={(event) => void submit(event)}>
               <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="star-material-date">Date</Label>
@@ -344,7 +344,7 @@ export default function MaterielsStar() {
             </form>
           </Panel>
 
-          <section id="star-materials-print-area">
+          <section id="star-materials-print-area" className="star-materials-registry">
             <Panel title="Registre des matériels Star">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 star-materials-screen">
                 <div className="relative min-w-[260px] flex-1">
@@ -363,14 +363,14 @@ export default function MaterielsStar() {
               </div>
               {loading ? <div className="star-materials-screen"><Empty text="Chargement du registre…" /></div> : entries.length ? (
                 <>
-                  <div className="overflow-x-auto rounded-lg border star-materials-screen">
-                    <table className="w-full min-w-[1050px] text-left text-sm">
-                      <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
+                  <div className="star-materials-table-wrap overflow-x-auto rounded-lg border star-materials-screen">
+                    <table className="star-materials-table w-full min-w-[1050px] text-left text-sm">
+                      <thead className="star-materials-table-head bg-muted/70 text-xs uppercase text-muted-foreground">
                           <tr>{["Date", "Heure d’entrée", "Prénom", "Matricule", "Prestataire", "Matériels / nombre", "Heure de sortie", "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
                       </thead>
                       <tbody className="divide-y divide-border/70">
                         {filteredEntries.map((entry) => (
-                          <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+                          <tr key={entry.id} className={`star-materials-table-row align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
                             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{displayDate(entry.date)}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}</td>
                             <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                             <td className="px-3 py-3 font-medium">{entry.prenom}</td>

@@ -71,18 +71,18 @@ export default function ListHistoriquePriseDePoste({
   return (
     <Panel title="Services en cours & Historique">
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="shift-section-heading mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           En service ({activeShifts.length}) · <span className="normal-case font-normal text-xs">{todayStr}</span>
         </h3>
         {activeShifts.length > 0 ? (
-          <ul className="space-y-3">
+          <ul className="shift-active-list space-y-3">
             {activeShifts.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center justify-between rounded-md border p-3 text-sm bg-background shadow-sm"
+                className="shift-active-card flex items-center justify-between rounded-md border p-3 text-sm bg-background shadow-sm"
               >
                 <div>
-                  <p className="font-semibold text-base">{s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-semibold text-base"><span>{s.posteNom || "Poste non renseigné"}</span><span className={`shift-type-pill ${s.shiftType === "NUIT" ? "shift-type-pill--night" : "shift-type-pill--day"}`}>{s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</span></p>
                   <p className="text-sm">Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
                   <p className="text-xs text-muted-foreground">
                     {s.site_de_travail} · {s.pendingAgentCount || s.agents?.length || 1} agent(s) · {s.agents?.filter((agent) => agent.fonctionService !== "CHEF").map((agent) => `${agent.prenom} ${agent.nom}`).join(", ") || "aucun autre agent"}
@@ -98,8 +98,8 @@ export default function ListHistoriquePriseDePoste({
                   </p>
                 </div>
                 <Button
-                  variant="destructive"
                   size="sm"
+                  className="shift-end-button"
                   onClick={() => onOpenEndDialog(s, activeShifts.length === 1)}
                   disabled={s.pendingSync}
                 >
@@ -117,9 +117,9 @@ export default function ListHistoriquePriseDePoste({
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-700">
           Prises de poste à confirmer ({pendingStartShifts.length})
         </h3>
-        <ul className="space-y-3">
-          {pendingStartShifts.map((s) => <li key={s.id} className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-            <p className="font-semibold">{s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : "Jour"}</p>
+        <ul className="shift-pending-list space-y-3">
+          {pendingStartShifts.map((s) => <li key={s.id} className="shift-pending-card rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <p className="flex flex-wrap items-center gap-2 font-semibold"><span>{s.posteNom || "Poste non renseigné"}</span><span className="shift-type-pill shift-type-pill--pending">{s.shiftType === "NUIT" ? "Nuit" : "Jour"}</span></p>
             <p>Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
             <p className="text-xs text-muted-foreground">{s.site_de_travail} · {s.pendingAgentCount || 1} agent(s)</p>
             <p className="mt-1 text-xs text-amber-700">
@@ -130,29 +130,20 @@ export default function ListHistoriquePriseDePoste({
         </ul>
       </div>}
 
-      <div>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="shift-finished-section">
+        <h3 className="shift-section-heading mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Historique des terminés
         </h3>
         {finishedShifts.length > 0 ? (
-          <ul className="divide-y space-y-2">
-            {finishedShifts.map((s) => (
-              <li key={s.id} className="py-2.5 text-sm">
-                <div className="flex justify-between font-medium">
-                  <span>
-                    {s.posteNom || "Poste non renseigné"} · {s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"} — {s.nom} {s.prenom} ({s.site_de_travail}, {s.agents?.length || 1} agent(s))
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    Prise : {fmtFull(s.started_at)} <br />
-                    Départ : <strong className="text-foreground">{fmtFull(s.ended_at)}</strong>
-                  </span>
-                </div>
-                {s.pendingSync && <p className="text-xs text-amber-700">
-                  Clôture en attente de synchronisation{s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}
-                </p>}
-              </li>
-            ))}
-          </ul>
+          <div className="shift-history-table-wrap overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr><th>Poste / Site</th><th>Service</th><th>Équipe</th><th>Prise</th><th>Fin</th><th>État</th></tr></thead><tbody>
+            {finishedShifts.map((s) => <tr key={s.id}>
+              <td><strong>{s.posteNom || "Poste non renseigné"}</strong><small className="block text-muted-foreground">{s.site_de_travail}</small></td>
+              <td><span className={`shift-type-pill ${s.shiftType === "NUIT" ? "shift-type-pill--night" : "shift-type-pill--day"}`}>{s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</span></td>
+              <td>{s.agents?.length || 1} agent(s)<small className="block text-muted-foreground">Chef : {s.prenom} {s.nom}</small></td>
+              <td className="whitespace-nowrap">{fmtFull(s.started_at)}</td><td className="whitespace-nowrap">{fmtFull(s.ended_at)}</td>
+              <td><span className="shift-closed-pill">Terminé</span>{s.pendingSync && <small className="mt-1 block text-amber-700">Synchronisation en attente{s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}</small>}</td>
+            </tr>)}
+          </tbody></table></div>
         ) : (
           <Empty text="Aucune prise de poste terminée" />
         )}

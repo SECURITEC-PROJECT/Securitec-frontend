@@ -90,7 +90,7 @@ export default function Vehicule() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="vehicle-module space-y-5">
       <PageHeader title="Mouvements véhicule (Entrée / Sortie)" subtitle="Enregistrez les entrées et sorties des véhicules et le nombre de personnes à bord." />
       <div className="max-w-xl">
         <SitePicker

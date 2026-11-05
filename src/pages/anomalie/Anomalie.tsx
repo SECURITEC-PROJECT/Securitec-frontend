@@ -259,7 +259,7 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
     window.print();
   };
 
-  return <div className="space-y-6">
+  return <div className="anomaly-module space-y-5">
     <PageHeader
       title={activeType === "VIOLATION_PROCEDURE" ? "Violation de procédure" : "Anomalie et Divers"}
       subtitle="Saisir et consulter les signalements du site."
@@ -283,7 +283,7 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
         }
         setActiveType(value);
       }}
-      className="space-y-4"
+      className="anomaly-tabs space-y-4"
     >
       <TabsList aria-label="Type de signalement">
         <TabsTrigger value="ANOMALIE">Anomalie</TabsTrigger>
@@ -292,12 +292,12 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
       </TabsList>
     </Tabs>
 
-    <section className="w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="flex items-center gap-3 border-b bg-muted/30 px-5 py-4">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><ClipboardList className="size-5" /></span>
+    <section className="anomaly-form-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="anomaly-form-heading flex items-center gap-3 border-b px-5 py-4">
+        <span className="anomaly-form-icon flex size-10 items-center justify-center rounded-lg"><ClipboardList className="size-5" /></span>
         <div><h2 className="font-semibold">{editingId ? `Modifier ${sectionName.toLocaleLowerCase("fr")}` : `Nouveau signalement : ${sectionName.toLocaleLowerCase("fr")}`}</h2><p className="text-sm text-muted-foreground">Renseignez les informations du signalement.</p></div>
       </div>
-      <form onSubmit={(event) => void submit(event)} className="space-y-4 p-4 sm:p-6">
+      <form onSubmit={(event) => void submit(event)} className="anomaly-form space-y-4 p-4 sm:p-6">
         <div className={`grid gap-4 ${activeType === "VIOLATION_PROCEDURE" ? "" : "sm:grid-cols-2"}`}>
           {activeType !== "VIOLATION_PROCEDURE" && <div className="space-y-1.5"><label htmlFor="anomalie-date" className="text-sm font-medium">Date</label><input id="anomalie-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>}
           <div className="space-y-1.5"><label htmlFor="anomalie-heure" className="text-sm font-medium">Heure</label><input id="anomalie-heure" type="time" required value={form.heure} onChange={(event) => setForm({ ...form, heure: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
@@ -340,7 +340,7 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
       </form>
     </section>
 
-    <section id="anomalies-print-area" className="space-y-3">
+    <section id="anomalies-print-area" className="anomaly-registry space-y-3">
       <div className="flex items-center justify-between print:hidden">
         <div><h2 className="text-lg font-semibold">{activeType === "ANOMALIE" ? "Anomalies enregistrées" : "Divers enregistrés"}</h2><p className="text-sm text-muted-foreground">{visibleEntries.length} signalement(s)</p></div>
         <div className="flex gap-2 print:hidden">
@@ -362,9 +362,9 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
           className="min-h-11 pl-9"
         />
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card print:hidden">
-        <table className={`w-full ${activeType === "ANOMALIE" ? "min-w-[1400px]" : "min-w-[760px]"} table-fixed border-collapse text-left text-sm`}>
-          <thead className="bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
+      <div className="anomaly-table-wrap overflow-x-auto rounded-xl border bg-card print:hidden">
+        <table className={`anomaly-table w-full ${activeType === "ANOMALIE" ? "min-w-[1400px]" : "min-w-[760px]"} table-fixed border-collapse text-left text-sm`}>
+          <thead className="anomaly-table-head bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
             {(activeType === "ANOMALIE"
               ? ["HEURE", "N° CAMION", "TRANSPORTEUR", "TITRE", "CASSE", "MANQUANT", "VIDES", "PHN", "DESCRIPTION DES FAITS"]
               : activeType === "DIVERS"
@@ -372,7 +372,7 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
                 : ["HEURE", "NOM & PRÉNOM", "OBSERVATIONS", "MESURES PRISES"]).map((heading, index) => <th key={heading} className={`border-b px-3 py-3 ${activeType === "ANOMALIE" ? (index === 0 ? "w-24" : index === 8 ? "w-[360px]" : "w-36") : index === 0 ? "w-36" : "w-[360px]"}`}>{heading}</th>)}
               {activeType !== "VIOLATION_PROCEDURE" && <th className="w-28 border-b px-4 py-3 text-right">Actions</th>}
           </tr></thead>
-          <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+          <tbody>{filteredEntries.map((entry) => <tr key={entry.id} className={`anomaly-table-row anomaly-table-row--${activeType.toLocaleLowerCase()} align-top`}>
             {activeType === "ANOMALIE" ? (
               <>
                 <td className="whitespace-nowrap border-b px-3 py-3">{entry.time || "-"}</td>

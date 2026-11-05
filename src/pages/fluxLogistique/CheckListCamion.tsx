@@ -151,12 +151,12 @@ export default function CheckListCamion() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="truck-checklist-module space-y-5">
       <PageHeader
         title="Check-list camion"
         subtitle="Contrôle SST et environnement des camions à l’entrée du site."
       />
-      <div className="flex flex-wrap items-end justify-between gap-4 print:hidden">
+      <div className="truck-checklist-toolbar flex flex-wrap items-end justify-between gap-4 print:hidden">
         <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="truck-checklist-site">Site</Label>
@@ -196,11 +196,11 @@ export default function CheckListCamion() {
           }} disabled={rows.length >= maxRows || isLoading || isSaving}>
             <Plus className="mr-2 size-4" /> Ajouter une ligne
           </Button>
-          <Button type="button" onClick={handleSave} disabled={!selectedSite || !date || isSaving || isLoading}>
+          <Button type="button" className="truck-checklist-save" onClick={handleSave} disabled={!selectedSite || !date || isSaving || isLoading}>
             {isSaving ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
             Enregistrer
           </Button>
-          <Button type="button" onClick={handlePrint} disabled={isLoading || isSaving}>
+          <Button type="button" className="truck-checklist-print" onClick={handlePrint} disabled={isLoading || isSaving}>
             <Printer className="mr-2 size-4" /> Imprimer la fiche
           </Button>
         </div>
@@ -212,15 +212,15 @@ export default function CheckListCamion() {
         </p>
       )}
 
-      <section id="truck-checklist-sheet" className="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-        <header className="mb-4 border-b-2 border-slate-700 pb-3 text-center">
+      <section id="truck-checklist-sheet" className="truck-checklist-sheet rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <header className="mb-4 border-b-2 pb-3 text-center">
           <div className="mb-3 flex items-start justify-between text-xs font-semibold text-slate-600">
             <span className="rounded-full border-2 border-slate-600 px-3 py-1 tracking-widest">STAR</span>
           </div>
           <h1 className="text-lg font-bold uppercase tracking-wide text-slate-900 sm:text-xl">
             CHECK-LIST CONTROLE SST ET ENVIRONNEMENT CAMION A L'ENTREE DU SITE
           </h1>
-          <p className="mt-2 bg-sky-800 px-2 py-2 text-sm font-semibold uppercase text-white">
+          <p className="truck-checklist-subtitle mt-2 px-2 py-2 text-sm font-semibold uppercase text-white">
             IREO TEBOKA TSY MAINTSY ARAHI-MASO
             <br />
             (POINTS A CONTROLER)
@@ -233,8 +233,8 @@ export default function CheckListCamion() {
         </div>
 
         <fieldset disabled={isLoading || isSaving} className="contents">
-        <div className="overflow-x-auto rounded-md border border-slate-500">
-          <table className="w-full min-w-[1800px] border-collapse text-center text-xs text-slate-900">
+        <div className="truck-checklist-table-wrap overflow-x-auto rounded-md border">
+          <table className="truck-checklist-table w-full min-w-[1800px] border-collapse text-center text-xs text-slate-900">
             <thead>
               <tr>
                 <th rowSpan={3} className="min-w-32 border border-slate-500 bg-slate-200 px-2 py-3">N° camion</th>

@@ -219,7 +219,7 @@ export default function Courrier() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="courrier-module space-y-5">
       <PageHeader title="Courrier" subtitle="Suivi des entrées et sorties de personnes et d’articles." />
       <div className="max-w-xl">
         <SitePicker
@@ -240,7 +240,7 @@ export default function Courrier() {
       {!loading && (
         <>
           <Panel title={editing ? "Modifier un mouvement" : "Enregistrer une entrée"}>
-            <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+            <form className="courrier-entry-form space-y-5" onSubmit={(event) => void submit(event)}>
               <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="courrier-date">Date</Label>
@@ -278,7 +278,7 @@ export default function Courrier() {
             </form>
           </Panel>
 
-          <section id="courrier-registry-print-area">
+          <section id="courrier-registry-print-area" className="courrier-registry">
           <Panel title="Registre des entrées et sorties">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 courrier-registry-screen">
               <div className="relative min-w-[260px] flex-1">
@@ -296,7 +296,7 @@ export default function Courrier() {
                 { label: "Prénom", value: (row) => row.prenom }, { label: "Désignation", value: (row) => row.designation },
                 { label: "Nombre", value: (row) => row.nombre }, { label: "Heure sortie", value: (row) => row.heureSortie }, { label: "Annulé le", value: (row) => row.annuleLe },
               ]} />
-              <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrint}>
+              <Button type="button" variant="outline" className="courrier-print-button print:hidden" disabled={!entries.length} onClick={handlePrint}>
                 <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
               </Button>
             </div>
@@ -304,8 +304,8 @@ export default function Courrier() {
               <>
               <div className="overflow-hidden rounded-lg border courrier-registry-screen">
                 <div className="max-h-[560px] overflow-auto">
-                  <table className="w-full table-fixed text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+                  <table className="courrier-table w-full table-fixed text-left text-sm">
+                    <thead className="courrier-table-head sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                       <tr>
                         <th className="w-[11%] whitespace-nowrap border-b px-3 py-3 font-medium">Date</th>
                         <th className="w-[13%] whitespace-nowrap border-b px-3 py-3 font-medium">Heure d’entrée</th>
@@ -318,7 +318,7 @@ export default function Courrier() {
                     </thead>
                     <tbody className="divide-y divide-border/70">
                       {filteredEntries.map((entry) => (
-                        <tr key={entry.id} className={`align-top transition-colors hover:bg-muted/30 ${entry.annuleLe ? "text-muted-foreground" : ""}`}>
+                        <tr key={entry.id} className={`courrier-table-row align-top ${entry.annuleLe ? "courrier-table-row--cancelled" : ""}`}>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{formatDate(entry.date.slice(0, 10))}{entry.annuleLe && <span className="ml-1 font-sans text-destructive">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block font-sans text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                           <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                           <td className="px-3 py-3 font-medium">{entry.prenom}</td>
@@ -339,7 +339,7 @@ export default function Courrier() {
                               {!entry.pendingSync && <RegistryAuditHistory entity="mouvement_courrier" recordId={entry.id} />}
                               {!entry.pendingSync && <RegistryAttachments entity="mouvement_courrier" recordId={entry.id} siteId={site?.id} />}
                               {!entry.pendingSync && !entry.annuleLe && !entry.heureSortie && (
-                                <Button type="button" size="sm" variant="outline" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}>
+                                <Button type="button" size="sm" variant="outline" className="courrier-exit-button" disabled={exitingId === entry.id} onClick={() => void registerExit(entry)}>
                                   <LogOut className="h-4 w-4" />
                                   {exitingId === entry.id ? "Sortie…" : "Sortie"}
                                 </Button>

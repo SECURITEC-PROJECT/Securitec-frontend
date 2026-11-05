@@ -134,7 +134,7 @@ export default function Passation() {
   };
 
   return (
-    <div>
+    <div className="handover-module space-y-5">
       <PageHeader
         title="Passation"
         subtitle="Transmission des consignes à l'équipe montante"

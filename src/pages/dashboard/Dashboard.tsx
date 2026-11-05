@@ -221,10 +221,10 @@ export default function Dashboard() {
   const alertCount = counts.incidents + counts.anomalies;
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-home space-y-4">
       <PageHeader title="Tableau de bord du site" subtitle={dateLabel.format(new Date())} action={<Button asChild><Link to="/dashboard/postes"><Plus /> Accéder aux postes</Link></Button>} />
 
-      {!readingPostId && data.consignes.some((entry) => openInstruction(entry)) && <div className="flex flex-wrap items-center gap-3 border-l-4 border-warning bg-warning/10 px-4 py-3">
+      {!readingPostId && data.consignes.some((entry) => openInstruction(entry)) && <div className="dashboard-alert flex flex-wrap items-center gap-3 border-l-4 border-warning bg-warning/10 px-4 py-3">
         <AlertTriangle className="size-5 shrink-0 text-warning-foreground" />
         <p className="min-w-0 flex-1 text-sm">Des consignes actives attendent une lecture. Sélectionnez un poste pour afficher et confirmer celles qui le concernent.</p>
       </div>}
@@ -247,7 +247,7 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <section className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 xl:grid-cols-6">
+      <section className="dashboard-filter-panel grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 xl:grid-cols-6">
         <div className="space-y-1"><label htmlFor="dashboard-site" className="text-xs font-medium text-muted-foreground">Site</label><select id="dashboard-site" value={siteId} onChange={(event) => setSiteId(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></div>
         <div className="space-y-1"><label htmlFor="dashboard-post" className="text-xs font-medium text-muted-foreground">Poste de garde</label><select id="dashboard-post" value={postId} onChange={(event) => setPostId(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm"><option value="">Tous les postes</option>{posts.map((post) => <option key={post.id} value={post.id}>{post.nom}</option>)}</select></div>
         <div className="space-y-1"><label htmlFor="dashboard-from" className="text-xs font-medium text-muted-foreground">Du</label><input id="dashboard-from" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" /></div>
@@ -266,35 +266,39 @@ export default function Dashboard() {
       </div>
 
       <GridStats
-        visitorsCount={data.visitors.filter((visitor) => !visitor.exited_at).length}
-        vehiclesCount={data.vehicles.filter((vehicle) => !vehicle.exited_at).length}
         shiftsCount={filteredShifts.length}
-        alertsCount={alertCount}
-        proceduresCount={counts.procedures}
-        eventsCount={counts.events}
+        patrolsCount={activePatrols.length}
+        violationsCount={counts.incidents}
         anomaliesCount={counts.anomalies}
-        activeInstructionsCount={activeConsignes.length}
       />
 
-      <section className="rounded-xl border bg-card">
+      <div className="dashboard-summary-strip">
+        <span><strong>{data.visitors.filter((visitor) => !visitor.exited_at).length}</strong> personnes sur site</span>
+        <span><strong>{data.vehicles.filter((vehicle) => !vehicle.exited_at).length}</strong> véhicules présents</span>
+        <span><strong>{counts.procedures}</strong> procédures</span>
+        <span><strong>{activeConsignes.length}</strong> consignes actives</span>
+        <span className="dashboard-updated"><Clock className="size-3" /> Mis à jour {new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(new Date())}</span>
+      </div>
+
+      <section className="dashboard-staffing rounded-xl border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
           <div><h2 className="text-sm font-semibold">Effectifs par poste</h2><p className="text-xs text-muted-foreground">Agents présents, service et prestataire</p></div>
           <span className="text-xs text-muted-foreground">{staffing.reduce((total, post) => total + post.members.length, 0)} agent(s)</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[650px] text-left text-sm">
-            <thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="px-4 py-2.5">Poste</th><th className="px-4 py-2.5">Services</th><th className="px-4 py-2.5">Effectif</th><th className="px-4 py-2.5">Agents et prestataires</th></tr></thead>
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="px-4 py-2.5">Poste</th><th className="px-4 py-2.5">Services</th><th className="px-4 py-2.5">Effectif</th><th className="px-4 py-2.5">Agents et prestataires</th><th className="px-4 py-2.5">État</th></tr></thead>
             <tbody>{staffing.map((post) => {
               const services = [...new Set(post.members.map((member) => member.shiftType === "NUIT" ? "Nuit" : member.shiftType === "JOUR" ? "Jour" : "Service non précisé"))];
               const providers = [...post.members.reduce((counts, member) => counts.set(member.prestataire || "Prestataire non renseigné", (counts.get(member.prestataire || "Prestataire non renseigné") || 0) + 1), new Map<string, number>())].map(([provider, count]) => `${provider} (${count})`);
-              return <tr key={post.id} className="border-t align-top"><td className="px-4 py-3 font-medium"><Link className="text-primary hover:underline" to={`/dashboard/postes/${post.id}`} state={{ siteId, posteNom: post.name }}>{post.name}</Link></td><td className="px-4 py-3">{services.join(", ") || "—"}</td><td className="px-4 py-3">{post.members.length}</td><td className="max-w-xl px-4 py-3 text-xs text-muted-foreground">{providers.length ? providers.join(" · ") : "Aucun agent en service"}</td></tr>;
+              return <tr key={post.id} className="border-t align-middle"><td className="px-4 py-3 font-semibold"><Link className="text-primary hover:underline" to={`/dashboard/postes/${post.id}`} state={{ siteId, posteNom: post.name }}>{post.name}</Link></td><td className="px-4 py-3"><div className="flex flex-wrap gap-1">{services.length ? services.map((service) => <span key={service} className={`dashboard-service-tag ${service === "Nuit" ? "dashboard-service-tag--night" : "dashboard-service-tag--day"}`}>{service}</span>) : <span className="text-muted-foreground">—</span>}</div></td><td className="px-4 py-3"><span className={`dashboard-headcount ${post.members.length ? "is-staffed" : "is-empty"}`}>{post.members.length} agent(s)</span></td><td className="max-w-xl px-4 py-3 text-xs text-muted-foreground">{providers.length ? providers.join(" · ") : "Aucun agent en service"}</td><td className="px-4 py-3"><span className={`dashboard-post-state ${post.members.length ? "is-active" : "is-idle"}`}>{post.members.length ? "En service" : "Sans agent"}</span></td></tr>;
             })}
-            {!staffing.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste ne correspond au filtre.</td></tr>}</tbody>
+            {!staffing.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun poste ne correspond au filtre.</td></tr>}</tbody>
           </table>
         </div>
       </section>
 
-      {alertCount > 0 && <div className="flex flex-wrap items-center gap-3 border-l-4 border-warning bg-warning/10 px-4 py-3">
+      {alertCount > 0 && <div className="dashboard-alert flex flex-wrap items-center gap-3 border-l-4 border-warning bg-warning/10 px-4 py-3">
         <AlertTriangle className="size-5 shrink-0 text-warning-foreground" />
         <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{alertCount} incident(s) ou anomalie(s) dans la période filtrée</p><p className="mt-0.5 text-xs text-muted-foreground">Les résultats suivent les filtres de site, poste, période et type.</p></div>
         <Button asChild variant="ghost" size="sm"><Link to="/dashboard/main-courante">Consulter <ClipboardCheck /></Link></Button>
@@ -303,7 +307,7 @@ export default function Dashboard() {
       <div className="grid gap-7 xl:grid-cols-[1.4fr_1fr]">
         <MainCouranteRecente logs={recentLogs} name={(id) => shiftNames.get(id) || "Agent"} />
         <div className="space-y-6">
-          <section>
+          <section className="dashboard-panel rounded-xl border bg-card p-4">
             <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold">Consignes actives</h2><span className="text-xs text-primary">{activeConsignes.length}</span></div>
             <div className="divide-y border-y">
               {activeConsignes.slice(0, 6).map((entry) => <article key={entry.id} className="py-3"><p className="text-xs font-semibold">{entry.consigne}</p><p className="mt-1 text-[11px] text-muted-foreground">{entry.posteNom || "Tous postes / poste non rattaché"} · {entry.emetteur} · {entry.jusquauNouvelOrdre ? "Jusqu’à nouvel ordre" : `Jusqu’au ${String(entry.dateFin || entry.date).slice(0, 10)}`}</p></article>)}

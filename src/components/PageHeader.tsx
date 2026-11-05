@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="page-heading mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold ">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
       </div>
       {action}
@@ -14,7 +14,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
 
 export function Panel({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <section className="min-w-0 border-t pt-5">
+    <section className="panel-card min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
       {title && <h2 className="mb-4 text-sm font-semibold">{title}</h2>}
       {children}
     </section>

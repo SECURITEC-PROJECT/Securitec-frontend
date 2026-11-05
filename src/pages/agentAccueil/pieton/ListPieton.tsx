@@ -134,9 +134,9 @@ export default function ListPieton({
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[950px] text-sm">
-          <thead className="text-left text-xs uppercase text-muted-foreground">
+      <div className="visitor-access-table-wrap overflow-x-auto rounded-lg border">
+        <table className="visitor-access-table w-full min-w-[950px] text-sm">
+          <thead className="visitor-access-table-head text-left text-xs uppercase text-muted-foreground">
             <tr>
               {["Date", "Nom et prénom", "Accès au site", "Établissement", "Motif", "N° badge", "Heure d’entrée", "Heure de sortie", "Actions"].map((label) => (
                 <th key={label} className="whitespace-nowrap border-b py-2 pr-3">{label}</th>
@@ -145,7 +145,7 @@ export default function ListPieton({
           </thead>
           <tbody className="divide-y">
             {filtered.map((visitor) => (
-              <tr key={visitor.id} className={enAnomalie.has(String(visitor.id)) ? "bg-red-50 font-medium text-red-700" : ""}>
+              <tr key={visitor.id} className={`visitor-access-table-row ${enAnomalie.has(String(visitor.id)) ? "bg-red-50 font-medium text-red-700" : ""}`}>
                 <td className="whitespace-nowrap py-2 pr-3 font-mono text-xs">{formatDate(visitor.entered_at)}</td>
                 <td className="py-2 pr-3 font-medium">{visitor.full_name || "—"}</td>
                 <td className="py-2 pr-3"><span className={`rounded px-2 py-1 text-[10px] font-semibold ${visitor.site_banned ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{visitor.site_banned ? "INTERDIT" : "Autorisé"}</span></td>

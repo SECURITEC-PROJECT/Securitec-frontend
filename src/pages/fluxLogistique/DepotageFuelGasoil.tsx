@@ -225,11 +225,11 @@ export default function DepotageFuelGasoil() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="fuel-module space-y-5">
       <PageHeader title="Dépotage fuel et gasoil" subtitle="Enregistrement des réceptions de fuel et de gasoil" />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
       <Panel title={editingId ? "Modifier un dépotage" : "Nouveau dépotage fuel / gasoil"}>
-          <form className="w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
+          <form className="fuel-form w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
             <SitePicker
               id="fuel-site"
               value={selectedSiteName}
@@ -320,7 +320,7 @@ export default function DepotageFuelGasoil() {
           </form>
       </Panel>
 
-      <section id="fuel-registry-print-area">
+      <section id="fuel-registry-print-area" className="fuel-registry">
       <Panel title="Registre des dépotages">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 fuel-registry-screen">
           <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">
@@ -344,7 +344,7 @@ export default function DepotageFuelGasoil() {
               onChange={(event) => setSearchDate(event.target.value)}
             />
           </div>
-          <Button type="button" variant="outline" className="print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
+          <Button type="button" variant="outline" className="fuel-print-button print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
           </Button>
         </div>
@@ -352,8 +352,8 @@ export default function DepotageFuelGasoil() {
           <p className="fuel-registry-screen text-sm text-destructive">{entriesError}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border fuel-registry-screen">
-            <table className="w-full min-w-[1200px] text-left text-sm">
-              <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
+            <table className="fuel-table w-full min-w-[1200px] text-left text-sm">
+              <thead className="fuel-table-head bg-muted/60 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Heure</th>
@@ -376,7 +376,7 @@ export default function DepotageFuelGasoil() {
                     {entries.length === 0 ? "Aucun dépotage enregistré." : "Aucun résultat pour ces critères."}
                   </td></tr>
                 ) : filteredEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-muted/30">
+                  <tr key={entry.id} className="fuel-table-row">
                     <td className="whitespace-nowrap px-4 py-3">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td className="px-4 py-3">{entry.heurePointe || "—"}</td>
                     <td className="px-4 py-3">{entry.immatriculationVehicule || "—"}</td>

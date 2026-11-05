@@ -39,14 +39,14 @@ export default function PresentsVehicules({
   return (
     <Panel title="Véhicules présents sur site">
       {present.length ? (
-        <ul className="divide-y">
+        <ul className="vehicle-present-list space-y-2">
           {present.map((vehicle) => (
-            <li key={vehicle.id} className="flex flex-wrap items-center justify-between gap-4 py-3">
+            <li key={vehicle.id} className="vehicle-present-card flex flex-wrap items-center justify-between gap-4 rounded-lg border p-3">
               <div className="min-w-[220px]">
                 <p className="flex items-center gap-2 font-medium">
                   <Truck className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   <span className="font-mono">{vehicle.plate}</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{vehicle.category}</span>
+                  <span className="vehicle-category-pill rounded-full px-2 py-0.5 text-xs">{vehicle.category}</span>
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {vehicle.ownerName} · {vehicle.passengersEntry} personne(s) · entrée {vehicle.entryTime}

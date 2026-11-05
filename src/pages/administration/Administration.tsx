@@ -388,10 +388,10 @@ export default function Administration() {
   };
 
   const tabs: Tab[] = ["Vue société", "Sites", "Équipe et équipements", "Contacts d’urgence", ...(canManageSites ? ["Postes de garde" as const, "Services du site" as const, "Prestataires" as const, "Utilisateurs" as const] : [])];
-  return <div className="space-y-6">
+  return <div className="administration-module space-y-5">
     <PageHeader title="Administration de la société" subtitle="Vue globale des sites, des équipes et des équipements enregistrés dans la base." action={<Button variant="outline" onClick={() => void load(true)} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualiser</Button>} />
 
-    <div className="flex flex-wrap gap-1 border-b pb-3" role="tablist" aria-label="Sections administration">
+    <div className="administration-tabs flex flex-wrap gap-1 border-b pb-3" role="tablist" aria-label="Sections administration">
       {tabs.map((item) => <Button key={item} role="tab" aria-selected={tab === item} variant={tab === item ? "secondary" : "ghost"} onClick={() => setTab(item)}>{item}</Button>)}
     </div>
 

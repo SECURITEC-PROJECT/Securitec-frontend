@@ -196,12 +196,12 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
     void persistConfiguration(next);
   };
 
-  return <div className="space-y-5">
+  return <div className="aps-attendance-module space-y-4">
     {showHeader && <PageHeader title={`Pointage APS - service de ${service}`} subtitle="Feuille journaliere des agents par poste" />}
-    <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service de pointage">
+    <div className="aps-service-tabs flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service de pointage">
       {(["jour", "nuit"] as const).map((item) => <button key={item} role="tab" aria-selected={service === item} onClick={() => setService(item)} className={`rounded-md px-5 py-2 text-sm font-medium capitalize transition-colors ${service === item ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-background"}`}>{item}</button>)}
     </div>
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
+    <section className="aps-attendance-filters rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="w-full max-w-xs">
           <label htmlFor="pointage-date" className="mb-1.5 block text-sm font-medium">Date du pointage</label>
@@ -215,7 +215,7 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
           </select>
           {siteError && <p className="mt-1 text-xs text-destructive">{siteError}</p>}
         </div>
-        <div className="flex flex-wrap gap-2 print:hidden">
+        <div className="aps-attendance-actions flex flex-wrap gap-2 print:hidden">
           <button onClick={() => void save()} disabled={saving || savingConfiguration || loading || !activeSiteId} className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"><Save className="size-4" />{saving ? "Enregistrement..." : "Enregistrer"}</button>
           <button onClick={reset} className="inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"><RotateCcw className="size-4" /> Effacer la journee</button>
           <button onClick={() => window.print()} className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90"><Printer className="size-4" /> Imprimer</button>
@@ -230,7 +230,7 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
     {pendingStatusByKey[contextKey] && <p className={`text-sm ${pendingStatusByKey[contextKey].status === "pending" ? "text-amber-700" : "text-destructive"}`} title={pendingStatusByKey[contextKey].error}>
       {pendingStatusByKey[contextKey].status === "conflict" ? "Conflit : le pointage APS n’a pas été confirmé par le serveur." : pendingStatusByKey[contextKey].status === "rejected" ? "Pointage rejeté par le serveur. Vérifiez les données avant de réessayer." : "Pointage enregistré sur cet appareil, en attente de synchronisation."}
     </p>}
-    <div className="relative w-full max-w-sm print:hidden">
+    <div className="aps-post-search relative w-full max-w-sm print:hidden">
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
       <input
         type="search"
@@ -241,7 +241,7 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
         className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
       />
     </div>
-    <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+    <div className="aps-attendance-table-wrap overflow-x-auto rounded-xl border bg-card shadow-sm">
       <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
         <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground"><tr>
           <th className="w-36 border-b px-4 py-3">Poste</th><th className="w-48 border-b px-4 py-3">Nom</th><th className="w-48 border-b px-4 py-3">Pr&#233;nom</th><th className="w-36 border-b px-4 py-3">Matricule</th><th className="w-36 border-b px-4 py-3">Heure d&#8217;entr&#233;e</th><th className="w-36 border-b px-4 py-3">Heure de sortie</th><th className="border-b px-4 py-3">Observation</th>
@@ -251,7 +251,7 @@ export default function PointageAPS({ showHeader = true }: { showHeader?: boolea
             <span>{poste.name}</span>
             <label className="mt-2 block text-xs font-normal text-muted-foreground">
               Effectif
-              <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => setPostCount(poste.name, Number(event.target.value))} className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
+              <select aria-label={`Nombre de personnes au poste ${poste.name}`} value={poste.count} disabled={savingConfiguration || saving} onChange={(event) => setPostCount(poste.name, Number(event.target.value))} className="aps-headcount-select mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground print:hidden">
                 {Array.from({ length: 30 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}
               </select>
               <span className="hidden print:inline">{poste.count} personne(s)</span>

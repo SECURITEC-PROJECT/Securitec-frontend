@@ -169,7 +169,7 @@ export default function FormPieton({
 
   return (
     <Panel title={editingVisitor ? "Modifier un passage visiteur" : "Enregistrer une entrée"}>
-      <form onSubmit={(event) => void handleSubmit(event)} className="grid grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
+      <form onSubmit={(event) => void handleSubmit(event)} className="visitor-access-form grid grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
         <Section>Visiteur</Section>
         {/* Nom et prénom avec suggestions des personnes déjà présentes */}
         <div className="relative col-span-2 lg:col-span-4">

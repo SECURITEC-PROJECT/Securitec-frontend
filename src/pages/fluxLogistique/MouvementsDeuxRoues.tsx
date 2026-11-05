@@ -429,7 +429,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="two-wheel-module space-y-5">
       <PageHeader title={title} subtitle={isBicycle
         ? "Enregistrement des entrées de vélos par employé."
         : "Enregistrement des entrées et sorties de motos."} />
@@ -450,7 +450,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
       </div>
 
       <Panel title={editingEntry ? "Modifier un mouvement" : `Nouvelle entrée ${isBicycle ? "vélo" : "moto"}`}>
-        <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+        <form className="two-wheel-form space-y-5" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor={`${kind}-date`}>Date</Label>
@@ -527,6 +527,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
         </form>
       </Panel>
 
+      <div className="two-wheel-registry">
       <Panel title={`Historique ${isBicycle ? "des vélos" : "des motos"} (${filteredEntries.length})`}>
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="relative min-w-[260px] flex-1">
@@ -543,16 +544,16 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           : loading ? <Empty text="Chargement du registre…" />
             : loadError ? <p className="py-6 text-center text-sm text-destructive">{loadError}</p>
               : !entries.length ? <Empty text="Aucun mouvement enregistré pour ce site." />
-                : <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full min-w-[760px] text-left text-sm">
-                    <thead className="bg-muted/70 text-xs uppercase text-muted-foreground">
+              : <div className="two-wheel-table-wrap overflow-x-auto rounded-lg border">
+                  <table className="two-wheel-table w-full min-w-[760px] text-left text-sm">
+                    <thead className="two-wheel-table-head bg-muted/70 text-xs uppercase text-muted-foreground">
                       <tr>{(isBicycle
                         ? ["Date", "Heure d’entrée", "Matricule", "Prénom", "Section", "Marque vélo", "Heure de sortie", "Actions"]
                         : ["Date", "Heure d’entrée", "Moto", "Observation", "Heure de sortie", "Actions"]
                       ).map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y">
-                      {filteredEntries.map((entry) => <tr key={entry.id} className="align-top hover:bg-muted/30">
+                      {filteredEntries.map((entry) => <tr key={entry.id} className="two-wheel-table-row align-top hover:bg-muted/30">
                         <td className={`whitespace-nowrap px-3 py-3 ${entry.annuleLe ? "text-muted-foreground line-through" : ""}`}>{formatDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive no-underline">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                         <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
                         {isBicycle ? <>
@@ -589,6 +590,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
                   </table>
                 </div>}
       </Panel>
+      </div>
     </div>
   );
 }

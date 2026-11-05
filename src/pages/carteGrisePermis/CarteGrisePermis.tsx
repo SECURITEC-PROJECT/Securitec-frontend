@@ -253,14 +253,14 @@ export default function CarteGrisePermis() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="carte-grise-module space-y-5">
       <PageHeader
         title="Carte grise / Permis de conduire"
         subtitle="Vérification et enregistrement des documents véhicules et permis"
       />
-      <div className="space-y-6">
-          <form className="space-y-4 rounded-lg border bg-card p-4 shadow-sm" onSubmit={handleSubmit}>
-            <h2 className="font-semibold text-primary">Enregistrement carte grise / permis</h2>
+      <div className="carte-grise-layout grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <form className="carte-grise-form space-y-4 rounded-lg border bg-card p-4 shadow-sm" onSubmit={handleSubmit}>
+            <h2 className="carte-grise-panel-title font-semibold">Enregistrement carte grise / permis</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="date">Date</Label>
@@ -443,10 +443,10 @@ export default function CarteGrisePermis() {
             </Button>
           </form>
 
-        <section id="carte-grise-print-area" className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
+        <section id="carte-grise-print-area" className="carte-grise-registry space-y-3 rounded-lg border bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-semibold text-primary">Registre carte grise / permis</h2>
-            <Button type="button" variant="outline" className="print:hidden" disabled={!records.length} onClick={handlePrint}>
+            <h2 className="carte-grise-panel-title font-semibold">Registre carte grise / permis</h2>
+            <Button type="button" variant="outline" className="carte-grise-print-button print:hidden" disabled={!records.length} onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
             </Button>
           </div>
@@ -474,7 +474,7 @@ export default function CarteGrisePermis() {
                 <div className="overflow-hidden rounded-lg border carte-grise-screen">
                   <div className="max-h-[560px] overflow-auto">
                     <table className="w-full min-w-[1050px] text-sm">
-                    <thead className="sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+                    <thead className="carte-grise-table-head sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                       <tr>
                         <th className="px-4 py-3">Entrée</th>
                         <th className="px-3 py-3">Sortie</th>
@@ -489,7 +489,7 @@ export default function CarteGrisePermis() {
                     </thead>
                     <tbody className="divide-y divide-border/70">
                       {filteredRecords.map((record) => (
-                        <tr key={record.id} className="align-top transition-colors hover:bg-muted/30">
+                        <tr key={record.id} className={`carte-grise-table-row align-top transition-colors hover:bg-muted/30 ${record.exited_at ? "carte-grise-table-row--exited" : "carte-grise-table-row--present"}`}>
                           <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
                             <span className="block font-medium text-foreground">{formatDate(record.entered_at)}</span>
                             <span className="mt-0.5 block text-muted-foreground">{formatTime(record.entered_at)}</span>
@@ -518,7 +518,7 @@ export default function CarteGrisePermis() {
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="outline"
+                                className="carte-grise-exit-button"
                                 disabled={exitingId !== null}
                                 onClick={() => void handleExit(record)}
                               >

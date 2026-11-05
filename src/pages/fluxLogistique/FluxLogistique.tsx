@@ -511,7 +511,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   };
 
   return (
-    <div className="space-y-6">
+    <div className={isWasteRegister ? "waste-flow-module space-y-5" : "document-flow-module space-y-5"}>
       <PageHeader
         title={pageTitle}
         subtitle={isWasteRegister ? "Saisie et suivi des sorties d’ordures par véhicule." : "Saisie et suivi des transports, bons, factures et destinations."}
@@ -557,7 +557,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       {site?.id && !openShiftId && <p className="text-sm text-amber-700">{openShifts.length ? "Sélectionnez le poste actif qui effectue cette saisie." : "Aucune prise de poste ouverte sur ce site. Ouvrez le service avant d’enregistrer un flux."}</p>}
 
           <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Enregistrer une sortie"}>
-        <form className="space-y-6" onSubmit={(event) => void saveTruck(event)}>
+        <form className={`${isWasteRegister ? "waste-flow-form" : "document-flow-form"} space-y-5`} onSubmit={(event) => void saveTruck(event)}>
           {isWasteRegister && <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
               <div className="flex min-h-10 items-center justify-between gap-2">
@@ -831,7 +831,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         </form>
       </Panel>
 
-      <Panel title={pageTitle}>
+      <div className={isWasteRegister ? "waste-flow-registry" : "document-flow-registry"}><Panel title={pageTitle}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="relative w-full max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -852,15 +852,16 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
           </div>
           {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
           {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
-          <Button type="button" variant="outline" disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
+          <Button type="button" variant="outline" className={isWasteRegister ? "waste-flow-outline" : "document-flow-outline"} disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
             <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
           </Button>
-          <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
+          <Button type="button" variant="outline" className={isWasteRegister ? "waste-flow-outline" : "document-flow-outline"} disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
             <Download className="h-4 w-4" />Exporter Excel
           </Button>
           <Button
             type="button"
             variant="outline"
+            className={isWasteRegister ? "waste-flow-outline" : "document-flow-outline"}
             disabled={!filteredEntries.length}
             onClick={() => printEntries(filteredEntries, pageTitle)}
           >
@@ -870,8 +871,8 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         </div>
         <div className="overflow-hidden rounded-lg border">
           <div className="max-h-[560px] overflow-auto">
-            <table className="w-full min-w-[1450px] text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+            <table className={`${isWasteRegister ? "waste-flow-table" : "document-flow-table"} w-full min-w-[1450px] text-left text-sm`}>
+              <thead className={`${isWasteRegister ? "waste-flow-table-head" : "document-flow-table-head"} sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur`}>
                 <tr>
                   {["Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(isWasteRegister ? ["Transporteur"] : []), ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(isWasteRegister ? ["Plomb"] : []), ...(!isWasteRegister ? ["Type document", "Émetteur", "Vérification", "Visa agent"] : []), "Saisie par / le", "Pièces jointes", "Historique", "Actions"].map((label) => (
                     <th key={label} className="whitespace-nowrap border-b px-3 py-3 font-medium">{label}</th>
@@ -880,7 +881,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               </thead>
               <tbody className="divide-y divide-border/70">
                 {filteredEntries.map((entry) => (
-                  <tr key={entry.id} className="align-top transition-colors hover:bg-muted/30">
+                  <tr key={entry.id} className={`${isWasteRegister ? "waste-flow-table-row" : "document-flow-table-row"} align-top ${entry.pendingSync ? (isWasteRegister ? "waste-flow-table-row--pending" : "document-flow-table-row--pending") : ""}`}>
                     <td className="whitespace-nowrap px-3 py-3">{String(entry.date).slice(0, 10)}</td>
                     <td className="whitespace-nowrap px-3 py-3 font-medium">{entry.immatriculationVehicule || "—"}</td>
                     {isWasteRegister && <td className="px-3 py-3">{entry.transporteur || "—"}</td>}
@@ -891,7 +892,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                     <td className="px-3 py-3">{entry.destinataire || "—"}</td>
                     {isWasteRegister && <td className="px-3 py-3">{entry.plomb || "—"}</td>}
                     {!isWasteRegister && <>
-                      <td className="px-3 py-3">{entry.typeDocument || "—"}</td>
+                      <td className="px-3 py-3"><span className={`document-type-badge document-type-badge--${entry.typeDocument?.toLocaleLowerCase() || "default"}`}>{entry.typeDocument || "—"}</span></td>
                       <td className="px-3 py-3">{entry.emetteur || "—"}</td>
                       <td className="max-w-xs whitespace-pre-wrap px-3 py-3">{entry.verification || "—"}</td>
                       <td className="px-3 py-3">{entry.visaAgent || "—"}</td>
@@ -923,7 +924,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
             </table>
           </div>
         </div>
-      </Panel>
+      </Panel></div>
     </div>
   );
 }

@@ -114,6 +114,7 @@ export default function LayoutPrincipal({ user, onLogout }: LayoutPrincipalProps
   };
 
   const current = SIDEBAR_GROUPS.map((g) => g.items.find((n) => n.to === location.pathname)?.label).find(Boolean) ?? "Vue d’ensemble";
+  const isReportPage = location.pathname === "/dashboard/statistiques";
 
   const updateQueuedWrite = async (requestId: string, action: "retry" | "discard") => {
     if (action === "discard" && !(await confirmDeletion("Cette saisie hors ligne sera supprimée de cet appareil et ne sera pas envoyée à la base."))) return;
@@ -133,18 +134,15 @@ export default function LayoutPrincipal({ user, onLogout }: LayoutPrincipalProps
   };
 
   return (
-    <div className="min-h-screen lg:flex">
-      <Sidebar 
-        open={open} 
-        setOpen={setOpen} 
-        user={user} 
-        role={role} 
-        signOut={signOut} 
+    <div className={`min-h-screen flex flex-col${isReportPage ? " report-mode" : ""}`}>
+      <Header
+        open={open}
+        setOpen={setOpen}
+        current={current}
+        role={role}
+        userRole={user.role}
+        signOut={signOut}
       />
-
-      {open && <Button aria-label="Fermer le menu" variant="ghost" className="fixed inset-0 z-40 h-screen w-screen rounded-none bg-foreground/20 lg:hidden" onClick={() => setOpen(false)} />}
-
-      <div className="min-w-0 flex-1">
         {!isOnline && <div role="status" className="bg-amber-100 px-4 py-2 text-center text-sm font-medium text-amber-950">
           Hors connexion : les données déjà consultées restent disponibles. Les saisies prises en charge seront synchronisées au retour du réseau.
           {pendingWrites.length > 0 && <Button type="button" variant="link" className="ml-2 h-auto p-0 text-amber-950 underline" onClick={() => setShowPendingWrites((shown) => !shown)}>
@@ -187,19 +185,21 @@ export default function LayoutPrincipal({ user, onLogout }: LayoutPrincipalProps
             ))}
           </ul>
         </section>}
-        <Header 
-          open={open} 
-          setOpen={setOpen} 
-          current={current} 
-          role={role} 
-          signOut={signOut} 
-        />
-
-        <main className="mx-auto max-w-[1600px] p-5 lg:p-8">
-          <Outlet />
-        </main>
-
-        <Footer />
+      <div className="flex min-h-0 flex-1">
+        {!isReportPage && <Sidebar
+          open={open}
+          setOpen={setOpen}
+          user={user}
+          role={role}
+          signOut={signOut}
+        />}
+        {!isReportPage && open && <Button aria-label="Fermer le menu" variant="ghost" className="fixed inset-0 z-40 h-screen w-screen rounded-none bg-foreground/20 lg:hidden" onClick={() => setOpen(false)} />}
+        <div className="min-w-0 flex-1">
+          <main className="mx-auto max-w-[1800px] p-3 sm:p-4 lg:p-5">
+            <Outlet />
+          </main>
+          <Footer />
+        </div>
       </div>
     </div>
   );

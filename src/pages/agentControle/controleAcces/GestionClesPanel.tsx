@@ -294,9 +294,9 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const selectedReturner = siteEmployees.find((employee) => employee.id === returnerEmployeeId);
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4 shadow-sm">
-        <h2 className="font-semibold text-primary">Enregistrer une sortie de clé</h2>
+    <div className="keys-module-panels space-y-4">
+      <form onSubmit={handleSubmit} className="keys-form space-y-4 rounded-lg border bg-card p-4 shadow-sm">
+        <h2 className="keys-panel-heading font-semibold">Enregistrer une sortie de clé</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="space-y-1">
             <span className="text-sm font-medium">Date</span>
@@ -354,10 +354,10 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         </div>
       </form>
 
-      <section id="key-movements-print-area" className="space-y-3 rounded-lg border bg-card p-4 shadow-sm">
+      <section id="key-movements-print-area" className="keys-history space-y-3 rounded-lg border bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold text-primary">Historique et retour des clés</h2>
-          <Button type="button" variant="outline" className="print:hidden" disabled={!siteId || !visibleEntries.length} onClick={handlePrint}>
+          <h2 className="keys-panel-heading font-semibold">Historique et retour des clés</h2>
+          <Button type="button" variant="outline" className="keys-print-button print:hidden" disabled={!siteId || !visibleEntries.length} onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer tous les mouvements
           </Button>
         </div>
@@ -373,7 +373,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         </div>
         <div className="max-h-[520px] overflow-auto key-movements-screen">
           <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 bg-muted">
+            <thead className="keys-table-head sticky top-0 bg-muted">
               <tr>
                 {["Date sortie", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Lieu", "Observation", "Date retour", "Personne qui a rendu", "Heure de retour"].map((label) => (
                   <th key={label} className="border-b px-3 py-2 font-medium">{label}</th>
@@ -382,7 +382,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             </thead>
             <tbody>
               {filteredEntries.map((entry) => (
-                <tr key={entry.id} className="border-b last:border-0">
+                <tr key={entry.id} className={`keys-table-row border-b last:border-0 ${entry.notReturned ? "keys-table-row--alert" : entry.returnTime ? "keys-table-row--returned" : "keys-table-row--pending"}`}>
                   <td className="px-3 py-2">{formaterDate(entry.date)}</td>
                   <td className="px-3 py-2">{entry.lastName} {entry.firstName}</td>
                   <td className="px-3 py-2">{entry.matricule}</td>
@@ -411,7 +411,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-8"
+                        className="keys-return-button h-8"
                         disabled={returningEntryId === entry.id}
                         onClick={() => {
                           setReturnDialogEntry(entry);

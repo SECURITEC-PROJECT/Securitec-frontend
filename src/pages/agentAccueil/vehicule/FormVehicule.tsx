@@ -136,7 +136,7 @@ export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancel
 
   return (
     <Panel title={editingVehicle ? "Modifier un mouvement véhicule" : "Enregistrer une entrée véhicule"}>
-      <form className="space-y-5" onSubmit={(event) => void submit(event)}>
+      <form className="vehicle-entry-form space-y-5" onSubmit={(event) => void submit(event)}>
         <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           {field("vehicle-date", "Date", form.date, (date) => setForm({ ...form, date }), { type: "date", required: true })}
           {field("vehicle-plate", "Matricule du véhicule", form.plate, (plate) => setForm({ ...form, plate }), { required: true, maxLength: 50 })}

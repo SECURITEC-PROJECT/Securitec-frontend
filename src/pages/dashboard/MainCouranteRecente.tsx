@@ -9,7 +9,7 @@ interface MainCouranteRecenteProps {
 
 export default function MainCouranteRecente({ logs, name }: MainCouranteRecenteProps) {
   return (
-    <section>
+    <section className="dashboard-panel rounded-xl border bg-card p-4">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Incidents récents</h2>
         <Link to="/dashboard/main-courante" className="flex items-center gap-1 text-xs text-primary">Tout voir <ArrowRight className="h-3 w-3" /></Link>

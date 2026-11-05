@@ -248,9 +248,9 @@ export default function PassationServiceAPS({
   };
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-xl border bg-card p-4 shadow-sm">
-        <form className="space-y-4" onSubmit={(event) => void submit(event)}>
+    <div className="aps-handover-module space-y-4">
+      <section className="aps-handover-form-card rounded-xl border bg-card p-4 shadow-sm">
+        <form className="aps-handover-form space-y-4" onSubmit={(event) => void submit(event)}>
           <div className="w-full max-w-sm space-y-1.5">
             <Label htmlFor="aps-handover-date">Date</Label>
             <Input id="aps-handover-date" type="date" required value={form.date} onChange={(event) => updateForm("date", event.target.value)} />
@@ -278,7 +278,7 @@ export default function PassationServiceAPS({
               </div>
             ))}
           </div>
-          <section className="space-y-3 rounded-lg border p-4">
+          <section className="aps-signature-section space-y-3 rounded-lg border p-4">
             <div>
               <h3 className="font-semibold">Signatures et validation</h3>
               <p className="text-sm text-muted-foreground">Les matricules des deux CP servent de signatures. Le contrôleur connecté valide et enregistre la passation.</p>
@@ -308,7 +308,7 @@ export default function PassationServiceAPS({
             </div>
           </section>
           <div className="flex justify-end gap-2">
-            <Button type="submit" disabled={saving || !canSign}>
+        <Button type="submit" className="aps-submit-button" disabled={saving || !canSign}>
               {editing ? <Save className="mr-2 size-4" /> : <CheckCircle className="mr-2 size-4" />}
               {saving ? "Validation…" : editing ? "Signer et valider les modifications" : "Signer et valider la passation"}
             </Button>
@@ -328,13 +328,13 @@ export default function PassationServiceAPS({
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <Button type="button" variant="outline" onClick={printHistory} disabled={!entries.length}>
+        <Button type="button" variant="outline" className="aps-print-button" onClick={printHistory} disabled={!entries.length}>
           <Printer className="mr-2 size-4" />Imprimer tout le registre
         </Button>
       </div>
-      <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
-        <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
-          <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
+      <section className="aps-history-section overflow-x-auto rounded-xl border bg-card shadow-sm">
+        <table className="aps-history-table w-full min-w-[1200px] border-collapse text-left text-sm">
+          <thead className="aps-table-head bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="border-b px-3 py-3">Date</th>
               <th className="border-b px-3 py-3">Matériel</th>
@@ -354,7 +354,7 @@ export default function PassationServiceAPS({
           </thead>
           <tbody>
             {filteredEntries.map((entry) => (
-              <tr key={entry.id} className="align-top hover:bg-muted/30">
+              <tr key={entry.id} className={`aps-table-row align-top ${entry.pendingSync ? "aps-table-row--pending" : ""}`}>
                 <td className="whitespace-nowrap border-b px-3 py-3">{formatDate(entry.date)}{entry.pendingSync && <span className={`mt-1 block text-xs ${entry.pendingSyncStatus === "pending" ? "text-amber-700" : "text-destructive"}`} title={entry.pendingSyncError}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
                 <td className="max-w-48 whitespace-pre-wrap border-b px-3 py-3">{entry.materiel || "—"}</td>
                 <td className="border-b px-3 py-3">{entry.chaineEst || "—"}</td>
@@ -370,8 +370,8 @@ export default function PassationServiceAPS({
                 <td className="whitespace-nowrap border-b px-3 py-3">{entry.controleur || "—"}</td>
                 <td className="border-b px-2 py-2 print:hidden">
                   <div className="flex items-center gap-1">
-                    <Button type="button" size="icon" variant="ghost" aria-label="Modifier la passation" title="Modifier" onClick={() => startEditing(entry)}><Pencil className="size-4" /></Button>
-                    <Button type="button" size="icon" variant="ghost" aria-label="Imprimer la passation" title="Imprimer" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="aps-row-action" aria-label="Modifier la passation" title="Modifier" onClick={() => startEditing(entry)}><Pencil className="size-4" /></Button>
+                    <Button type="button" size="icon" variant="ghost" className="aps-row-action" aria-label="Imprimer la passation" title="Imprimer" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
                     <Button type="button" size="icon" variant="ghost" className="text-destructive" aria-label="Supprimer la passation" title="Supprimer" onClick={() => void deleteEntry(entry)}><Trash2 className="size-4" /></Button>
                   </div>
                 </td>

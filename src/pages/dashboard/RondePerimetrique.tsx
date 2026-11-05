@@ -8,7 +8,7 @@ interface RondePerimetriqueProps {
 
 export default function RondePerimetrique({ patrols, name }: RondePerimetriqueProps) {
   return (
-    <section>
+    <section className="dashboard-panel rounded-xl border bg-card p-4">
       <div className="mb-3 flex justify-between">
         <h2 className="text-sm font-semibold">Ronde périmétrique</h2>
         <Link to="/dashboard/rondes" className="text-xs text-primary">Suivre <ArrowUpRight className="inline h-3 w-3" /></Link>

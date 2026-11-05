@@ -290,15 +290,15 @@ export default function DechetsLevee() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="waste-module space-y-5">
       <PageHeader
         title="Déchêt et Levure"
         subtitle="Enregistrement des sorties de drèche et de levure avec les informations de pesage"
       />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <section className="w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="flex items-center gap-3 border-b bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-5 py-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <section className="waste-entry-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="waste-entry-heading flex items-center gap-3 border-b px-5 py-4">
+          <div className="waste-entry-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
             <ClipboardList className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
@@ -482,11 +482,11 @@ export default function DechetsLevee() {
           </div>
         </form>
       </section>
-      <section id="waste-registry-print-area">
+      <section id="waste-registry-print-area" className="waste-registry-section">
         <Panel title="Registre des sorties de drèche et de levure">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 waste-registry-screen">
           <p className="text-sm text-muted-foreground">Historique des sorties pour le site sélectionné.</p>
-          <Button type="button" variant="outline" className="print:hidden" disabled={!entries.length} onClick={handlePrintRegistry}>
+          <Button type="button" variant="outline" className="waste-print-button print:hidden" disabled={!entries.length} onClick={handlePrintRegistry}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
           </Button>
         </div>
@@ -515,7 +515,7 @@ export default function DechetsLevee() {
           <div className="overflow-hidden rounded-lg border waste-registry-screen">
             <div className="max-h-[560px] overflow-auto">
               <table className="w-full min-w-[850px] text-sm">
-                <thead className="sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+                <thead className="waste-table-head sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                   <tr>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-3 py-3">Désignation</th>
@@ -532,9 +532,9 @@ export default function DechetsLevee() {
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {filteredEntries.map((entry) => (
-                    <tr key={entry.id} className="transition-colors hover:bg-muted/30">
+                    <tr key={entry.id} className={`waste-table-row transition-colors ${entry.typeDechet === "LEVURE" ? "waste-table-row--levure" : "waste-table-row--dreche"}`}>
                       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-medium">{formatDate(entry.date)}</td>
-                      <td className="px-3 py-3">{formatWasteType(entry.typeDechet)}</td>
+                      <td className="px-3 py-3"><span className={`waste-type-badge ${entry.typeDechet === "LEVURE" ? "waste-type-badge--levure" : "waste-type-badge--dreche"}`}>{formatWasteType(entry.typeDechet)}</span></td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureSortie || "—"}</td>
                       <td className="px-3 py-3 font-medium">{entry.vehicule || "—"}</td>
                       <td className="px-3 py-3">{entry.transporteur || "—"}</td>
@@ -545,10 +545,10 @@ export default function DechetsLevee() {
                       <td className="px-4 py-3">{entry.destinataire || "—"}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         <div className="inline-flex gap-1">
-                          <Button type="button" size="icon" variant="ghost" aria-label="Imprimer le bon de sortie" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
+                          <Button type="button" size="icon" variant="ghost" className="waste-row-action" aria-label="Imprimer le bon de sortie" title="Imprimer au format 80 × 80 mm" onClick={() => printEntry(entry)}>
                             <Printer className="h-4 w-4" />
                           </Button>
-                          <Button type="button" size="icon" variant="ghost" aria-label="Modifier la sortie" title="Modifier" onClick={() => startEditing(entry)}>
+                          <Button type="button" size="icon" variant="ghost" className="waste-row-action" aria-label="Modifier la sortie" title="Modifier" onClick={() => startEditing(entry)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button

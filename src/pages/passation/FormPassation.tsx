@@ -109,7 +109,7 @@ export default function FormPassation({ siteId = "", agentSortantNom = "", agent
 
   return (
     <Panel title="Nouvelle passation">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="handover-form space-y-4">
         <section className="space-y-2 rounded-md border bg-muted/30 p-3">
           <h3 className="text-sm font-semibold">Chef sortant</h3>
           <div className="grid grid-cols-2 gap-3">

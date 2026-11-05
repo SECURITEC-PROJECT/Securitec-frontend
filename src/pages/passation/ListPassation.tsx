@@ -50,11 +50,11 @@ export default function ListPassation({ handovers }: ListPassationProps) {
         { label: "Consignes", value: (row) => row.instructions },
         { label: "Pièces/courriers retenus", value: (row) => (row.documents_retenus || []).map((item) => `${item.type} ${item.reference} ×${item.quantite}`).join(" | ") },
       ]} /></div>
-      {filteredHandovers.length ? <ul className="space-y-3">
+      {filteredHandovers.length ? <ul className="handover-list space-y-3">
         {filteredHandovers.map((handover) => {
           const outgoing = [handover.agent_sortant_prenom, handover.agent_sortant_nom].filter(Boolean).join(" ");
           const incoming = [handover.incoming_prenom, handover.incoming_nom].filter(Boolean).join(" ");
-          return <li key={handover.id} className="space-y-2 rounded-md border p-3 text-sm">
+          return <li key={handover.id} className="handover-entry space-y-2 rounded-md border p-3 text-sm">
             <div className="flex flex-wrap justify-between gap-2 font-medium"><span>{outgoing} → {incoming}</span><span className="font-mono text-xs text-muted-foreground">{fmtDate(handover.created_at)}</span></div>
             {handover.pendingSync && <p className="text-xs text-amber-700">
               {handover.pendingSyncStatus === "conflict" ? "Conflit de synchronisation" : handover.pendingSyncStatus === "rejected" ? "Passation rejetée" : "Passation en attente : les deux services restent inchangés jusqu’à confirmation serveur."}
