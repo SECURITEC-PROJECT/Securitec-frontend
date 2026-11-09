@@ -1511,3 +1511,22 @@ main table tbody tr:last-child { border-bottom: 0; }
   .administration-module .panel-card { padding: 12px; }
   .administration-module .panel-card > div:first-of-type { flex-wrap: wrap; }
 }
+
+/* Fuel and gasoil registry follows the blue Securitec workspace theme. */
+.fuel-module { --fuel-blue: #0756e8; --fuel-navy: #112b55; }
+.fuel-module > .page-heading { padding: 18px 24px; border: 1px solid #dbe7fb; border-radius: 12px; background: linear-gradient(105deg, #eaf2ff 0%, #f7faff 65%, #e5efff 100%); }
+.fuel-module > .page-heading h1 { color: #102b62; font-size: clamp(1.35rem, 2vw, 1.8rem); }
+.fuel-module > .page-heading p { color: #243b69; }
+.fuel-module > .panel-card, .fuel-registry .panel-card { border-color: #dce5f3; border-radius: 10px; box-shadow: 0 3px 12px #173a6c10; }
+.fuel-module > .panel-card > h2, .fuel-registry .panel-card > h2 { color: #142c5a; }
+.fuel-module .fuel-primary-action { background: #0756e8; color: white; box-shadow: 0 3px 8px #0756e833; }
+.fuel-module .fuel-primary-action:hover { background: #0647c4; }
+.fuel-entry-dialog { border-color: #dce5f3; border-radius: 14px; }
+.fuel-module .fuel-table { border-color: #d8e1ef; }
+.fuel-module .fuel-table th, .fuel-module .fuel-table td { border-color: #e2e8f2; }
+.fuel-module .fuel-table-head { background: #eef3fb !important; }
+.fuel-module .fuel-table-head th { color: #243b69; }
+.fuel-module .fuel-table-row:nth-child(odd) { background: #f4f8ff; }
+.fuel-module .fuel-table-row:hover { background: #e7f0ff; }
+.fuel-module .fuel-table td button:nth-child(1), .fuel-module .fuel-table td button:nth-child(2) { color: #0756c9; }
+.fuel-module .fuel-table td button:nth-child(1):hover, .fuel-module .fuel-table td button:nth-child(2):hover { background: #e7f0ff; color: #0647c4; }
