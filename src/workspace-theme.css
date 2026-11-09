@@ -444,6 +444,46 @@
   width: 100%;
 }
 
+.keys-entry-modal {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0 !important;
+  width: min(1400px, 96vw) !important;
+  max-width: none !important;
+  max-height: 92vh;
+  overflow: hidden;
+  padding: 0 !important;
+  border: 1px solid #d5e0f1;
+  border-radius: 14px !important;
+  background: #fff;
+  box-shadow: 0 24px 80px #10245335;
+}
+.keys-entry-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e1e9f5;
+  background: linear-gradient(110deg, #eff5ff, #fff);
+}
+.keys-entry-modal-header h2 { margin: 0; color: #102453; font-size: 17px; font-weight: 700; }
+.keys-entry-modal-header p { margin: 5px 0 0; color: #66758d; font-size: 12px; }
+.keys-entry-modal-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: 11px;
+  background: #1459e8;
+  color: #fff;
+}
+.keys-entry-modal-icon svg { width: 21px; height: 21px; }
+.keys-entry-modal .keys-entry-panel { min-height: 0; overflow: auto; padding: 18px 20px; }
+.keys-entry-modal .keys-entry-toolbar { align-items: center; }
+.keys-entry-modal .keys-entry-toolbar p { color: #66758d; font-size: 11px; }
+.keys-entry-modal-footer { padding: 12px 20px; border-top: 1px solid #e1e9f5; background: #f8faff; }
+
 .keys-entry-toolbar {
   display: flex;
   align-items: center;
