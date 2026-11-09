@@ -1717,14 +1717,14 @@ export const serviceApi = {
         keyType: String(item.payload.keyType || ""),
         quantity: Number(item.payload.quantity || 0),
         departureTime: String(item.payload.departureTime || ""),
-        returnTime: null,
-        notReturned: false,
-        returnDate: null,
-        returnerLastName: null,
-        returnerFirstName: null,
-        returnerMatricule: null,
+        returnTime: item.payload.returnTime ? String(item.payload.returnTime) : null,
+        notReturned: Boolean(item.payload.notReturned),
+        returnDate: item.payload.returnDate ? String(item.payload.returnDate) : null,
+        returnerLastName: item.payload.returnerLastName ? String(item.payload.returnerLastName) : null,
+        returnerFirstName: item.payload.returnerFirstName ? String(item.payload.returnerFirstName) : null,
+        returnerMatricule: item.payload.returnerMatricule ? String(item.payload.returnerMatricule) : null,
         lieu: String(item.payload.lieu || ""),
-        observations: null,
+        observations: item.payload.observations ? String(item.payload.observations) : null,
         pendingSync: true,
         pendingSyncStatus: item.status || "pending",
         pendingSyncError: item.lastError,
@@ -1750,7 +1750,7 @@ export const serviceApi = {
     });
     return [...pending, ...pendingActions];
   },
-  async createKeyTracking(data: { date: string; employeeId: string; lastName: string; firstName: string; matricule: string; keyType: string; quantity: number; departureTime: string; siteId: string; lieu: string }) {
+  async createKeyTracking(data: { date: string; employeeId: string; lastName: string; firstName: string; matricule: string; keyType: string; quantity: number; departureTime: string; siteId: string; lieu: string; observations?: string; returnDate?: string; returnTime?: string; returnerLastName?: string; returnerFirstName?: string; returnerMatricule?: string; notReturned?: boolean }) {
     const requestId = crypto.randomUUID();
     const payload = { ...data, clientRequestId: requestId };
     try {

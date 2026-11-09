@@ -64,6 +64,11 @@ function columnName(index: number): string {
 
 export function exportXlsx(filename: string, sheetTitle: string, headers: string[], rows: unknown[][]): void {
   const data = [headers, ...rows];
+  const columnWidths = headers.map((header, columnIndex) => {
+    const longest = Math.max(String(header ?? "").length, ...rows.map((row) => String(row[columnIndex] ?? "").length));
+    return Math.min(42, Math.max(12, longest + 2));
+  });
+  const worksheetColumns = `<cols>${columnWidths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join("")}</cols>`;
   const sheetRows = data.map((row, rowIndex) => {
     const cells = row.map((value, columnIndex) => {
       const ref = `${columnName(columnIndex)}${rowIndex + 1}`;
@@ -77,7 +82,7 @@ export function exportXlsx(filename: string, sheetTitle: string, headers: string
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
     { name: "xl/workbook.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(safeSheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
     { name: "xl/_rels/workbook.xml.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>` },
-    { name: "xl/worksheets/sheet1.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>` },
+    { name: "xl/worksheets/sheet1.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${worksheetColumns}<sheetData>${sheetRows}</sheetData></worksheet>` },
   ];
   const blob = zip(files);
   const url = URL.createObjectURL(blob);
