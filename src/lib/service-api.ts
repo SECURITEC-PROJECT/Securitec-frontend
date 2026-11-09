@@ -610,7 +610,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers,
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new ApiResponseError(result.error || `Erreur API (${response.status})`, response.status);
+    if (!response.ok) {
+      const message = result.debug ? `${result.error || `Erreur API (${response.status})`} - ${result.debug}` : result.error || `Erreur API (${response.status})`;
+      throw new ApiResponseError(message, response.status);
+    }
     if (method === "GET" && userId) {
       try {
         await cacheApiResponse(userId, path, result);
