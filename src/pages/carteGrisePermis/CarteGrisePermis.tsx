@@ -92,15 +92,20 @@ export default function CarteGrisePermis() {
   };
 
   const handleExport = () => {
+    const formatDateTime = (value: string | Date | null | undefined) => {
+      if (!value) return "—";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "—";
+      return `${formatDate(date)}\n${formatTime(date)}`;
+    };
     const rows = filteredRecords.map((record) => {
-      const details = record.equipment || "";
-      const license = details.match(/Permis:\s*([^,]*)/)?.[1]?.trim() || "";
-      const vehicle = details.match(/Véhicule:\s*([^,]*)/)?.[1]?.trim() || "";
-      const observations = details.match(/Observations:\s*(.*)$/)?.[1]?.trim() || "";
-      const entered = record.entered_at ? new Date(record.entered_at) : null;
-      return [entered && !Number.isNaN(entered.getTime()) ? entered.toLocaleDateString("sv-SE") : "", entered && !Number.isNaN(entered.getTime()) ? entered.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "", record.full_name || "", record.id_document || "", license, vehicle, record.vehicle || "", record.reason || "", observations, record.site_name || "", record.exited_at ? "Sorti" : "Présent"];
+      return [
+        formatDateTime(record.entered_at), formatDateTime(record.exited_at), record.exited_at ? "Sorti" : "Présent",
+        record.full_name || "—", record.id_document || "—", record.vehicle || "—", record.reason || "—",
+        record.equipment || "—", record.exited_at ? "—" : "Sortie",
+      ];
     });
-    exportXlsx(`registre-carte-grise-permis-${new Date().toISOString().slice(0,10)}.xlsx`, "Registre contrôles", ["Date","Heure","Nom et prénom","CIN","Permis","Véhicule","Immatriculation","Motif","Observations","Site","Statut"], rows);
+    exportXlsx(`registre-carte-grise-permis-${new Date().toISOString().slice(0,10)}.xlsx`, "Registre contrôles", ["Entrée","Sortie","Statut","Personne","CIN","Immatriculation","Motif","Détails","Action"], rows);
   };
 
   return (
@@ -219,7 +224,7 @@ export default function CarteGrisePermis() {
               <table>
                 <thead>
                   <tr>
-                    {["Entrée", "Sortie", "Statut", "Personne", "CIN", "Immatriculation", "Motif", "Détails", "Site"].map((heading) => (
+                    {["Entrée", "Sortie", "Statut", "Personne", "CIN", "Immatriculation", "Motif", "Détails", "Action"].map((heading) => (
                       <th key={heading}>{heading}</th>
                     ))}
                   </tr>
@@ -235,7 +240,7 @@ export default function CarteGrisePermis() {
                       <td>{record.vehicle || "—"}</td>
                       <td>{record.reason || "—"}</td>
                       <td>{record.equipment || "—"}</td>
-                      <td>{record.site_name || "—"}</td>
+                      <td>{record.exited_at ? "—" : "Sortie"}</td>
                     </tr>
                   ))}
                 </tbody>
