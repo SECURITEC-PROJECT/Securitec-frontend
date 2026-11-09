@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/PageHeader";
 import MouvementApsEvenements from "@/pages/pointageAps/MouvementApsEvenements";
 import { useSites } from "@/hooks/useSites";
 import { confirmDeletion } from "@/lib/deletion-toast";
@@ -14,7 +13,7 @@ import {
 } from "@/lib/service-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Download, FileDown, FileUp, Printer, RotateCcw, Save, Search } from "lucide-react";
+import { CalendarDays, ClipboardCheck, Download, FileDown, FileUp, Printer, RotateCcw, Save, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -352,11 +351,14 @@ export default function MouvementsAPS() {
   };
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Mouvements APS" subtitle="Module 1 — Pointage APS (Jour et Nuit) : nom et matricule par poste." />
-    <section className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 shadow-sm print:hidden">
-      <div className="w-full max-w-sm">
-        <label htmlFor="aps-movement-global-site" className="mb-1.5 block text-sm font-medium">Site des modules APS</label>
+    <div className="aps-module space-y-5">
+    <header className="aps-registry-heading">
+      <div className="aps-registry-heading__identity">
+        <span className="aps-registry-heading__icon"><ClipboardCheck aria-hidden="true" /></span>
+        <div><h1>Mouvements APS</h1><p>Pointage des agents et suivi des mouvements du site</p></div>
+      </div>
+      <div className="aps-registry-heading__site print:hidden">
+        <label htmlFor="aps-movement-global-site">Site</label>
         <select
           id="aps-movement-global-site"
           value={activeSiteId}
@@ -368,14 +370,14 @@ export default function MouvementsAPS() {
         </select>
         {siteError && <p className="mt-1 text-xs text-destructive">{siteError}</p>}
       </div>
-    </section>
+    </header>
     <Tabs defaultValue="pointage-aps" className="space-y-4">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 print:hidden" aria-label="Modules des mouvements APS">
+        <TabsList className="aps-module-tabs flex h-auto w-full flex-wrap justify-start gap-1 print:hidden" aria-label="Modules des mouvements APS">
           <TabsTrigger value="pointage-aps">Pointage APS (Jour et Nuit)</TabsTrigger>
           <TabsTrigger value="module-2">Mouvement</TabsTrigger>
         </TabsList>
         <TabsContent value="pointage-aps" className="mt-0 space-y-5">
-      <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service des mouvements APS">
+      <div className="aps-service-tabs flex w-fit gap-1 rounded-lg border bg-muted/40 p-1 print:hidden" role="tablist" aria-label="Service des mouvements APS">
         {(["jour", "nuit"] as const).map((item) => (
           <button
             key={item}
@@ -390,9 +392,9 @@ export default function MouvementsAPS() {
         ))}
       </div>
 
-      <section className="rounded-xl border bg-card p-4 shadow-sm">
+      <section className="aps-filter-panel rounded-xl border bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="w-full max-w-xs">
+          <div className="aps-date-filter w-full max-w-xs">
             <label htmlFor="aps-movement-date" className="mb-1.5 block text-sm font-medium">Date</label>
             <div className="relative">
               <CalendarDays className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
@@ -436,7 +438,7 @@ export default function MouvementsAPS() {
       {pendingStatusByKey[contextKey] && <p className={`text-sm ${pendingStatusByKey[contextKey].status === "pending" ? "text-amber-700" : "text-destructive"}`} title={pendingStatusByKey[contextKey].error}>
         {pendingStatusByKey[contextKey].status === "conflict" ? "Conflit : les mouvements APS n’ont pas été confirmés par le serveur." : pendingStatusByKey[contextKey].status === "rejected" ? "Mouvements APS rejetés par le serveur. Vérifiez les données avant de réessayer." : "Mouvements enregistrés sur cet appareil, en attente de synchronisation."}
       </p>}
-      <div className="relative w-full max-w-sm print:hidden">
+      <div className="aps-post-search relative w-full max-w-sm print:hidden">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <input
           type="search"
@@ -447,7 +449,7 @@ export default function MouvementsAPS() {
           className="h-10 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
         />
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+      <div className="aps-register-table overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
