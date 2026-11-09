@@ -1369,6 +1369,9 @@ export const serviceApi = {
   async listShiftPosts(siteId: string) {
     return (await request<{ posts: { id: string; nom: string }[] }>(`/shifts/posts?siteId=${encodeURIComponent(siteId)}`)).posts;
   },
+  async deleteShift(id: string) {
+    return request<{ deleted: boolean; serviceId: string; deletedFluxCount: number }>(`/shifts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
   async startShift(data: Record<string, unknown>) {
     const siteId = String(data.siteId || "");
     if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);

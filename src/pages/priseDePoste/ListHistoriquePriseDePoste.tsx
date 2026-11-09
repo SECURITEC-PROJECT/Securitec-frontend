@@ -1,5 +1,11 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
+import { useSites } from "@/hooks/useSites";
+import type { ShiftFormData } from "./FormPriseDePoste";
+import { Download, FileDown, FileUp, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useState } from "react";
 
 const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
@@ -46,18 +52,25 @@ export interface Shift {
 interface ListHistoriquePriseDePosteProps {
   shifts: Shift[];
   onOpenEndDialog: (shift: Shift, isOnlyOne: boolean) => void;
-  fmt: (dateStr: string | null) => string;
+  onDeleteShift: (shift: Shift) => Promise<{ deleted: boolean; deletedFluxCount: number }>;
+  onImportShift: (data: ShiftFormData) => Promise<void>;
+  onRefresh: () => Promise<void>;
 }
 
 export default function ListHistoriquePriseDePoste({
   shifts,
   onOpenEndDialog,
-  fmt,
+  onDeleteShift,
+  onImportShift,
+  onRefresh,
 }: ListHistoriquePriseDePosteProps) {
+  const { sites } = useSites();
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [serviceFilter, setServiceFilter] = useState<"" | "JOUR" | "NUIT">("");
+  const [importing, setImporting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const groups = Array.from(shifts.reduce((all, shift) => {
     const key = shift.serviceId || shift.id;
     const group = all.get(key) || [];
@@ -85,11 +98,7 @@ export default function ListHistoriquePriseDePoste({
         && (!serviceFilter || shift.shiftType === serviceFilter);
   });
   const allActiveShiftCount = groups.filter((shift) => shift.ended_at === null && shift.pendingSyncAction !== "open").length;
-  const pendingStartShifts = filteredGroups.filter((shift) => shift.pendingSyncAction === "open");
-  const activeShifts = filteredGroups.filter((shift) => shift.ended_at === null && shift.pendingSyncAction !== "open");
-  const finishedShifts = filteredGroups.filter((shift) => shift.ended_at !== null);
-
-  const todayStr = new Date().toLocaleDateString("fr-FR", { timeZone: MADAGASCAR_TIME_ZONE });
+  const registerShifts = filteredGroups;
 
   const fmtFull = (dateStr: string | null) => {
     if (!dateStr) return "—";
@@ -100,6 +109,126 @@ export default function ListHistoriquePriseDePoste({
       minute: "2-digit",
       timeZone: MADAGASCAR_TIME_ZONE,
     })}`;
+  };
+
+  const exportHeaders = ["Poste / Site", "Service", "Équipe", "Prise", "Fin", "État"];
+  const exportRows = filteredGroups.map((group) => {
+    const crew = group.agents || [group];
+    return [
+      `${group.posteNom || "Poste non renseigné"}\n${group.site_de_travail || ""}`,
+      group.shiftType === "NUIT" ? "Nuit" : group.shiftType === "JOUR" ? "Jour" : "Service",
+      `${crew.length} agent(s)\nChef : ${group.prenom || ""} ${group.nom || ""}`.trim(),
+      fmtFull(group.started_at), group.ended_at ? fmtFull(group.ended_at) : "",
+      group.ended_at ? "Terminé" : "En service",
+    ];
+  });
+
+  const deleteService = async (shift: Shift) => {
+    const serviceId = shift.serviceId || shift.id;
+    if (shift.pendingSync || shift.pendingSyncAction === "open") {
+      toast.error("Synchronisez cette prise de service avant de la supprimer.");
+      return;
+    }
+    if (!window.confirm(`Supprimer la prise de service de ${shift.posteNom || shift.site_de_travail} ? Les flux logistiques et leurs audits associés seront aussi supprimés. Cette action est définitive.`)) return;
+    setDeletingId(serviceId);
+    try {
+      const result = await onDeleteShift(shift);
+      if (result.deleted) toast.success(result.deletedFluxCount
+        ? `Prise supprimée avec ${result.deletedFluxCount} flux logistique(s) associé(s).`
+        : "Prise de service supprimée.");
+      else toast.info("Cette prise de service était déjà absente du registre.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Suppression de la prise de service impossible.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const importFile = async (file?: File) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const norm = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      const headers = (sheet[0] || []).map(norm);
+      const col = (...names: string[]) => headers.findIndex((header) => names.includes(header));
+      const c = {
+        location: col("poste / site"), site: col("site", "site de travail"), post: col("poste", "poste de garde"), service: col("service", "type de service"),
+        team: col("equipe"), last: col("nom", "nom de l'agent"), first: col("prenom", "prenom de l'agent"), matricule: col("matricule", "matricule responsable"),
+        provider: col("prestataire", "fournisseur"), started: col("prise", "prise de poste", "debut", "debut de service"),
+        ended: col("fin", "fin de service", "fin de poste"), state: col("etat", "statut"), notes: col("observations", "observation"),
+      };
+      if ([c.service, c.started].some((index) => index < 0) || (c.location < 0 && [c.site, c.post].some((index) => index < 0)) || (c.team < 0 && [c.last, c.first].some((index) => index < 0))) {
+        throw new Error("Colonnes requises : Poste / Site, Service, Équipe et Prise.");
+      }
+      const parseTimestamp = (raw: string): string | undefined => {
+        const value = raw.trim();
+        if (!value) return undefined;
+        if (/^\d{4}-\d{2}-\d{2}(?:T| )/.test(value)) {
+          const timestamp = new Date(value);
+          return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+        }
+        const local = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})(?:\D+(\d{1,2}):(\d{2}))?$/i.exec(value);
+        if (local) {
+          const [, day, month, year, hour = "00", minute = "00"] = local;
+          const datePart = `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`;
+          const parsed = new Date(`${datePart}T${hour.padStart(2,"0")}:${minute}:00+03:00`);
+          return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+        }
+        const serial = Number(value);
+        if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+          const date = new Date(Date.UTC(1899, 11, 30 + Math.floor(serial)));
+          const minutes = Math.round((serial % 1) * 24 * 60);
+          return new Date(`${date.toISOString().slice(0,10)}T${String(Math.floor(minutes/60)%24).padStart(2,"0")}:${String(minutes%60).padStart(2,"0")}:00+03:00`).toISOString();
+        }
+        return undefined;
+      };
+      const records = sheet.slice(1).map((cells, index) => {
+        const get = (index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+        const location = get(c.location);
+        const locationParts = location.split(/\r?\n/).map((part) => part.trim()).filter(Boolean);
+        const postName = c.post >= 0 ? get(c.post) : locationParts[0] || "";
+        const siteName = c.site >= 0 ? get(c.site) : locationParts.slice(1).join(" ");
+        const site = sites.find((item) => norm(item.name) === norm(siteName));
+        const service = norm(get(c.service));
+        const shiftType: ShiftFormData["shiftType"] | "" = service.includes("nuit") ? "NUIT" : service.includes("jour") ? "JOUR" : "";
+        const team = get(c.team);
+        const chefLine = team.split(/\r?\n/).map((part) => part.trim()).find((part) => norm(part).startsWith("chef")) || "";
+        const chefName = chefLine.replace(/^chef\s*:\s*/i, "").trim();
+        const chefParts = chefName.split(/\s+/).filter(Boolean);
+        return {
+          line: index + 2, hasData: cells.some((cell) => String(cell ?? "").trim() !== ""), siteName, siteId: site?.id || "", postName, shiftType,
+          lastName: c.last >= 0 ? get(c.last) : chefParts.slice(1).join(" "), firstName: c.first >= 0 ? get(c.first) : chefParts[0] || "",
+          matricule: get(c.matricule), provider: get(c.provider),
+          startedAt: parseTimestamp(get(c.started)), endedAt: parseTimestamp(get(c.ended)), endedProvided: Boolean(get(c.ended)),
+          state: norm(get(c.state)), notes: get(c.notes),
+        };
+      }).filter((row) => row.hasData);
+      if (!records.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let imported = 0;
+      const failures: string[] = [];
+      for (const record of records) {
+        const matricule = record.matricule || `IMPORT-${Date.now().toString(36).toUpperCase()}-${record.line}`;
+        try {
+          await onImportShift({
+            nom: record.lastName || "Non renseigné", prenom: record.firstName || "Non renseigné", matricule,
+            prestataire: record.provider || "Non renseigné", site_de_travail: record.siteName || "Site non renseigné", siteId: record.siteId,
+            posteId: "", posteNom: record.postName, shiftType: record.shiftType, chefMatricule: matricule,
+            agentMatricules: [], notes: record.notes, startedAt: record.startedAt, endedAt: record.endedAt,
+          });
+          imported += 1;
+        } catch (error) {
+          failures.push(`Ligne ${record.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      await onRefresh();
+      if (imported) toast.success(`${imported} ligne(s) importée(s) dans le registre de prise de service.`);
+      if (failures.length) toast.error(imported ? `${failures.length} ligne(s) non importée(s). Vérifiez les données du fichier.` : failures.slice(0,3).join(" "));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -116,82 +245,46 @@ export default function ListHistoriquePriseDePoste({
         {(search || dateFrom || dateTo || serviceFilter) && <Button type="button" variant="ghost" onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setServiceFilter(""); }}>Effacer</Button>}
       </div>
       <p className="shift-history-result-count" aria-live="polite">{filteredGroups.length} service(s) correspondant(s)</p>
-      <div className="mb-6">
-        <h3 className="shift-section-heading mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          En service ({activeShifts.length}) · <span className="normal-case font-normal text-xs">{todayStr}</span>
-        </h3>
-        {activeShifts.length > 0 ? (
-          <ul className="shift-active-list space-y-3">
-            {activeShifts.map((s) => (
-              <li
-                key={s.id}
-                className="shift-active-card flex items-center justify-between rounded-md border p-3 text-sm bg-background shadow-sm"
-              >
-                <div>
-                  <p className="flex flex-wrap items-center gap-2 font-semibold text-base"><span>{s.posteNom || "Poste non renseigné"}</span><span className={`shift-type-pill ${s.shiftType === "NUIT" ? "shift-type-pill--night" : "shift-type-pill--day"}`}>{s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</span></p>
-                  <p className="text-sm">Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {s.site_de_travail} · {s.pendingAgentCount || s.agents?.length || 1} agent(s) · {s.agents?.filter((agent) => agent.fonctionService !== "CHEF").map((agent) => `${agent.prenom} ${agent.nom}`).join(", ") || "aucun autre agent"}
-                  </p>
-                  {s.pendingSync && <p className="mt-1 text-xs text-amber-700">
-                    {s.pendingSyncAction === "end"
-                      ? `Clôture non confirmée — service toujours ouvert sur le serveur${s.pendingSyncStatus === "conflict" ? " (conflit)" : s.pendingSyncStatus === "rejected" ? " (rejetée)" : ""}`
-                      : s.pendingSyncStatus === "conflict" ? "Conflit de synchronisation" : s.pendingSyncStatus === "rejected" ? "Prise de poste rejetée" : "En attente de synchronisation"}
-                    {s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}
-                  </p>}
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Début : <span className="font-mono">{fmt(s.started_at)}</span>
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="shift-end-button"
-                  onClick={() => onOpenEndDialog(s, allActiveShiftCount === 1)}
-                  disabled={s.pendingSync}
-                >
-                  Terminer
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground italic">{filteredGroups.length ? "Aucun agent actuellement en service." : "Aucun service ne correspond à cette recherche."}</p>
-        )}
-      </div>
-
-      {pendingStartShifts.length > 0 && <div className="mb-6">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-700">
-          Prises de poste à confirmer ({pendingStartShifts.length})
-        </h3>
-        <ul className="shift-pending-list space-y-3">
-          {pendingStartShifts.map((s) => <li key={s.id} className="shift-pending-card rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-            <p className="flex flex-wrap items-center gap-2 font-semibold"><span>{s.posteNom || "Poste non renseigné"}</span><span className="shift-type-pill shift-type-pill--pending">{s.shiftType === "NUIT" ? "Nuit" : "Jour"}</span></p>
-            <p>Chef : {s.nom} {s.prenom} {s.matricule ? `(${s.matricule})` : ""}</p>
-            <p className="text-xs text-muted-foreground">{s.site_de_travail} · {s.pendingAgentCount || 1} agent(s)</p>
-            <p className="mt-1 text-xs text-amber-700">
-              {s.pendingSyncStatus === "conflict" ? "Conflit : le serveur n’a pas ouvert ce service" : s.pendingSyncStatus === "rejected" ? "Rejetée : le serveur n’a pas ouvert ce service" : "En attente : ce service n’est pas encore ouvert sur le serveur"}
-              {s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}
-            </p>
-          </li>)}
-        </ul>
-      </div>}
-
       <div className="shift-finished-section">
-        <h3 className="shift-section-heading mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Historique des terminés
-        </h3>
-        {finishedShifts.length > 0 ? (
-          <div className="shift-history-table-wrap overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead><tr><th>Poste / Site</th><th>Service</th><th>Équipe</th><th>Prise</th><th>Fin</th><th>État</th></tr></thead><tbody>
-            {finishedShifts.map((s) => <tr key={s.id}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="shift-section-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Registre des prises de service
+          </h3>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <label className={`inline-flex h-10 cursor-pointer items-center rounded-md border px-3 text-sm font-medium ${importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+              <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={importing} onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button type="button" variant="outline" disabled={!exportRows.length} onClick={() => exportXlsx(
+              `registre-prise-de-service-${new Date().toISOString().slice(0,10)}.xlsx`, "Registre prise de service", exportHeaders, exportRows,
+            )}>
+              <Download className="mr-2 h-4 w-4" /> Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" onClick={() => exportXlsx(
+              "modele-registre-prise-de-service.xlsx", "Registre prise de service", exportHeaders, [],
+            )}>
+              <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
+            </Button>
+          </div>
+        </div>
+        {registerShifts.length > 0 ? (
+          <div className="shift-history-table-wrap overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr><th>Poste / Site</th><th>Service</th><th>Équipe</th><th>Prise</th><th>Fin</th><th>État</th><th>Action</th></tr></thead><tbody>
+            {registerShifts.map((s) => <tr key={s.id}>
               <td><strong>{s.posteNom || "Poste non renseigné"}</strong><small className="block text-muted-foreground">{s.site_de_travail}</small></td>
               <td><span className={`shift-type-pill ${s.shiftType === "NUIT" ? "shift-type-pill--night" : "shift-type-pill--day"}`}>{s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</span></td>
               <td>{s.agents?.length || 1} agent(s)<small className="block text-muted-foreground">Chef : {s.prenom} {s.nom}</small></td>
               <td className="whitespace-nowrap">{fmtFull(s.started_at)}</td><td className="whitespace-nowrap">{fmtFull(s.ended_at)}</td>
-              <td><span className="shift-closed-pill">Terminé</span>{s.pendingSync && <small className="mt-1 block text-amber-700">Synchronisation en attente{s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}</small>}</td>
+              <td><span className={s.ended_at ? "shift-closed-pill" : "shift-type-pill shift-type-pill--pending"}>{s.pendingSyncAction === "open" ? "À confirmer" : s.ended_at ? "Terminé" : "En service"}</span>{s.pendingSync && <small className="mt-1 block text-amber-700">Synchronisation en attente{s.pendingSyncError ? ` · ${s.pendingSyncError}` : ""}</small>}</td>
+              <td><div className="flex flex-wrap gap-2">
+                {!s.ended_at && s.pendingSyncAction !== "open" && <Button size="sm" className="shift-end-button" onClick={() => onOpenEndDialog(s, allActiveShiftCount === 1)} disabled={s.pendingSync || deletingId === (s.serviceId || s.id)}>Terminer</Button>}
+                <Button type="button" size="sm" variant="destructive" onClick={() => void deleteService(s)} disabled={s.pendingSync || s.pendingSyncAction === "open" || deletingId === (s.serviceId || s.id)} aria-label={`Supprimer la prise de service ${s.posteNom || ""}`}>
+                  <Trash2 className="mr-1 h-4 w-4" />{deletingId === (s.serviceId || s.id) ? "Suppression…" : "Supprimer"}
+                </Button>
+              </div></td>
             </tr>)}
           </tbody></table></div>
         ) : (
-          <Empty text="Aucune prise de poste terminée" />
+          <Empty text="Aucune prise de service enregistrée" />
         )}
       </div>
     </Panel>
