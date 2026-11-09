@@ -1,4 +1,4 @@
-import { PageHeader, Panel } from "@/components/PageHeader";
+import { Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +10,12 @@ import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
 import { printRecord } from "@/lib/printRecord";
 import { printRegistryTable } from "@/lib/registry-table";
-import { ClipboardList, Download, FileDown, FileUp, Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { ClipboardList, Download, FileDown, FileUp, Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const today = () => {
   const date = new Date();
@@ -109,6 +110,10 @@ export default function DechetsLevee() {
     error: string;
   }>({ siteId: "", chauffeurs: [], error: "" });
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"" | "LEVURE" | "DRECHE">("");
+  const [formOpen, setFormOpen] = useState(false);
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const selectedSiteType = site?.type || siteType;
@@ -253,7 +258,10 @@ export default function DechetsLevee() {
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
   const filteredEntries = entries.filter((entry) =>
     [formatDate(entry.date), formatWasteType(entry.typeDechet), entry.heureSortie, entry.numeroPesage, entry.facture, entry.plomb, entry.vehicule, entry.transporteur, entry.destinataire, entry.siteName]
-      .some((value) => normalizeText(value || "").includes(normalizeText(search))),
+      .some((value) => normalizeText(value || "").includes(normalizeText(search)))
+      && (!dateFrom || entry.date.slice(0, 10) >= dateFrom)
+      && (!dateTo || entry.date.slice(0, 10) <= dateTo)
+      && (!typeFilter || entry.typeDechet === typeFilter),
   );
 
   const clearForm = () => {
@@ -272,6 +280,7 @@ export default function DechetsLevee() {
   };
 
   const startEditing = (entry: DechetsEntry) => {
+    setFormOpen(true);
     setEditingId(entry.id);
     setDate(entry.date.slice(0, 10));
     setTypeDechet(entry.typeDechet || "");
@@ -602,37 +611,35 @@ export default function DechetsLevee() {
 
   return (
     <div className="waste-module space-y-5">
-      <PageHeader
-        title="Drèche et levure"
-        subtitle="Enregistrement des sorties de drèche et de levure avec les informations de pesage"
-      />
-      {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <section className="waste-entry-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="waste-entry-heading flex items-center gap-3 border-b px-5 py-4">
-          <div className="waste-entry-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-            <ClipboardList className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-foreground">{editingId ? "Modifier une sortie" : "Nouvelle sortie de drèche ou de levure"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Saisissez les informations sur une ligne, puis enregistrez la sortie.</p>
-          </div>
+      <div className="waste-registry-heading">
+        <div className="waste-registry-heading__identity">
+          <span className="waste-registry-heading__icon"><ClipboardList aria-hidden="true" /></span>
+          <div><h1>Drèche et levure</h1><p>Suivez les sorties, le pesage et les destinataires</p></div>
         </div>
+        <div className="waste-registry-heading__controls">
+          <SitePicker
+            id="dechets-site"
+            value={selectedSiteName}
+            type={selectedSiteType}
+            sites={sites}
+            canCreate={canCreateSite}
+            onAdd={addSite}
+            onChange={(name, type) => { setSiteName(name); setSiteType(type); setVehicule(""); }}
+          />
+          <Button type="button" className="waste-registry-new-button" onClick={() => { clearForm(); setFormOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> Nouvelle sortie
+          </Button>
+        </div>
+      </div>
+      {siteError && <p className="text-sm text-destructive">{siteError}</p>}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="waste-entry-dialog w-[calc(100vw-1rem)] max-w-[1700px] max-h-[94vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Modifier une sortie" : "Nouvelle sortie de drèche ou de levure"}</DialogTitle>
+            <DialogDescription>Renseignez les données de sortie puis enregistrez la ligne dans le registre du site.</DialogDescription>
+          </DialogHeader>
+      <section className="waste-entry-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
         <form className="space-y-4 p-4 sm:p-6" onSubmit={(event) => void submit(event)}>
-          <div className="max-w-2xl">
-            <SitePicker
-              id="dechets-site"
-              value={selectedSiteName}
-              type={selectedSiteType}
-              sites={sites}
-              canCreate={canCreateSite}
-              onAdd={addSite}
-              onChange={(name, type) => {
-                setSiteName(name);
-                setSiteType(type);
-                setVehicule("");
-              }}
-            />
-          </div>
           {selectedSiteId && loadingShifts && <p className="text-sm text-muted-foreground">Vérification des prises de poste ouvertes…</p>}
           {shiftError && <p role="alert" className="text-sm text-destructive">{shiftError}</p>}
           {selectedSiteId && !loadingShifts && openShifts.length > 0 && (
@@ -798,7 +805,7 @@ export default function DechetsLevee() {
                 <Input id="dechets-destinataire" required maxLength={255} value={destinataire} onChange={(event) => setDestinataire(event.target.value)} />
               </div>
               <div className="flex gap-2">
-                {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
+                {editingId && <Button type="button" variant="outline" disabled={saving} onClick={() => { clearForm(); setFormOpen(false); }}>Annuler</Button>}
                 <Button type="submit" disabled={saving || !selectedSiteName.trim()}>
                   {saving ? "Enregistrement…" : editingId ? "Modifier" : "Enregistrer"}
                 </Button>
@@ -810,14 +817,13 @@ export default function DechetsLevee() {
           </p>
         </form>
       </section>
+        </DialogContent>
+      </Dialog>
       <section id="waste-registry-print-area" className="waste-registry-section">
         <Panel>
-        <div className="mb-4 flex flex-col gap-3 waste-registry-screen xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">Registre des sorties de drèche et de levure</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Historique des sorties pour le site sélectionné.</p>
-          </div>
-          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-[76%] xl:grid-cols-4">
+        <div className="waste-registry-toolbar waste-registry-screen">
+          <div className="waste-registry-toolbar__label">Registre des sorties <span>{filteredEntries.length} enregistrement(s)</span></div>
+          <div className="waste-registry-toolbar__actions">
             <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!selectedSiteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
               <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
               <input
@@ -828,19 +834,20 @@ export default function DechetsLevee() {
                 onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }}
               />
             </label>
-            <Button className="w-full" type="button" variant="outline" onClick={() => exportXlsx("modele-registre-dechets-levure.xlsx", "Drèche et levure", wasteHeaders, [])}>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-registre-dechets-levure.xlsx", "Drèche et levure", wasteHeaders, [])}>
               <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
             </Button>
-            <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={handleExport}>
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" /> Exporter Excel
             </Button>
-            <Button type="button" variant="outline" className="waste-print-button w-full" disabled={!filteredEntries.length} onClick={handlePrintRegistry}>
+            <Button type="button" variant="outline" className="waste-print-button" disabled={!filteredEntries.length} onClick={handlePrintRegistry}>
               <Printer className="mr-2 h-4 w-4" /> Imprimer les lignes (Word)
             </Button>
           </div>
         </div>
         {entriesError && <p className="waste-registry-screen mb-3 text-sm text-destructive">{entriesError}</p>}
-        <div className="relative mb-4 w-full waste-registry-screen">
+        <div className="waste-registry-filters waste-registry-screen">
+          <label className="waste-registry-search"><span>Recherche</span><div className="relative">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre des sorties de drèche et de levure"
@@ -849,6 +856,11 @@ export default function DechetsLevee() {
               onChange={(event) => setSearch(event.target.value)}
               className="h-full min-h-11 pl-9"
             />
+          </div></label>
+          <label>Période du<input type="date" max={dateTo || undefined} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+          <label>Au<input type="date" min={dateFrom || undefined} value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+          <label>Désignation<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "" | "LEVURE" | "DRECHE")}><option value="">Toutes</option><option value="DRECHE">Drèche</option><option value="LEVURE">Levure</option></select></label>
+          {(search || dateFrom || dateTo || typeFilter) && <Button type="button" variant="ghost" onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setTypeFilter(""); }}>Effacer</Button>}
         </div>
         {!site?.id ? (
           <p className="waste-registry-screen rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
