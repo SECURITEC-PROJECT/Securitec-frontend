@@ -1,13 +1,13 @@
-import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
 import TableauCarteGrise from "./TableauCarteGrise";
-import { Download, Printer, Search } from "lucide-react";
+import { ClipboardCheck, Download, Plus, Printer, Search } from "lucide-react";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const isCarteGriseRecord = (record: { document_type?: string; zone?: string }) =>
   record.document_type === "CIN/Permis" && record.zone === "Contrôle";
@@ -45,6 +45,11 @@ export default function CarteGrisePermis() {
   const [loadingRecords, setLoadingRecords] = useState(true);
   const [registryError, setRegistryError] = useState("");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [siteFilter, setSiteFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "PRESENT" | "SORTI">("");
+  const [entryOpen, setEntryOpen] = useState(false);
   const [exitingId, setExitingId] = useState<string | null>(null);
   useEffect(() => {
     serviceApi.listVisitors()
@@ -53,16 +58,23 @@ export default function CarteGrisePermis() {
       .finally(() => setLoadingRecords(false));
   }, []);
 
-  const filteredRecords = records.filter((record) =>
-    [
+  const filteredRecords = records.filter((record) => {
+    const searchMatches = [
       record.full_name,
       record.id_document,
       record.vehicle,
       record.reason,
       record.equipment,
       record.site_name,
-    ].some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())),
-  );
+    ].some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+    const entryDate = record.entered_at ? new Date(record.entered_at) : null;
+    const entryDateKey = entryDate && !Number.isNaN(entryDate.getTime()) ? entryDate.toISOString().slice(0, 10) : "";
+    return searchMatches
+      && (!dateFrom || entryDateKey >= dateFrom)
+      && (!dateTo || entryDateKey <= dateTo)
+      && (!siteFilter || record.site_id === siteFilter)
+      && (!statusFilter || (statusFilter === "SORTI" ? Boolean(record.exited_at) : !record.exited_at));
+  });
   const handleExit = async (record: CarteGriseRecord) => {
     if (!window.confirm(`Confirmer la sortie de ${record.full_name || "cette personne"} ? Vérifiez que les documents lui ont été rendus.`)) return;
     setExitingId(record.id);
@@ -110,36 +122,45 @@ export default function CarteGrisePermis() {
 
   return (
     <div className="carte-grise-module space-y-5">
-      <PageHeader
-        title="Carte grise / Permis de conduire"
-        subtitle="Vérification et enregistrement des documents véhicules et permis"
-      />
       <div className="carte-grise-layout grid grid-cols-1 gap-4">
-        <TableauCarteGrise sites={sites} canCreateSite={canCreateSite} addSite={addSite} siteError={siteError} onSaved={(record) => setRecords((current) => [record, ...current])} />
         <section id="carte-grise-print-area" className="carte-grise-registry space-y-3 rounded-lg border bg-card p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="carte-grise-panel-title font-semibold">Registre carte grise / permis</h2>
-            <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="carte-grise-print-button print:hidden" disabled={!filteredRecords.length} onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" /> Exporter Excel
-            </Button><Button type="button" variant="outline" className="carte-grise-print-button print:hidden" disabled={!records.length} onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
-            </Button></div>
+          <div className="carte-grise-registry-heading">
+            <div className="carte-grise-registry-heading__identity">
+              <span className="carte-grise-registry-heading__icon"><ClipboardCheck aria-hidden="true" /></span>
+              <div><h2>Carte grise / Permis</h2><p>Consultez les entrées, sorties et documents contrôlés</p></div>
+            </div>
+            <Button type="button" className="carte-grise-registry-heading__action" onClick={() => setEntryOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" /> Nouvelle vérification
+            </Button>
+          </div>
+          <div className="carte-grise-registry-toolbar">
+            <span className="carte-grise-registry-toolbar__label">Registre</span>
+            <div className="flex flex-wrap gap-2 print:hidden">
+              <Button type="button" variant="outline" className="carte-grise-print-button" disabled={!filteredRecords.length} onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" /> Exporter Excel
+              </Button>
+              <Button type="button" variant="outline" className="carte-grise-print-button" disabled={!records.length} onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" /> Imprimer
+              </Button>
+            </div>
           </div>
           {registryError && <p className="mb-3 text-sm text-destructive">{registryError}</p>}
           {loadingRecords ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Chargement du registre…</p>
           ) : (
             <div className="space-y-4">
-              <div className="relative carte-grise-screen">
-                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-label="Rechercher dans le registre carte grise et permis"
-                  placeholder="Rechercher par nom, CIN, immatriculation ou motif…"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="pl-9"
-                />
+              <div className="carte-grise-filters carte-grise-screen">
+                <label className="carte-grise-search"><span>Recherche</span><div className="relative">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input aria-label="Rechercher dans le registre carte grise et permis" placeholder="Nom, CIN, immatriculation ou motif…" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" />
+                </div></label>
+                <label>Période du<input type="date" max={dateTo || undefined} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+                <label>Au<input type="date" min={dateFrom || undefined} value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+                <label>Site<select value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">Tous les sites</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select></label>
+                <label>Statut<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "" | "PRESENT" | "SORTI")}><option value="">Tous</option><option value="PRESENT">Présent</option><option value="SORTI">Sorti</option></select></label>
+                {(search || dateFrom || dateTo || siteFilter || statusFilter) && <Button type="button" variant="ghost" onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setSiteFilter(""); setStatusFilter(""); }}>Effacer</Button>}
               </div>
+              <p className="carte-grise-result-count" aria-live="polite">{filteredRecords.length} enregistrement(s)</p>
               {records.length === 0 ? (
                 <div className="rounded-lg border border-dashed px-4 py-12 text-center">
                   <p className="font-medium">Aucun enregistrement pour le moment</p>
@@ -249,6 +270,15 @@ export default function CarteGrisePermis() {
           )}
         </section>
       </div>
+      <Dialog open={entryOpen} onOpenChange={setEntryOpen}>
+        <DialogContent className="carte-grise-entry-dialog w-[calc(100vw-1rem)] max-w-[1600px] max-h-[94vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Nouvelle vérification carte grise / permis</DialogTitle>
+            <DialogDescription>Saisissez les contrôles dans le tableau et enregistrez chaque ligne.</DialogDescription>
+          </DialogHeader>
+          <TableauCarteGrise sites={sites} canCreateSite={canCreateSite} addSite={addSite} siteError={siteError} onSaved={(record) => setRecords((current) => [record, ...current])} />
+        </DialogContent>
+      </Dialog>
       <style>{`
         @media print {
           @page { size: landscape; margin: 12mm; }

@@ -10,6 +10,7 @@ import { serviceApi, type ApsMovementEvent } from "@/lib/service-api";
 import { Download, FileDown, FileUp, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const EMPTY_ENTRIES: ApsMovementEvent[] = [];
 
@@ -53,6 +54,7 @@ export default function MouvementApsEvenements({
   const [editing, setEditing] = useState<ApsMovementEvent | null>(null);
   const [form, setForm] = useState(blankForm);
   const [search, setSearch] = useState("");
+  const [entryOpen, setEntryOpen] = useState(false);
   const registryKey = `${activeSiteId}:${date}`;
   const entries = entriesByKey[registryKey] ?? EMPTY_ENTRIES;
   const loading = Boolean(activeSiteId) && !Object.hasOwn(entriesByKey, registryKey);
@@ -111,6 +113,7 @@ export default function MouvementApsEvenements({
           : [saved, ...(current[registryKey] ?? [])],
       }));
       resetForm();
+      setEntryOpen(false);
       toast[saved.pendingSync ? "info" : "success"](saved.pendingSync
         ? "Mouvement enregistré sur cet appareil, en attente de synchronisation."
         : wasEditing ? "Mouvement modifié." : "Mouvement enregistré.");
@@ -129,6 +132,7 @@ export default function MouvementApsEvenements({
       observation: entry.observation,
       heureSortie: entry.heureSortie ?? "",
     });
+    setEntryOpen(true);
   };
 
   const deleteEntry = async (entry: ApsMovementEvent) => {
@@ -280,7 +284,18 @@ export default function MouvementApsEvenements({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="aps-events-module space-y-4">
+      <div className="aps-events-heading">
+        <div className="aps-events-heading__identity"><span className="aps-events-heading__icon"><Plus aria-hidden="true" /></span><div><h2>Mouvements et événements</h2><p>Consultez et enregistrez les événements APS du site</p></div></div>
+        <Button type="button" className="aps-events-new-button" onClick={() => { resetForm(); setEntryOpen(true); }}><Plus className="mr-2 size-4" />Nouveau mouvement</Button>
+      </div>
+      <div className="aps-events-date-filter print:hidden">
+        <label htmlFor="aps-event-registry-date">Date du registre</label>
+        <Input id="aps-event-registry-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+      </div>
+      <Dialog open={entryOpen} onOpenChange={setEntryOpen}>
+        <DialogContent className="aps-event-dialog w-[calc(100vw-1rem)] max-w-[1500px] max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader><DialogTitle>{editing ? "Modifier le mouvement" : "Nouveau mouvement APS"}</DialogTitle><DialogDescription>Renseignez les heures, le mouvement et les observations.</DialogDescription></DialogHeader>
       <section className="rounded-xl border bg-card p-4 shadow-sm">
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
           <div className="overflow-x-auto pb-2">
@@ -310,14 +325,16 @@ export default function MouvementApsEvenements({
                   {editing ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
                   {saving ? "Enregistrement…" : editing ? "Modifier" : "Enregistrer"}
                 </Button>
-                {editing && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 size-4" />Annuler</Button>}
+                {editing && <Button type="button" variant="outline" onClick={() => { resetForm(); setEntryOpen(false); }}><X className="mr-2 size-4" />Annuler</Button>}
               </div>
             </div>
           </div>
         </form>
       </section>
+        </DialogContent>
+      </Dialog>
 
-      <div className="grid w-full grid-cols-1 items-stretch gap-2 print:hidden sm:grid-cols-2 xl:grid-cols-5">
+      <div className="aps-events-toolbar print:hidden">
         <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!activeSiteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
           <FileUp className="mr-2 size-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
           <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!activeSiteId || importing || loading || saving} onChange={(event) => { void importHistory(event.target.files?.[0]); event.currentTarget.value = ""; }} />
@@ -343,7 +360,7 @@ export default function MouvementApsEvenements({
           />
         </div>
       </div>
-      <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+      <section className="aps-events-table overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full min-w-[850px] border-collapse text-left text-sm">
           <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>

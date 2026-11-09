@@ -156,7 +156,7 @@ export default function TableauPriseDePoste({ onStart, initialSiteId = "", initi
   };
 
   return (
-    <Panel title="Nouvelle prise de poste">
+    <Panel title="Saisie du service">
       <div className="shift-entry-sheet" aria-label="Saisie directe de la prise de poste">
         <div className="shift-entry-sheet__toolbar">
           <p className="shift-entry-sheet__hint">Saisissez les informations directement dans les cellules. Chaque ligne s’enregistre séparément.</p>

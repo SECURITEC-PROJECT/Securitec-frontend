@@ -4,7 +4,7 @@ import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
 import { useSites } from "@/hooks/useSites";
 import type { ShiftFormData } from "./FormPriseDePoste";
-import { Download, FileDown, FileUp, Trash2 } from "lucide-react";
+import { ClipboardCheck, Download, FileDown, FileUp, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -51,6 +51,7 @@ export interface Shift {
 
 interface ListHistoriquePriseDePosteProps {
   shifts: Shift[];
+  onNewShift: () => void;
   onOpenEndDialog: (shift: Shift, isOnlyOne: boolean) => void;
   onDeleteShift: (shift: Shift) => Promise<{ deleted: boolean; deletedFluxCount: number }>;
   onImportShift: (data: ShiftFormData) => Promise<void>;
@@ -59,6 +60,7 @@ interface ListHistoriquePriseDePosteProps {
 
 export default function ListHistoriquePriseDePoste({
   shifts,
+  onNewShift,
   onOpenEndDialog,
   onDeleteShift,
   onImportShift,
@@ -232,7 +234,38 @@ export default function ListHistoriquePriseDePoste({
   };
 
   return (
-    <Panel title="Services en cours & Historique">
+    <Panel>
+      <div className="shift-registry-heading">
+        <div className="shift-registry-heading__identity">
+          <span className="shift-registry-heading__icon"><ClipboardCheck aria-hidden="true" /></span>
+          <div>
+            <h2>Prises de service</h2>
+            <p>Enregistrez et suivez les prises de poste par site et par équipe</p>
+          </div>
+        </div>
+        <Button type="button" className="shift-registry-heading__action" onClick={onNewShift}>
+          <Plus className="mr-2 h-4 w-4" /> Nouvelle prise de service
+        </Button>
+      </div>
+      <div className="shift-registry-toolbar">
+        <span className="shift-registry-toolbar__label">Registre</span>
+        <div className="shift-registry-toolbar__actions print:hidden">
+          <label className={`inline-flex h-10 cursor-pointer items-center rounded-md border px-3 text-sm font-medium ${importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+            <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer"}
+            <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={importing} onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          </label>
+          <Button type="button" variant="outline" disabled={!exportRows.length} onClick={() => exportXlsx(
+            `registre-prise-de-service-${new Date().toISOString().slice(0,10)}.xlsx`, "Registre prise de service", exportHeaders, exportRows,
+          )}>
+            <Download className="mr-2 h-4 w-4" /> Exporter
+          </Button>
+          <Button type="button" variant="outline" onClick={() => exportXlsx(
+            "modele-registre-prise-de-service.xlsx", "Registre prise de service", exportHeaders, [],
+          )}>
+            <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
+          </Button>
+        </div>
+      </div>
       <div className="shift-history-filters" aria-label="Recherche dans l'historique">
         <label className="shift-history-filters__search">Recherche
           <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nom, matricule, poste, site…" />
@@ -246,30 +279,10 @@ export default function ListHistoriquePriseDePoste({
       </div>
       <p className="shift-history-result-count" aria-live="polite">{filteredGroups.length} service(s) correspondant(s)</p>
       <div className="shift-finished-section">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="shift-section-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Registre des prises de service
-          </h3>
-          <div className="flex flex-wrap gap-2 print:hidden">
-            <label className={`inline-flex h-10 cursor-pointer items-center rounded-md border px-3 text-sm font-medium ${importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
-              <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
-              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={importing} onChange={(event) => { void importFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-            </label>
-            <Button type="button" variant="outline" disabled={!exportRows.length} onClick={() => exportXlsx(
-              `registre-prise-de-service-${new Date().toISOString().slice(0,10)}.xlsx`, "Registre prise de service", exportHeaders, exportRows,
-            )}>
-              <Download className="mr-2 h-4 w-4" /> Exporter Excel
-            </Button>
-            <Button type="button" variant="outline" onClick={() => exportXlsx(
-              "modele-registre-prise-de-service.xlsx", "Registre prise de service", exportHeaders, [],
-            )}>
-              <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
-            </Button>
-          </div>
-        </div>
-        {registerShifts.length > 0 ? (
-          <div className="shift-history-table-wrap overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr><th>Poste / Site</th><th>Service</th><th>Équipe</th><th>Prise</th><th>Fin</th><th>État</th><th>Action</th></tr></thead><tbody>
-            {registerShifts.map((s) => <tr key={s.id}>
+{registerShifts.length > 0 ? (
+          <div className="shift-history-table-wrap overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr><th>N°</th><th>Poste / Site</th><th>Service</th><th>Équipe</th><th>Prise</th><th>Fin</th><th>État</th><th>Action</th></tr></thead><tbody>
+            {registerShifts.map((s, index) => <tr key={s.id}>
+              <td>{index + 1}</td>
               <td><strong>{s.posteNom || "Poste non renseigné"}</strong><small className="block text-muted-foreground">{s.site_de_travail}</small></td>
               <td><span className={`shift-type-pill ${s.shiftType === "NUIT" ? "shift-type-pill--night" : "shift-type-pill--day"}`}>{s.shiftType === "NUIT" ? "Nuit" : s.shiftType === "JOUR" ? "Jour" : "Service"}</span></td>
               <td>{s.agents?.length || 1} agent(s)<small className="block text-muted-foreground">Chef : {s.prenom} {s.nom}</small></td>
