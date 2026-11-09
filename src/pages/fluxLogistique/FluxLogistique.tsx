@@ -171,6 +171,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   const [entries, setEntries] = useState<TruckEntry[]>([]);
   const [truckForm, setTruckForm] = useState<TruckForm>(emptyTruck);
   const [editingTruck, setEditingTruck] = useState<TruckEntry | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
@@ -334,6 +335,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       setTruckForm(emptyTruck());
       setEditingTruck(null);
       setAttachmentFiles([]);
+      setFormOpen(false);
       if (attachmentErrors.length) toast.warning(`Enregistrement sauvegardé, mais ${attachmentErrors.length} pièce(s) jointe(s) n’ont pas été ajoutées.`);
       if (savedEntry?.pendingSync) toast.info("Saisie enregistrée hors connexion. Elle sera synchronisée au retour du réseau.");
       else toast.success(editingTruck
@@ -363,6 +365,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       verification: entry.verification || "",
       visaAgent: entry.visaAgent || "",
     });
+    setFormOpen(true);
   };
 
   const deleteTruck = async (entry: TruckEntry) => {
@@ -698,6 +701,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       <PageHeader
         title={pageTitle}
         subtitle={isWasteRegister ? "Saisie et suivi des sorties d’ordures par véhicule." : "Saisie et suivi des transports, bons, factures et destinations."}
+        action={!isWasteRegister ? <Button className="document-flow-primary" type="button" disabled={!site?.id} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); setAttachmentFiles([]); setFormOpen(true); }}><FilePlus2 className="mr-2 h-4 w-4" />Nouvel enregistrement</Button> : undefined}
       />
       <div className="max-w-xl">
         <SitePicker
@@ -739,7 +743,9 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       </div>}
       {site?.id && !openShiftId && <p className="text-sm text-amber-700">{openShifts.length ? "Sélectionnez le poste actif qui effectue cette saisie." : "Aucune prise de poste ouverte sur ce site. Ouvrez le service avant d’enregistrer un flux."}</p>}
 
-          <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Enregistrer une sortie"}>
+          <div className={isWasteRegister ? "document-flow-entry-shell" : `document-flow-entry-shell ${formOpen ? "is-open" : ""}`} aria-hidden={!isWasteRegister && !formOpen} role={!isWasteRegister && formOpen ? "dialog" : undefined} aria-modal={!isWasteRegister && formOpen ? true : undefined} aria-label={editingTruck ? "Modifier un enregistrement bon ou facture" : "Nouvel enregistrement bon ou facture"}>
+          {!isWasteRegister && <button type="button" className="document-flow-modal-close" aria-label="Fermer le formulaire" onClick={() => setFormOpen(false)}>×</button>}
+          <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Nouvel enregistrement Bon / facture / Bon de sortie"}>
         <form className={`${isWasteRegister ? "waste-flow-form" : "document-flow-form"} space-y-5`} onSubmit={(event) => void saveTruck(event)}>
           {isWasteRegister && <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
@@ -1002,7 +1008,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
           {site?.id && !openShiftId && <p className="text-base text-amber-700">Aucune prise de poste ouverte pour ce site.</p>}
           <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
             {editingTruck && (
-              <Button type="button" variant="outline" className="h-11 px-5 text-base" disabled={saving} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); }}>
+                <Button type="button" variant="outline" className="h-11 px-5 text-base" disabled={saving} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); setFormOpen(false); }}>
                 <X /> Annuler
               </Button>
             )}
@@ -1012,7 +1018,8 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
             </Button>
           </div>
         </form>
-      </Panel>
+          </Panel>
+          </div>
 
       <div className={isWasteRegister ? "waste-flow-registry" : "document-flow-registry"}><Panel title={isWasteRegister ? pageTitle : undefined}>
         {!isWasteRegister && <div className="mb-4 flex flex-col gap-3 border-b pb-3 print:hidden xl:flex-row xl:items-center xl:justify-between">
