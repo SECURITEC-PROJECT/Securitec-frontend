@@ -7,10 +7,11 @@ import { printRecord } from "@/lib/printRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarDays, Clock3, Download, FilePlus2, Pencil, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, Clock3, Download, FileDown, FilePlus2, FileUp, Pencil, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 type TruckForm = {
   date: string;
@@ -41,6 +42,10 @@ type TruckEntry = TruckForm & {
 };
 
 const wasteDesignations = ["Verres cassées", "Ordures", "Gravat"] as const;
+const documentHeaders = [
+  "Date", "Immatriculation", "Heure de sortie", "Désignation", "Nombre",
+  "Numéro Bon / Facture", "Destination", "Type de document", "Émetteur", "Vérification", "Visa agent",
+];
 
 const today = () => {
   const date = new Date();
@@ -167,6 +172,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   const [truckForm, setTruckForm] = useState<TruckForm>(emptyTruck);
   const [editingTruck, setEditingTruck] = useState<TruckEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -397,6 +403,24 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   };
 
   const exportSpreadsheet = () => {
+    if (!isWasteRegister) {
+      const rows = filteredEntries.map((entry) => [
+        String(entry.date || "").slice(0, 10),
+        entry.immatriculationVehicule || "",
+        entry.heureSortie || "",
+        entry.designation || "",
+        entry.nbr || "",
+        entry.facture || "",
+        entry.destinataire || "",
+        entry.typeDocument || "",
+        entry.emetteur || "",
+        entry.verification || "",
+        entry.visaAgent || "",
+      ]);
+      const stamp = today().replaceAll("-", "");
+      exportXlsx(`registre-bons-factures-${stamp}.xlsx`, pageTitle, documentHeaders, rows);
+      return;
+    }
     const columns = [
       "Date", isWasteRegister ? "Véhicule" : "Transport (matricule)",
       ...(isWasteRegister ? ["Transporteur"] : []),
@@ -417,6 +441,165 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     ]);
     const stamp = today().replaceAll("-", "");
     exportXlsx(`${isWasteRegister ? "registre-ordures" : "registre-bons-factures"}-${stamp}.xlsx`, pageTitle, columns, rows);
+  };
+
+  const importDocumentRegister = async (file?: File) => {
+    if (!file) return;
+    if (isWasteRegister) return;
+    if (!site?.id) {
+      toast.error("Sélectionnez un site avant l’importation.");
+      return;
+    }
+    if (saving || syncing || importing) {
+      toast.error("Attendez la fin de l’enregistrement ou de la synchronisation avant l’importation.");
+      return;
+    }
+    if (!openShiftId) {
+      toast.error(openShifts.length
+        ? "Sélectionnez le poste et le service qui effectuent cette saisie avant l’importation."
+        : "Ouvrez une prise de poste pour ce site avant l’importation.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalizeHeader = (value: string) => value.trim().normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").replace(/[^a-z0-9]/g, "");
+      const columns = {
+        date: ["date"],
+        registration: ["immatriculation", "transport matricule", "matricule"],
+        time: ["heure de sortie", "heure sortie", "heure"],
+        designation: ["designation", "objet"],
+        count: ["nombre", "nbr", "quantite"],
+        number: ["numero bon facture", "numero bon", "bon facture", "facture", "numero document"],
+        destination: ["destination", "destinataire"],
+        documentType: ["type de document", "type document", "type"],
+        issuer: ["emetteur", "expediteur"],
+        verification: ["verification"],
+        visa: ["visa agent", "visa de l agent", "agent"],
+      };
+      const requiredColumns = ["date", "registration", "time", "designation", "count", "number", "destination", "documentType"] as const;
+      const matchingHeaders = (row: string[]) => {
+        const headers = row.map((value) => normalizeHeader(String(value ?? "")));
+        return Object.values(columns).filter((aliases) =>
+          headers.some((header) => aliases.some((alias) => header === normalizeHeader(alias))),
+        ).length;
+      };
+      const headerRowIndex = sheet.slice(0, 10).reduce((bestIndex, row, index, rows) =>
+        matchingHeaders(row) > matchingHeaders(rows[bestIndex] || []) ? index : bestIndex,
+      0);
+      const headers = (sheet[headerRowIndex] || []).map((value) => normalizeHeader(String(value ?? "")));
+      const column = (...aliases: string[]) => headers.findIndex((header) =>
+        aliases.some((alias) => header === normalizeHeader(alias)),
+      );
+      const col = Object.fromEntries(
+        Object.entries(columns).map(([key, aliases]) => [key, column(...aliases)]),
+      ) as Record<keyof typeof columns, number>;
+      if (requiredColumns.some((key) => col[key] < 0)) {
+        const detected = (sheet[headerRowIndex] || []).filter(Boolean).join(", ");
+        const requiredHeaders = documentHeaders.slice(0, 8);
+        throw new Error(`Colonnes requises manquantes : ${requiredHeaders.join(", ")}. En-têtes détectés : ${detected || "aucun"}.`);
+      }
+      const get = (cells: string[], index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+      const parseDate = (value: string) => {
+        const text = value.trim();
+        const isoDate = /^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/.exec(text);
+        if (isoDate && !Number.isNaN(Date.parse(`${isoDate[1]}T00:00:00`))) return isoDate[1];
+        const frenchDate = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(text);
+        if (frenchDate) return `${frenchDate[3]}-${frenchDate[2].padStart(2, "0")}-${frenchDate[1].padStart(2, "0")}`;
+        const serial = Number(text);
+        return Number.isFinite(serial) && serial > 20000 && serial < 80000
+          ? new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10)
+          : "";
+      };
+      const parseTime = (value: string) => {
+        const text = value.trim();
+        const serial = Number(text);
+        if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+          const minutes = Math.round(serial * 1440);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+        const match = /^(\d{1,2}):(\d{2})/.exec(text);
+        return match && Number(match[1]) < 24 && Number(match[2]) < 60
+          ? `${match[1].padStart(2, "0")}:${match[2]}`
+          : "";
+      };
+      const parseDocumentType = (value: string) => {
+        const normalized = normalizeHeader(value);
+        if (normalized === "facture") return "FACTURE";
+        if (["bonsortie", "sortie"].includes(normalized)) return "BON_SORTIE";
+        return "BON";
+      };
+      const rows = sheet.slice(headerRowIndex + 1).map((cells, index) => ({
+        line: headerRowIndex + index + 2,
+        date: parseDate(get(cells, col.date)),
+        immatriculationVehicule: get(cells, col.registration),
+        heureSortie: parseTime(get(cells, col.time)),
+        designation: get(cells, col.designation),
+        nbr: get(cells, col.count),
+        facture: get(cells, col.number),
+        destinataire: get(cells, col.destination),
+        typeDocument: parseDocumentType(get(cells, col.documentType)),
+        emetteur: get(cells, col.issuer),
+        verification: get(cells, col.verification),
+        visaAgent: get(cells, col.visa),
+        hasData: cells.some((value) => String(value ?? "").trim()),
+      })).filter((row) => row.hasData);
+      if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+
+      const created: TruckEntry[] = [];
+      const failures: string[] = [];
+      for (const row of rows) {
+        const missingFields = [
+          !row.date && "date (format attendu : JJ/MM/AAAA ou AAAA-MM-JJ)",
+          !row.immatriculationVehicule && "immatriculation",
+          !row.heureSortie && "heure de sortie (format attendu : HH:MM)",
+          !row.designation && "désignation",
+          !row.nbr && "nombre",
+          !row.facture && "numéro du bon / facture",
+          !row.destinataire && "destination",
+        ].filter((field): field is string => Boolean(field));
+        if (missingFields.length) {
+          failures.push(`Ligne ${row.line} : champ(s) manquant(s) ou invalide(s) : ${missingFields.join(", ")}.`);
+          continue;
+        }
+        try {
+          const result = await serviceApi.createLogistics({
+            date: row.date,
+            type: "DECHARGEMENT",
+            immatriculationVehicule: row.immatriculationVehicule,
+            heureSortie: row.heureSortie,
+            designation: row.designation,
+            nbr: row.nbr,
+            facture: row.facture,
+            destinataire: row.destinataire,
+            typeDocument: row.typeDocument,
+            emetteur: row.emetteur,
+            verification: row.verification,
+            visaAgent: row.visaAgent,
+            siteId: site.id,
+            siteName: selectedSiteName,
+            siteType: site.type,
+            priseDePosteId: openShiftId,
+          });
+          if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
+          created.push(result.entry as TruckEntry);
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+          if (error instanceof Error && "status" in error && error.status === 409) break;
+        }
+      }
+      if (created.length) {
+        setEntries((current) => [...created, ...current.filter((entry) => !created.some((item) => item.id === entry.id))]);
+        const queued = created.filter((entry) => entry.pendingSync).length;
+        toast.success(`${created.length} enregistrement(s) importé(s)${queued ? ` (${queued} en attente de synchronisation)` : ""}.`);
+      }
+      if (failures.length) toast.error(`${failures.length} ligne(s) non importée(s) : ${failures.slice(0, 2).join(" ")}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const printEntries = (items: TruckEntry[], title: string) => {
@@ -785,16 +968,16 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="flux-emetteur" className="flex min-h-10 items-center text-base font-semibold">Émetteur</Label>
-              <Input id="flux-emetteur" required maxLength={255} className="h-12 text-base" value={truckForm.emetteur} onChange={(event) => setTruckForm({ ...truckForm, emetteur: event.target.value })} />
+              <Label htmlFor="flux-emetteur" className="flex min-h-10 items-center text-base font-semibold">Émetteur (facultatif)</Label>
+              <Input id="flux-emetteur" maxLength={255} className="h-12 text-base" value={truckForm.emetteur} onChange={(event) => setTruckForm({ ...truckForm, emetteur: event.target.value })} />
             </div>
             <div className="space-y-2 xl:col-span-2">
-              <Label htmlFor="flux-verification" className="flex min-h-10 items-center text-base font-semibold">Vérification</Label>
-              <Input id="flux-verification" required maxLength={2000} className="h-12 text-base" value={truckForm.verification} onChange={(event) => setTruckForm({ ...truckForm, verification: event.target.value })} />
+              <Label htmlFor="flux-verification" className="flex min-h-10 items-center text-base font-semibold">Vérification (facultatif)</Label>
+              <Input id="flux-verification" maxLength={2000} className="h-12 text-base" value={truckForm.verification} onChange={(event) => setTruckForm({ ...truckForm, verification: event.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="flux-visa-agent" className="flex min-h-10 items-center text-base font-semibold">Visa de l’agent</Label>
-              <Input id="flux-visa-agent" required maxLength={255} className="h-12 text-base" value={truckForm.visaAgent} onChange={(event) => setTruckForm({ ...truckForm, visaAgent: event.target.value })} />
+              <Label htmlFor="flux-visa-agent" className="flex min-h-10 items-center text-base font-semibold">Visa de l’agent (facultatif)</Label>
+              <Input id="flux-visa-agent" maxLength={255} className="h-12 text-base" value={truckForm.visaAgent} onChange={(event) => setTruckForm({ ...truckForm, visaAgent: event.target.value })} />
             </div>
           </div>}
           <div className="space-y-2">
@@ -831,8 +1014,34 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
         </form>
       </Panel>
 
-      <div className={isWasteRegister ? "waste-flow-registry" : "document-flow-registry"}><Panel title={pageTitle}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className={isWasteRegister ? "waste-flow-registry" : "document-flow-registry"}><Panel title={isWasteRegister ? pageTitle : undefined}>
+        {!isWasteRegister && <div className="mb-4 flex flex-col gap-3 border-b pb-3 print:hidden xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0 xl:flex-[0_1_25%]">
+            <h2 className="text-sm font-semibold text-foreground">{pageTitle}</h2>
+          </div>
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:flex-[1_1_0%] xl:grid-cols-4">
+            <label className={`inline-flex h-10 min-w-0 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-md border px-2 text-center text-xs font-medium ${!site?.id || importing || saving ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+              <FileUp className="mr-1.5 h-4 w-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input
+                className="sr-only"
+                type="file"
+                accept=".xlsx,.csv,text/csv"
+                disabled={!site?.id || importing || saving}
+                onChange={(event) => { void importDocumentRegister(event.target.files?.[0]); event.currentTarget.value = ""; }}
+              />
+            </label>
+            <Button className="w-full min-w-0 whitespace-nowrap px-2 text-xs" type="button" variant="outline" onClick={() => exportXlsx("modele-enregistrements-bon-facture.xlsx", pageTitle, documentHeaders, [])}>
+              <FileDown className="mr-1.5 h-4 w-4 shrink-0" />Modèle Excel
+            </Button>
+            <Button className="w-full min-w-0 whitespace-nowrap px-2 text-xs" type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
+              <Download className="mr-1.5 h-4 w-4 shrink-0" />Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" className="document-flow-outline w-full min-w-0 whitespace-nowrap px-2 text-xs" disabled={!filteredEntries.length} onClick={() => printEntries(filteredEntries, pageTitle)}>
+              <Printer className="mr-1.5 h-4 w-4 shrink-0" />Imprimer les lignes (Word)
+            </Button>
+          </div>
+        </div>}
+        <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 ${isWasteRegister ? "" : "print:hidden"}`}>
           <div className="relative w-full max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -850,24 +1059,26 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
             <Label className="sr-only" htmlFor="flux-to-date">Au</Label>
             <Input id="flux-to-date" type="date" aria-label="Filtrer jusqu’au" value={toDate} onChange={(event) => setToDate(event.target.value)} className="w-auto" />
           </div>
-          {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
-          {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
-          <Button type="button" variant="outline" className={isWasteRegister ? "waste-flow-outline" : "document-flow-outline"} disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
-            <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
-          </Button>
-          <Button type="button" variant="outline" className={isWasteRegister ? "waste-flow-outline" : "document-flow-outline"} disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
-            <Download className="h-4 w-4" />Exporter Excel
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={isWasteRegister ? "waste-flow-outline" : "document-flow-outline"}
-            disabled={!filteredEntries.length}
-            onClick={() => printEntries(filteredEntries, pageTitle)}
-          >
-            <Printer className="h-4 w-4" />
-            Exporter PDF / imprimer
-          </Button>
+          {!isWasteRegister && <div className="flex flex-wrap items-center gap-2">
+            {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
+            {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
+            <Button type="button" variant="outline" className="document-flow-outline" disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
+              <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
+            </Button>
+          </div>}
+          {isWasteRegister && <>
+            {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
+            {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
+            <Button type="button" variant="outline" className="waste-flow-outline" disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
+              <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
+            </Button>
+            <Button type="button" variant="outline" className="waste-flow-outline" disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
+              <Download className="h-4 w-4" />Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" className="waste-flow-outline" disabled={!filteredEntries.length} onClick={() => printEntries(filteredEntries, pageTitle)}>
+              <Printer className="h-4 w-4" />Exporter PDF / imprimer
+            </Button>
+          </>}
         </div>
         <div className="overflow-hidden rounded-lg border">
           <div className="max-h-[560px] overflow-auto">
