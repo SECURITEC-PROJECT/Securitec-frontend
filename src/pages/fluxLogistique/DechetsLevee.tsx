@@ -9,8 +9,10 @@ import { serviceApi, type ChauffeurRecord } from "@/lib/service-api";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
 import { printRecord } from "@/lib/printRecord";
+import { downloadWordTable, printRegistryTable } from "@/lib/registry-table";
 import { ClipboardList, Download, FileDown, FileUp, Pencil, Printer, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 
@@ -36,6 +38,23 @@ interface DechetsEntry {
   pendingSync?: boolean;
 }
 
+interface OpenShift {
+  id: string;
+  serviceId?: string;
+  siteId?: string;
+  site_de_travail?: string;
+  pendingSync?: boolean;
+  ended_at?: string | null;
+  posteId?: string;
+  posteNom?: string;
+  shiftType?: string;
+  nom?: string;
+  prenom?: string;
+  started_at?: string;
+  serviceEndedAt?: string | null;
+  fonctionService?: string;
+}
+
 const formatDate = (value: string) => {
   const date = value?.slice(0, 10);
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "—";
@@ -53,58 +72,6 @@ const wasteHeaders = [
 const normalizeText = (value: string) =>
   value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toLocaleLowerCase("fr");
 const normalizeHeader = (value: string) => normalizeText(value).replace(/[^a-z0-9]/g, "");
-const normalizeIdentity = (value: string) => normalizeHeader(value);
-const normalizePersonName = (value: string) =>
-  normalizeText(value).replace(/[^a-z0-9 ]/g, "").split(" ").filter(Boolean).sort().join(" ");
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
-})[character] || character);
-
-function printTable(title: string, siteName: string, headers: string[], rows: string[][]) {
-  const printWindow = window.open("", "_blank", "width=1100,height=800");
-  if (!printWindow) {
-    toast.error("Autorisez les fenêtres contextuelles pour imprimer.");
-    return;
-  }
-  const head = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
-  const body = rows.map((row) => `<tr>${headers.map((_, index) => `<td>${escapeHtml(row[index] || "")}</td>`).join("")}</tr>`).join("");
-  printWindow.document.open();
-  printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-    <style>
-      @page { size: A4 landscape; margin: 10mm; }
-      body { color: #172033; font: 10pt Arial, sans-serif; }
-      h1 { margin: 0 0 6px; font-size: 18pt; }
-      p { margin: 0 0 16px; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border: 1px solid #777; padding: 6px; text-align: left; vertical-align: top; }
-      th { background: #eee; }
-      tr { break-inside: avoid; }
-    </style></head><body><h1>${escapeHtml(title)}</h1>
-    <p>Site : ${escapeHtml(siteName || "—")} · Imprimé le ${escapeHtml(new Date().toLocaleString("fr-FR"))}</p>
-    <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
-    </body></html>`);
-  printWindow.document.close();
-}
-
-function exportWordTable(filename: string, title: string, siteName: string, headers: string[], rows: string[][]) {
-  const head = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
-  const body = rows.map((row) => `<tr>${headers.map((_, index) => `<td>${escapeHtml(row[index] || "")}</td>`).join("")}</tr>`).join("");
-  const html = `<!doctype html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="fr">
-    <head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-      <style>@page Section1 { size: 841.9pt 595.3pt; margin: 28.35pt; mso-page-orientation: landscape; }
-        div.Section1 { page: Section1; } body { font: 10pt Arial, sans-serif; } table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #777; padding: 5px; text-align: left; vertical-align: top; } th { background: #eee; }</style>
-    </head><body><div class="Section1"><h1>${escapeHtml(title)}</h1><p>Site : ${escapeHtml(siteName || "—")}</p>
-      <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></body></html>`;
-  const url = URL.createObjectURL(new Blob([html], { type: "application/msword" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 export default function DechetsLevee() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
@@ -123,6 +90,12 @@ export default function DechetsLevee() {
   const [activeVehicleSuggestion, setActiveVehicleSuggestion] = useState(0);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [openShiftId, setOpenShiftId] = useState<string | null>(null);
+  const [openShifts, setOpenShifts] = useState<OpenShift[]>([]);
+  const [loadingShifts, setLoadingShifts] = useState(false);
+  const [shiftError, setShiftError] = useState("");
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const shiftSelectRef = useRef<HTMLSelectElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [registry, setRegistry] = useState<{ siteId: string; entries: DechetsEntry[]; error: string }>({
@@ -140,6 +113,78 @@ export default function DechetsLevee() {
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
   const selectedSiteType = site?.type || siteType;
   const selectedSiteId = site?.id || "";
+
+  useEffect(() => {
+    const updateConnectivity = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", updateConnectivity);
+    window.addEventListener("offline", updateConnectivity);
+    return () => {
+      window.removeEventListener("online", updateConnectivity);
+      window.removeEventListener("offline", updateConnectivity);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSiteId) {
+      return;
+    }
+
+    const selectedPostId = localStorage.getItem(`securitec-active-post:${selectedSiteId}`);
+    const storageKey = `securitec-logistics-shift:${selectedSiteId}:${selectedPostId || "site"}`;
+    if (!isOnline) {
+      setOpenShifts([]);
+      setOpenShiftId(localStorage.getItem(storageKey) ||
+        (!selectedPostId ? localStorage.getItem(`securitec-logistics-shift:${selectedSiteId}`) ||
+          localStorage.getItem(`securitec-active-shift:${selectedSiteId}`) : null));
+      setLoadingShifts(false);
+      setShiftError("");
+      return;
+    }
+
+    let active = true;
+    setLoadingShifts(true);
+    setShiftError("");
+    serviceApi.listShifts(selectedSiteId).then((shifts) => {
+      const grouped = new Map<string, OpenShift[]>();
+      shifts.filter((item: OpenShift) => !item.ended_at && !item.serviceEndedAt && !item.pendingSync &&
+        (item.siteId === selectedSiteId || String(item.site_de_travail || "").trim().toLocaleLowerCase() === selectedSiteName.trim().toLocaleLowerCase()))
+        .forEach((item: OpenShift) => {
+          const id = String(item.serviceId || item.id);
+          grouped.set(id, [...(grouped.get(id) || []), item]);
+        });
+      const candidates = Array.from(grouped.entries()).map(([serviceId, members]) => {
+        const leader = members.find((item) => item.fonctionService === "CHEF") || members[0];
+        return { ...leader, id: serviceId, serviceId };
+      }).sort((left, right) => new Date(right.started_at || 0).getTime() - new Date(left.started_at || 0).getTime());
+      if (!active) return;
+      setOpenShifts(candidates);
+      const matchingPostShifts = selectedPostId ? candidates.filter((item) => item.posteId === selectedPostId) : [];
+      const relevant = matchingPostShifts.length ? matchingPostShifts : candidates;
+      const cached = localStorage.getItem(storageKey) ||
+        (!selectedPostId ? localStorage.getItem(`securitec-logistics-shift:${selectedSiteId}`) ||
+          localStorage.getItem(`securitec-active-shift:${selectedSiteId}`) : null);
+      const id = relevant.some((item) => item.id === cached) ? cached : relevant.length === 1 ? relevant[0].id : null;
+      setOpenShiftId(id);
+      if (id) {
+        localStorage.setItem(storageKey, id);
+        const selected = relevant.find((item) => item.id === id);
+        if (selected?.posteId) {
+          localStorage.setItem(`securitec-active-post:${selectedSiteId}`, selected.posteId);
+          localStorage.setItem(`securitec-active-shift:${selectedSiteId}:${selected.posteId}`, id);
+        }
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    }).catch((error) => {
+      if (!active) return;
+      setOpenShifts([]);
+      setOpenShiftId(null);
+      setShiftError(error instanceof Error ? error.message : "Chargement des prises de poste impossible.");
+    }).finally(() => {
+      if (active) setLoadingShifts(false);
+    });
+    return () => { active = false; };
+  }, [selectedSiteId, selectedSiteName, isOnline]);
 
   useEffect(() => {
     let active = true;
@@ -192,18 +237,6 @@ export default function DechetsLevee() {
   const registeredChauffeurs = chauffeurRegistry.siteId === selectedSiteId
     ? chauffeurRegistry.chauffeurs
     : [];
-  const findDriver = (reference: string) => {
-    const identity = normalizeIdentity(reference);
-    const name = normalizePersonName(reference);
-    if (!identity) return undefined;
-    return registeredChauffeurs.find((driver) =>
-      normalizeIdentity(driver.vehicule || "") === identity ||
-      normalizeIdentity(driver.matricule || "") === identity ||
-      normalizePersonName(driver.nomPrenom) === name,
-    );
-  };
-  const selectedDriver = findDriver(vehicule);
-  const selectedVehicleIsRegistered = Boolean(selectedDriver?.vehicule?.trim());
   const normalizedVehicleSearch = normalizeText(vehicule);
   const matchingVehicles = registeredChauffeurs.filter((driver) =>
     driver.vehicule?.trim() &&
@@ -215,7 +248,6 @@ export default function DechetsLevee() {
         .includes(normalizedVehicleSearch)),
   ).slice(0, 8);
   const chauffeurVehiclesLoading = Boolean(selectedSiteId) && chauffeurRegistry.siteId !== selectedSiteId;
-  const chauffeursError = chauffeurRegistry.siteId === selectedSiteId ? chauffeurRegistry.error : "";
   const entries = registry.siteId === selectedSiteId ? registry.entries : [];
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
@@ -257,16 +289,14 @@ export default function DechetsLevee() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (chauffeurVehiclesLoading) {
-      toast.error("Veuillez attendre le chargement des véhicules des chauffeurs.");
+    if (!editingId && loadingShifts) {
+      toast.error("Veuillez attendre le chargement des prises de poste.");
       return;
     }
-    if (chauffeursError) {
-      toast.error("Impossible de vérifier les véhicules enregistrés. Réessayez après le chargement du module Chauffeurs.");
-      return;
-    }
-    if (!selectedVehicleIsRegistered) {
-      toast.error("Ce véhicule n’est pas enregistré dans le module Chauffeurs pour ce site.");
+    if (!editingId && !openShiftId) {
+      toast.error(openShifts.length
+        ? "Sélectionnez le poste et le service qui effectuent cette saisie."
+        : "Ouvrez une prise de poste pour ce site avant d’enregistrer un flux logistique.");
       return;
     }
     setSaving(true);
@@ -280,11 +310,12 @@ export default function DechetsLevee() {
         plomb: plomb.trim(),
         poids: Number(poids),
         destinataire: destinataire.trim(),
-        vehicule: selectedDriver?.vehicule?.trim() || vehicule.trim(),
+        vehicule: vehicule.trim(),
         transporteur: transporteur.trim(),
         siteId: site?.id,
         siteName: selectedSiteName,
         siteType: selectedSiteType,
+        priseDePosteId: openShiftId,
       };
       if (editingId) {
         const { entry } = await serviceApi.updateWasteLogistics(editingId, payload);
@@ -330,7 +361,7 @@ export default function DechetsLevee() {
   };
 
   const handlePrintRegistry = () => {
-    printTable("Registre des sorties de drèche et de levure", selectedSiteName, wasteHeaders, filteredEntries.map((entry) => [
+    printRegistryTable("Registre des sorties de drèche et de levure", selectedSiteName, wasteHeaders, filteredEntries.map((entry) => [
       formatDate(entry.date), formatWasteType(entry.typeDechet), entry.heureSortie || "", entry.vehicule || "",
       entry.transporteur || "", entry.numeroPesage || "", entry.facture || "", entry.plomb || "",
       entry.poids == null ? "" : Number(entry.poids).toLocaleString("fr-FR"), entry.destinataire || "",
@@ -351,7 +382,7 @@ export default function DechetsLevee() {
   };
 
   const handleExportWord = () => {
-    exportWordTable(
+    downloadWordTable(
       `registre-dechets-levure-${today()}.doc`,
       "Registre des sorties de drèche et de levure",
       selectedSiteName,
@@ -370,40 +401,62 @@ export default function DechetsLevee() {
       toast.error("Sélectionnez un site avant l’importation.");
       return;
     }
-    if (chauffeurVehiclesLoading) {
-      toast.error("Attendez le chargement des véhicules des chauffeurs avant l’importation.");
+    if (loadingShifts) {
+      toast.error("Attendez le chargement des prises de poste avant l’importation.");
       return;
     }
-    if (chauffeursError) {
-      toast.error("Impossible de charger les chauffeurs du site. Réessayez avant l’importation.");
+    if (!openShiftId) {
+      toast.error(openShifts.length
+        ? `Le site ${selectedSiteName} est sélectionné. Choisissez aussi le poste et le service actifs dans le champ « Poste et service de saisie » avant l’importation.`
+        : `Le site ${selectedSiteName} est sélectionné, mais aucune prise de poste ouverte n’est disponible. Ouvrez un service avant l’importation.`);
+      shiftSelectRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      shiftSelectRef.current?.focus({ preventScroll: true });
       return;
     }
     setImporting(true);
     try {
       const sheet = await readXlsxRows(file);
-      const headers = (sheet[0] || []).map((value) => normalizeHeader(String(value ?? "")));
-      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.some((alias) => header === normalizeHeader(alias)));
-      const col = {
-        date: column("date", "date sortie", "date de sortie"),
-        type: column("designation", "désignation", "type", "type de sortie", "type dechet"),
-        time: column("heure", "heure sortie", "heure de sortie"),
-        vehicle: column("vehicule", "vehicule sortie", "vehicule immatriculation", "immatriculation", "immatriculation vehicule", "plaque", "plaque immatriculation"),
-        matricule: column("matricule", "matricule chauffeur", "matricule vehicule", "immatriculation chauffeur"),
-        driverName: column("nom chauffeur", "nom du chauffeur", "chauffeur", "nom et prenom", "nom complet"),
-        lastName: column("nom de famille", "last name", "surname", "nom"),
-        firstName: column("prenom", "prénom", "first name"),
-        carrier: column("transporteur", "nom transporteur", "nom du transporteur", "societe", "entreprise"),
-        weighing: column("numero pesage", "n pesage", "n° de pesage", "numero de pesage", "pesage"),
-        invoice: column("facture", "numero facture", "numero de facture"),
-        seal: column("plomb", "numero plomb", "numero de plomb"),
-        weight: column("poids", "poids kg", "poids (kg)"),
-        recipient: column("destinataire", "destinataire client", "destinataire / client", "client"),
+      const columns = {
+        date: ["date", "date sortie", "date de sortie"],
+        type: ["designation", "type", "type de sortie", "type dechet"],
+        time: ["heure", "heure sortie", "heure de sortie"],
+        vehicle: ["vehicule", "vehicule sortie", "vehicule immatriculation", "immatriculation", "immatriculation vehicule", "plaque", "plaque immatriculation"],
+        matricule: ["matricule", "matricule chauffeur", "matricule vehicule", "immatriculation chauffeur"],
+        driverName: ["nom chauffeur", "nom du chauffeur", "chauffeur", "nom et prenom", "nom complet"],
+        lastName: ["nom de famille", "last name", "surname", "nom"],
+        firstName: ["prenom", "first name"],
+        carrier: ["transporteur", "nom transporteur", "nom du transporteur", "societe", "entreprise"],
+        weighing: ["numero pesage", "n pesage", "n° de pesage", "numero de pesage", "pesage"],
+        invoice: ["facture", "numero facture", "numero de facture"],
+        seal: ["plomb", "numero plomb", "numero de plomb"],
+        weight: ["poids", "poids kg", "poids (kg)", "poids net"],
+        recipient: ["destinataire", "destinataire client", "destinataire / client", "client"],
       };
+      const matchingHeaderCount = (row: string[]) => {
+        const headers = row.map((value) => normalizeHeader(String(value ?? "")));
+        return Object.values(columns).filter((aliases) =>
+          headers.some((header) => aliases.some((alias) => header === normalizeHeader(alias))),
+        ).length;
+      };
+      const headerRowIndex = sheet.slice(0, 10).reduce((bestIndex, row, index, rows) =>
+        matchingHeaderCount(row) > matchingHeaderCount(rows[bestIndex] || []) ? index : bestIndex,
+      0);
+      const headers = (sheet[headerRowIndex] || []).map((value) => normalizeHeader(String(value ?? "")));
+      const column = (...aliases: string[]) => headers.findIndex((header) =>
+        aliases.some((alias) => {
+          const normalizedAlias = normalizeHeader(alias);
+          return header === normalizedAlias || (normalizedAlias.length >= 5 && header.startsWith(normalizedAlias));
+        }),
+      );
+      const col = Object.fromEntries(
+        Object.entries(columns).map(([key, aliases]) => [key, column(...aliases)]),
+      ) as Record<keyof typeof columns, number>;
       if (col.date < 0 || col.type < 0 || col.time < 0 ||
           (col.vehicle < 0 && col.matricule < 0 && col.driverName < 0 && col.lastName < 0) ||
-          col.carrier < 0 && col.driverName < 0 && col.lastName < 0 ||
+          col.carrier < 0 ||
           col.weighing < 0 || col.weight < 0 || col.recipient < 0) {
-        throw new Error("Colonnes requises manquantes : Date, Désignation, Heure, Véhicule ou Matricule/Nom chauffeur, Transporteur (ou Nom), N° de pesage, Poids et Destinataire.");
+        const detected = (sheet[headerRowIndex] || []).filter(Boolean).join(", ");
+        throw new Error(`Colonnes requises manquantes : Date, Désignation, Heure, Véhicule ou Matricule, Transporteur, N° de pesage, Poids et Destinataire. En-têtes détectés : ${detected || "aucun"}.`);
       }
       const get = (cells: string[], index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
       const parseDate = (value: string) => {
@@ -447,14 +500,13 @@ export default function DechetsLevee() {
         const normalized = text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text;
         return Number(normalized);
       };
-      const rows = sheet.slice(1).map((cells, index) => {
+      const rows = sheet.slice(headerRowIndex + 1).map((cells, index) => {
         const rawVehicle = get(cells, col.vehicle);
         const rawMatricule = get(cells, col.matricule);
         const rawDriverName = [
           get(cells, col.lastName),
           get(cells, col.firstName),
         ].filter(Boolean).join(" ") || get(cells, col.driverName);
-        const driver = [rawMatricule, rawDriverName, rawVehicle].map(findDriver).find(Boolean);
         const rawType = get(cells, col.type);
         const rawWeight = get(cells, col.weight);
         return {
@@ -462,15 +514,15 @@ export default function DechetsLevee() {
           date: parseDate(get(cells, col.date)),
           typeDechet: parseType(rawType),
           heureSortie: parseTime(get(cells, col.time)),
-          vehicule: driver?.vehicule?.trim() || rawVehicle || rawMatricule,
-          transporteur: get(cells, col.carrier) || driver?.provider?.trim() || rawDriverName,
+          vehicule: rawVehicle || rawMatricule || rawDriverName,
+          transporteur: get(cells, col.carrier),
           numeroPesage: get(cells, col.weighing),
           facture: get(cells, col.invoice),
           plomb: get(cells, col.seal),
           poids: parseWeight(rawWeight),
           destinataire: get(cells, col.recipient),
         };
-      }).filter((row) => sheet[row.line - 1]?.some((value) => String(value ?? "").trim()));
+      }).filter((_, index) => sheet[headerRowIndex + index + 1]?.some((value) => String(value ?? "").trim()));
       if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
 
       let saved = 0;
@@ -484,11 +536,6 @@ export default function DechetsLevee() {
           failures.push(`Ligne ${row.line} : vérifiez la date, la désignation, l’heure, le véhicule/matricule, le transporteur, le pesage, le poids et le destinataire.`);
           continue;
         }
-        const matchingDriver = findDriver(row.vehicule);
-        if (!matchingDriver?.vehicule?.trim()) {
-          failures.push(`Ligne ${row.line} : véhicule, matricule ou nom chauffeur non reconnu pour ce site.`);
-          continue;
-        }
         try {
           const result = await serviceApi.createLogistics({
             date: row.date,
@@ -500,18 +547,25 @@ export default function DechetsLevee() {
             plomb: row.plomb,
             poids: row.poids,
             destinataire: row.destinataire,
-            vehicule: matchingDriver.vehicule.trim(),
+            vehicule: row.vehicule.trim(),
             transporteur: row.transporteur,
             siteId: selectedSiteId,
             siteName: selectedSiteName,
             siteType: selectedSiteType,
+            priseDePosteId: openShiftId,
           });
           if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
           importedEntries.push(result.entry);
           saved += 1;
           if (result.entry.pendingSync) queued += 1;
         } catch (error) {
-          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+          const message = error instanceof Error ? error.message : "enregistrement impossible";
+          failures.push(`Ligne ${row.line} : ${message}`);
+          if (error instanceof Error && "status" in error && error.status === 409) {
+            setOpenShiftId(null);
+            setShiftError(message);
+            break;
+          }
         }
       }
       if (importedEntries.length) {
@@ -593,6 +647,52 @@ export default function DechetsLevee() {
               }}
             />
           </div>
+          {selectedSiteId && loadingShifts && <p className="text-sm text-muted-foreground">Vérification des prises de poste ouvertes…</p>}
+          {shiftError && <p role="alert" className="text-sm text-destructive">{shiftError}</p>}
+          {selectedSiteId && !loadingShifts && openShifts.length > 0 && (
+            <div className="max-w-xl space-y-1.5">
+              <Label htmlFor="dechets-shift">Poste et service de saisie *</Label>
+              <select
+                id="dechets-shift"
+                ref={shiftSelectRef}
+                required={!editingId}
+                value={openShiftId || ""}
+                onChange={(event) => {
+                  const id = event.target.value || null;
+                  setOpenShiftId(id);
+                  const selected = openShifts.find((shift) => shift.id === id);
+                  const storageKey = `securitec-logistics-shift:${selectedSiteId}:${selected?.posteId || "site"}`;
+                  if (id) {
+                    localStorage.setItem(storageKey, id);
+                    localStorage.setItem(`securitec-logistics-shift:${selectedSiteId}`, id);
+                    if (selected?.posteId) {
+                      localStorage.setItem(`securitec-active-post:${selectedSiteId}`, selected.posteId);
+                      localStorage.setItem(`securitec-active-shift:${selectedSiteId}:${selected.posteId}`, id);
+                    }
+                  } else {
+                    localStorage.removeItem(storageKey);
+                  }
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Sélectionner le poste actif…</option>
+                {openShifts.map((shift) => (
+                  <option key={shift.id} value={shift.id}>
+                    {shift.posteNom || "Poste non renseigné"} · {shift.shiftType === "NUIT" ? "Nuit" : shift.shiftType === "JOUR" ? "Jour" : "Service"} · {shift.nom || ""} {shift.prenom || ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {selectedSiteId && !loadingShifts && !openShifts.length && !openShiftId && (
+            <p className="text-sm text-amber-700">
+              Aucune prise de poste ouverte sur ce site.{" "}
+              <Link to="/dashboard/prise-de-poste" state={{ siteId: selectedSiteId }} className="font-medium underline">
+                Ouvrir un service
+              </Link>{" "}
+              avant d’enregistrer ou d’importer les lignes.
+            </p>
+          )}
           <div className="overflow-x-auto pb-2">
             <div className="grid min-w-[1640px] grid-cols-[135px_130px_115px_190px_180px_145px_145px_120px_120px_190px_auto] items-end gap-3">
               <div className="space-y-1.5">
@@ -631,7 +731,7 @@ export default function DechetsLevee() {
                       required
                       maxLength={160}
                       autoComplete="off"
-                      placeholder={chauffeurVehiclesLoading ? "Chargement…" : "Véhicule, matricule ou nom"}
+                      placeholder={chauffeurVehiclesLoading ? "Chargement des suggestions…" : "Véhicule ou matricule"}
                       value={vehicule}
                       onFocus={() => setVehicleSuggestionsOpen(true)}
                       onChange={(event) => {
@@ -713,19 +813,15 @@ export default function DechetsLevee() {
               </div>
               <div className="flex gap-2">
                 {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
-                <Button type="submit" disabled={saving || !selectedSiteName.trim() || chauffeurVehiclesLoading || Boolean(chauffeursError) || !selectedVehicleIsRegistered}>
+                <Button type="submit" disabled={saving || !selectedSiteName.trim()}>
                   {saving ? "Enregistrement…" : editingId ? "Modifier" : "Enregistrer"}
                 </Button>
               </div>
             </div>
           </div>
-          {chauffeursError
-            ? <p role="alert" className="text-xs text-destructive">{chauffeursError}</p>
-            : !chauffeurVehiclesLoading && vehicule.trim() && !selectedVehicleIsRegistered
-              ? <p role="alert" className="text-xs text-destructive">Véhicule, matricule ou nom chauffeur non reconnu pour ce site.</p>
-              : !chauffeurVehiclesLoading && !registeredChauffeurs.some((driver) => driver.vehicule?.trim())
-                ? <p className="text-xs text-muted-foreground">Aucun véhicule n’est enregistré dans le module Chauffeurs pour ce site.</p>
-                : null}
+          <p className="text-xs text-muted-foreground">
+            Le véhicule/matricule et le transporteur se saisissent indépendamment. Les véhicules enregistrés sont proposés en suggestion, mais la saisie manuelle reste possible.
+          </p>
         </form>
       </section>
       <section id="waste-registry-print-area" className="waste-registry-section">
