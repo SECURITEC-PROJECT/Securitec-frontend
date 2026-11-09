@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
-import { Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
+import { Download, FileDown, FileUp, Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
@@ -56,6 +58,10 @@ const designationGroups = [
 const designationOptions = designationGroups.flatMap(({ label, options }) =>
   label === "Matières premières" ? [...options] : options.map((option) => `${label} - ${option}`),
 );
+const registryHeaders = [
+  "Date", "Heure de pointe", "Véhicule", "Immatriculation camion", "Désignation",
+  "Quantité", "Bon de livraison / facture", "Provenance",
+];
 
 interface MatierePremiereEntry {
   id: string;
@@ -88,6 +94,7 @@ export default function DechargementMatierePremiere() {
   const [document, setDocument] = useState("");
   const [provenance, setProvenance] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [registry, setRegistry] = useState<{
@@ -144,6 +151,16 @@ export default function DechargementMatierePremiere() {
       .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
     return matchesDate && matchesText;
   });
+  const rowsForExport = (source: MatierePremiereEntry[]) => source.map((entry) => [
+    entry.date?.slice(0, 10) || "",
+    entry.heurePointe || "",
+    entry.vehicule || "",
+    entry.immatriculationVehicule || "",
+    entry.designation || "",
+    entry.quantite ?? "",
+    entry.document || "",
+    entry.provenance || "",
+  ]);
 
   const clearForm = () => {
     setDate(today());
@@ -238,6 +255,140 @@ export default function DechargementMatierePremiere() {
       window.document.title = originalTitle;
     }, { once: true });
     window.print();
+  };
+
+  const importEntries = async (file?: File) => {
+    if (!file) return;
+    if (!selectedSiteId) {
+      toast.error("Sélectionnez un site avant l’importation.");
+      return;
+    }
+    if (loadingEntries || saving || importing) {
+      toast.error("Attendez le chargement du registre ou la fin de l’enregistrement avant l’importation.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalizeHeader = (value: string) => value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").replace(/[^a-z0-9]/g, "");
+      const columns = {
+        date: ["date"],
+        time: ["heure de pointe", "heure pointe", "heure", "hp"],
+        vehicle: ["vehicule"],
+        registration: ["immatriculation camion", "immatriculation", "matricule vehicule"],
+        designation: ["designation", "produit"],
+        quantity: ["quantite", "quantite dechargee", "nombre"],
+        document: ["bon de livraison facture", "bon de livraison", "facture", "document"],
+        origin: ["provenance", "origine"],
+      };
+      const countHeaders = (row: string[]) => {
+        const headers = row.map((value) => normalizeHeader(String(value ?? "")));
+        return Object.values(columns).filter((aliases) =>
+          headers.some((header) => aliases.some((alias) => header === normalizeHeader(alias))),
+        ).length;
+      };
+      const headerRowIndex = sheet.slice(0, 10).reduce((bestIndex, row, index, rows) =>
+        countHeaders(row) > countHeaders(rows[bestIndex] || []) ? index : bestIndex,
+      0);
+      const headers = (sheet[headerRowIndex] || []).map((value) => normalizeHeader(String(value ?? "")));
+      const column = (...aliases: string[]) => headers.findIndex((header) =>
+        aliases.some((alias) => header === normalizeHeader(alias)),
+      );
+      const col = Object.fromEntries(
+        Object.entries(columns).map(([key, aliases]) => [key, column(...aliases)]),
+      ) as Record<keyof typeof columns, number>;
+      if (Object.values(col).some((index) => index < 0)) {
+        const detected = (sheet[headerRowIndex] || []).filter(Boolean).join(", ");
+        throw new Error(`Colonnes requises manquantes : ${registryHeaders.join(", ")}. En-têtes détectés : ${detected || "aucun"}.`);
+      }
+      const get = (cells: string[], index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+      const parseDate = (value: string) => {
+        const text = value.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+        const frenchDate = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(text);
+        if (frenchDate) return `${frenchDate[3]}-${frenchDate[2].padStart(2, "0")}-${frenchDate[1].padStart(2, "0")}`;
+        const serial = Number(text);
+        return Number.isFinite(serial) && serial > 20000 && serial < 80000
+          ? new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10)
+          : "";
+      };
+      const parseTime = (value: string) => {
+        const text = value.trim();
+        const serial = Number(text);
+        if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+          const minutes = Math.round(serial * 1440);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+        const match = /^(\d{1,2}):(\d{2})/.exec(text);
+        return match && Number(match[1]) < 24 && Number(match[2]) < 60
+          ? `${match[1].padStart(2, "0")}:${match[2]}`
+          : "";
+      };
+      const rows = sheet.slice(headerRowIndex + 1).map((cells, index) => {
+        const rawQuantity = get(cells, col.quantity).replace(/\s/g, "");
+        return {
+          line: headerRowIndex + index + 2,
+          date: parseDate(get(cells, col.date)),
+          heurePointe: parseTime(get(cells, col.time)),
+          vehicule: get(cells, col.vehicle),
+          immatriculationVehicule: get(cells, col.registration),
+          designation: get(cells, col.designation),
+          quantite: Number(rawQuantity.includes(",") ? rawQuantity.replace(/\./g, "").replace(",", ".") : rawQuantity),
+          document: get(cells, col.document),
+          provenance: get(cells, col.origin),
+          hasData: cells.some((value) => String(value ?? "").trim()),
+        };
+      }).filter((row) => row.hasData);
+      if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+
+      const created: MatierePremiereEntry[] = [];
+      const failures: string[] = [];
+      for (const row of rows) {
+        if (!row.date || !row.heurePointe || !row.vehicule || !row.immatriculationVehicule ||
+            !row.designation || !Number.isInteger(row.quantite) || row.quantite <= 0 ||
+            !row.document || !row.provenance) {
+          failures.push(`Ligne ${row.line} : vérifiez la date, l’heure, le véhicule, l’immatriculation, la désignation, la quantité, le document et la provenance.`);
+          continue;
+        }
+        try {
+          const result = await serviceApi.createLogistics({
+            type: "MATIERE_PREMIERE",
+            date: row.date,
+            heurePointe: row.heurePointe,
+            immatriculationVehicule: row.immatriculationVehicule,
+            vehicule: row.vehicule,
+            designation: row.designation,
+            quantite: row.quantite,
+            document: row.document,
+            provenance: row.provenance,
+            siteId: selectedSiteId,
+            siteName: selectedSiteName,
+            siteType: selectedSiteType,
+          });
+          if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
+          created.push(result.entry as MatierePremiereEntry);
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+          if (error instanceof Error && "status" in error && error.status === 409) break;
+        }
+      }
+      if (created.length) {
+        setRegistry((current) => ({
+          siteId: selectedSiteId,
+          entries: [...created, ...(current.siteId === selectedSiteId
+            ? current.entries.filter((entry) => !created.some((item) => item.id === entry.id))
+            : [])],
+          error: "",
+        }));
+        const queued = created.filter((entry) => entry.pendingSync).length;
+        toast.success(`${created.length} déchargement(s) importé(s)${queued ? ` (${queued} en attente de synchronisation)` : ""}.`);
+      }
+      if (failures.length) toast.error(`${failures.length} ligne(s) non importée(s) : ${failures.slice(0, 2).join(" ")}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const printEntry = (entry: MatierePremiereEntry) => {
@@ -342,19 +493,45 @@ export default function DechargementMatierePremiere() {
           </form>
       </Panel>
       <section id="raw-material-print-area" className="raw-material-registry">
-      <Panel title="Registre des déchargements">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 raw-material-screen">
-          <div className="flex min-w-[260px] max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-3">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Panel>
+        <div className="mb-4 flex flex-col gap-3 border-b pb-3 raw-material-screen xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0 xl:flex-[0_1_25%]">
+            <h2 className="text-sm font-semibold text-foreground">Registre des déchargements</h2>
+          </div>
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:flex-[1_1_0%] xl:grid-cols-4">
+            <label className={`inline-flex h-10 min-w-0 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-md border px-2 text-center text-xs font-medium ${!selectedSiteId || importing || saving ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+              <FileUp className="mr-1.5 h-4 w-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input
+                className="sr-only"
+                type="file"
+                accept=".xlsx,.csv,text/csv"
+                disabled={!selectedSiteId || importing || saving}
+                onChange={(event) => { void importEntries(event.target.files?.[0]); event.currentTarget.value = ""; }}
+              />
+            </label>
+            <Button className="w-full min-w-0 whitespace-nowrap px-2 text-xs" type="button" variant="outline" onClick={() => exportXlsx("modele-dechargement-matiere-premiere.xlsx", "Matière première", registryHeaders, [])}>
+              <FileDown className="mr-1.5 h-4 w-4 shrink-0" />Modèle Excel
+            </Button>
+            <Button className="w-full min-w-0 whitespace-nowrap px-2 text-xs" type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`dechargement-matiere-premiere-${today()}.xlsx`, "Matière première", registryHeaders, rowsForExport(filteredEntries))}>
+              <Download className="mr-1.5 h-4 w-4 shrink-0" />Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" className="raw-material-print-button w-full min-w-0 whitespace-nowrap px-2 text-xs print:hidden" disabled={!selectedSiteId || !filteredEntries.length} onClick={handlePrintRegistry}>
+              <Printer className="mr-1.5 h-4 w-4 shrink-0" />Imprimer les lignes (Word)
+            </Button>
+          </div>
+        </div>
+        <div className="mb-4 flex flex-col gap-3 raw-material-screen sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre"
-              className="border-0 px-0 shadow-none focus-visible:ring-0"
+              className="h-10 w-full pl-9"
               placeholder="Rechercher immatriculation, véhicule, désignation…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:shrink-0">
             <Label htmlFor="matiere-search-date" className="whitespace-nowrap">Filtrer par date</Label>
             <Input
               id="matiere-search-date"
@@ -365,9 +542,6 @@ export default function DechargementMatierePremiere() {
               onChange={(event) => setSearchDate(event.target.value)}
             />
           </div>
-          <Button type="button" variant="outline" className="raw-material-print-button print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
-            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
-          </Button>
         </div>
         {entriesError ? (
           <p className="raw-material-screen text-sm text-destructive">{entriesError}</p>
@@ -461,7 +635,7 @@ export default function DechargementMatierePremiere() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry) => (
+                {filteredEntries.map((entry) => (
                   <tr key={entry.id}>
                     <td>{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td>{entry.heurePointe || "—"}</td>
