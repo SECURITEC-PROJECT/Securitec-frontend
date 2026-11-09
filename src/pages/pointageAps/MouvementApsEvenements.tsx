@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { confirmDeletion } from "@/lib/deletion-toast";
-import { downloadWordTable, printRegistryTable } from "@/lib/registry-table";
+import { printRegistryTable } from "@/lib/registry-table";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { printRecord } from "@/lib/printRecord";
 import { readXlsxRows } from "@/lib/read-xlsx";
@@ -174,19 +174,6 @@ export default function MouvementApsEvenements({
     exportXlsx(`registre-mouvements-aps-${date}.xlsx`, "Mouvements APS", eventHeaders, rows);
   };
 
-  const exportHistoryWord = () => {
-    const rows = filteredEntries.map((entry) => [
-      entry.date, entry.heureEntree, entry.mouvement, entry.observation || "", entry.heureSortie || "",
-    ]);
-    downloadWordTable(
-      `registre-mouvements-aps-${date}.doc`,
-      "Registre des mouvements APS",
-      activeSiteName,
-      eventHeaders,
-      rows,
-    );
-  };
-
   const importHistory = async (file?: File) => {
     if (!file) return;
     if (!activeSiteId) {
@@ -330,7 +317,7 @@ export default function MouvementApsEvenements({
         </form>
       </section>
 
-      <div className="grid grid-cols-1 gap-2 print:hidden sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid w-full grid-cols-1 items-stretch gap-2 print:hidden sm:grid-cols-2 xl:grid-cols-5">
         <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!activeSiteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
           <FileUp className="mr-2 size-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
           <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!activeSiteId || importing || loading || saving} onChange={(event) => { void importHistory(event.target.files?.[0]); event.currentTarget.value = ""; }} />
@@ -341,23 +328,20 @@ export default function MouvementApsEvenements({
         <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportHistory}>
           <Download className="mr-2 size-4" />Exporter Excel
         </Button>
-        <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportHistoryWord}>
-          <FileDown className="mr-2 size-4" />Télécharger Word
-        </Button>
         <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={printHistory}>
           <Printer className="mr-2 size-4" />Imprimer les lignes (Word)
         </Button>
-      </div>
-      <div className="relative w-full max-w-sm print:hidden">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input
-          type="search"
-          aria-label="Rechercher dans les mouvements APS"
-          placeholder="Rechercher un mouvement ou une observation..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="pl-9"
-        />
+        <div className="relative w-full min-w-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            type="search"
+            aria-label="Rechercher dans les mouvements APS"
+            placeholder="Rechercher un mouvement ou une observation..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-10 w-full pl-9"
+          />
+        </div>
       </div>
       <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full min-w-[850px] border-collapse text-left text-sm">

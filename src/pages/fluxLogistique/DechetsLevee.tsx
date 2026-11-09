@@ -9,7 +9,7 @@ import { serviceApi, type ChauffeurRecord } from "@/lib/service-api";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
 import { printRecord } from "@/lib/printRecord";
-import { downloadWordTable, printRegistryTable } from "@/lib/registry-table";
+import { printRegistryTable } from "@/lib/registry-table";
 import { ClipboardList, Download, FileDown, FileUp, Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -377,20 +377,6 @@ export default function DechetsLevee() {
         entry.date, formatWasteType(entry.typeDechet), entry.heureSortie || "", entry.vehicule || "",
         entry.transporteur || "", entry.numeroPesage || "", entry.facture || "", entry.plomb || "",
         entry.poids == null ? "" : String(entry.poids), entry.destinataire || "",
-      ]),
-    );
-  };
-
-  const handleExportWord = () => {
-    downloadWordTable(
-      `registre-dechets-levure-${today()}.doc`,
-      "Registre des sorties de drèche et de levure",
-      selectedSiteName,
-      wasteHeaders,
-      filteredEntries.map((entry) => [
-        formatDate(entry.date), formatWasteType(entry.typeDechet), entry.heureSortie || "", entry.vehicule || "",
-        entry.transporteur || "", entry.numeroPesage || "", entry.facture || "", entry.plomb || "",
-        entry.poids == null ? "" : Number(entry.poids).toLocaleString("fr-FR"), entry.destinataire || "",
       ]),
     );
   };
@@ -825,10 +811,13 @@ export default function DechetsLevee() {
         </form>
       </section>
       <section id="waste-registry-print-area" className="waste-registry-section">
-        <Panel title="Registre des sorties de drèche et de levure">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 waste-registry-screen">
-          <p className="text-sm text-muted-foreground">Historique des sorties pour le site sélectionné.</p>
-          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <Panel>
+        <div className="mb-4 flex flex-col gap-3 waste-registry-screen xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">Registre des sorties de drèche et de levure</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Historique des sorties pour le site sélectionné.</p>
+          </div>
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-[76%] xl:grid-cols-4">
             <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!selectedSiteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
               <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
               <input
@@ -845,16 +834,13 @@ export default function DechetsLevee() {
             <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" /> Exporter Excel
             </Button>
-            <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={handleExportWord}>
-              <FileDown className="mr-2 h-4 w-4" /> Télécharger Word
-            </Button>
             <Button type="button" variant="outline" className="waste-print-button w-full" disabled={!filteredEntries.length} onClick={handlePrintRegistry}>
               <Printer className="mr-2 h-4 w-4" /> Imprimer les lignes (Word)
             </Button>
           </div>
         </div>
         {entriesError && <p className="waste-registry-screen mb-3 text-sm text-destructive">{entriesError}</p>}
-        <div className="relative mb-4 waste-registry-screen">
+        <div className="relative mb-4 w-full waste-registry-screen">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre des sorties de drèche et de levure"

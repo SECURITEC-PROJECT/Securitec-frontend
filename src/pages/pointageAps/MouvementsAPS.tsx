@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/PageHeader";
 import MouvementApsEvenements from "@/pages/pointageAps/MouvementApsEvenements";
 import { useSites } from "@/hooks/useSites";
 import { confirmDeletion } from "@/lib/deletion-toast";
-import { downloadWordTable, printRegistryTable } from "@/lib/registry-table";
+import { printRegistryTable } from "@/lib/registry-table";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
 import {
@@ -192,16 +192,6 @@ export default function MouvementsAPS() {
 
   const exportMovements = () => {
     exportXlsx(`pointage-mouvements-aps-${service}-${date}.xlsx`, "Mouvements APS", apsMovementHeaders, rowsForExport());
-  };
-
-  const exportMovementsWord = () => {
-    downloadWordTable(
-      `pointage-mouvements-aps-${service}-${date}.doc`,
-      `Pointage APS — ${service}`,
-      sites.find((site) => site.id === activeSiteId)?.name ?? "",
-      apsMovementHeaders,
-      rowsForExport(),
-    );
   };
 
   const printMovements = () => {
@@ -433,9 +423,6 @@ export default function MouvementsAPS() {
           </Button>
           <Button className="w-full" type="button" variant="outline" disabled={!displayedPostes.length} onClick={exportMovements}>
             <Download className="mr-2 size-4" />Exporter Excel
-          </Button>
-          <Button className="w-full" type="button" variant="outline" disabled={!displayedPostes.length} onClick={exportMovementsWord}>
-            <FileDown className="mr-2 size-4" />Télécharger Word
           </Button>
           <Button className="w-full" type="button" variant="outline" disabled={!displayedPostes.length} onClick={printMovements}>
             <Printer className="mr-2 size-4" />Imprimer les lignes (Word)
