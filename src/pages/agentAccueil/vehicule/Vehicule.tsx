@@ -1,7 +1,8 @@
-import { PageHeader, Panel } from "@/components/PageHeader";
+import { Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type VehicleMovement } from "@/lib/service-api";
+import { MapPin, Truck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import FormVehicule from "./FormVehicule";
 import PresentsVehicules from "./PresentsVehicules";
@@ -11,6 +12,7 @@ export default function Vehicule() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
   const [editingVehicle, setEditingVehicle] = useState<VehicleMovement | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [registry, setRegistry] = useState<{ siteId: string; vehicles: VehicleMovement[]; error: string }>({
     siteId: "",
     vehicles: [],
@@ -50,7 +52,7 @@ export default function Vehicule() {
   const error = registry.siteId === site?.id ? registry.error : "";
   const loading = Boolean(site?.id) && registry.siteId !== site?.id;
 
-  const saveVehicle = (vehicle: VehicleMovement) => {
+  const saveVehicle = (vehicle: VehicleMovement, closeForm = true) => {
     setRegistry((current) => ({
       siteId: site?.id || current.siteId,
       vehicles: current.siteId === site?.id
@@ -60,7 +62,10 @@ export default function Vehicule() {
         : [vehicle],
       error: "",
     }));
-    setEditingVehicle(null);
+    if (closeForm) {
+      setEditingVehicle(null);
+      setFormOpen(false);
+    }
   };
 
   const exitVehicle = async (id: string, passengersOut: number): Promise<boolean> => {
@@ -90,9 +95,16 @@ export default function Vehicule() {
   };
 
   return (
-    <div className="vehicle-module space-y-5">
-      <PageHeader title="Mouvements véhicule (Entrée / Sortie)" subtitle="Enregistrez les entrées et sorties des véhicules et le nombre de personnes à bord." />
-      <div className="max-w-xl">
+    <div className="vehicle-module space-y-4">
+      <section className="vehicle-hero">
+        <div className="vehicle-hero-icon"><Truck aria-hidden="true" /></div>
+        <div>
+          <h1>Mouvements véhicule (Entrée / Sortie)</h1>
+          <p>Enregistrez et suivez les entrées et sorties des véhicules</p>
+        </div>
+      </section>
+      <div className="vehicle-site-context">
+        <MapPin aria-hidden="true" />
         <SitePicker
           id="vehicle-site"
           value={selectedSiteName}
@@ -103,6 +115,7 @@ export default function Vehicule() {
           onChange={(name) => {
             setSiteName(name);
             setEditingVehicle(null);
+            setFormOpen(false);
           }}
         />
       </div>
@@ -130,9 +143,11 @@ export default function Vehicule() {
           <FormVehicule
             key={editingVehicle?.id || "new"}
             siteId={site?.id || ""}
+            open={formOpen}
+            onOpenChange={setFormOpen}
             editingVehicle={editingVehicle}
             onSaved={saveVehicle}
-            onCancelEdit={() => setEditingVehicle(null)}
+            onCancelEdit={() => { setEditingVehicle(null); setFormOpen(false); }}
           />
           <PresentsVehicules
             rows={vehicles}
@@ -141,7 +156,8 @@ export default function Vehicule() {
           <RegistreVehicules
             rows={vehicles}
             siteName={selectedSiteName}
-            onEdit={setEditingVehicle}
+            onCreate={() => { setEditingVehicle(null); setFormOpen(true); }}
+            onEdit={(vehicle) => { setEditingVehicle(vehicle); setFormOpen(true); }}
             onDelete={deleteVehicle}
           />
         </>

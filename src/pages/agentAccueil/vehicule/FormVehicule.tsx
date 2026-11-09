@@ -1,9 +1,9 @@
-import { Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { VehicleMovement } from "@/lib/service-api";
 import { serviceApi } from "@/lib/service-api";
-import { Download, FileUp, Plus, Save, Trash2 } from "lucide-react";
+import { Download, FileUp, Plus, Save, Trash2, Truck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { readXlsxRows } from "@/lib/read-xlsx";
@@ -42,7 +42,7 @@ const parseExcelDate = (raw: string) => {
   const value = raw.trim();
   if (/^\d+(\.\d+)?$/.test(value) && Number(value) > 20000) return new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(value)) * 86400000).toISOString().slice(0, 10);
   const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  const fr = value.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})/);
+  const fr = value.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
   if (fr) return `${fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
   return "";
@@ -65,12 +65,14 @@ const rowFromVehicle = (vehicle: VehicleMovement): MovementRow => ({
 
 interface FormVehiculeProps {
   siteId: string;
-  onSaved: (vehicle: VehicleMovement) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: (vehicle: VehicleMovement, closeForm?: boolean) => void;
   editingVehicle: VehicleMovement | null;
   onCancelEdit: () => void;
 }
 
-export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancelEdit }: FormVehiculeProps) {
+export default function FormVehicule({ siteId, open, onOpenChange, onSaved, editingVehicle, onCancelEdit }: FormVehiculeProps) {
   const [rows, setRows] = useState<MovementRow[]>(() => [editingVehicle ? rowFromVehicle(editingVehicle) : newRow()]);
   const [savingKey, setSavingKey] = useState("");
   const [importing, setImporting] = useState(false);
@@ -178,11 +180,11 @@ export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancel
         };
         try {
           let vehicle = await serviceApi.createVehicle(payload);
-          onSaved(vehicle);
+          onSaved(vehicle, false);
           if (exitTime) {
             if (vehicle.id.startsWith("pending-")) throw new Error("Entree en attente de synchronisation; la sortie sera a enregistrer ensuite.");
             vehicle = await serviceApi.updateVehicle(vehicle.id, payload);
-            onSaved(vehicle);
+            onSaved(vehicle, false);
           }
           savedCount += 1;
         } catch (error) {
@@ -199,7 +201,19 @@ export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancel
   };
 
   return (
-    <Panel title="Saisie des mouvements véhicule — tableau type Excel">
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      onOpenChange(nextOpen);
+      if (!nextOpen && editingVehicle) onCancelEdit();
+    }}>
+      <DialogContent className="vehicle-entry-modal">
+        <DialogHeader className="vehicle-entry-modal-header">
+          <div className="vehicle-entry-modal-icon"><Truck aria-hidden="true" /></div>
+          <div>
+            <DialogTitle>{editingVehicle ? "Modifier un mouvement véhicule" : "Nouvel enregistrement véhicule"}</DialogTitle>
+            <DialogDescription>Renseignez les données d’entrée et, si nécessaire, de sortie selon le modèle Excel.</DialogDescription>
+          </div>
+        </DialogHeader>
+      <div className="vehicle-entry-modal-body">
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">Saisissez les entrées et sorties directement dans les cellules, puis enregistrez chaque ligne.</p>
         <div className="flex flex-wrap gap-2">
@@ -229,7 +243,7 @@ export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancel
               <td><Input aria-label="Nombre de personnes à la sortie" type="number" min="0" max="10000" step="1" value={row.passengersOut} onChange={(event) => update(row.key, "passengersOut", event.target.value)} /></td>
               <td><Input aria-label="Heure sortie" type="time" value={row.exitTime} onChange={(event) => update(row.key, "exitTime", event.target.value)} /></td>
               <td><div className="flex items-center gap-1">
-                <Button type="button" size="sm" disabled={Boolean(savingKey)} onClick={() => void save(row)}><Save className="mr-1 h-4 w-4" />{savingKey === row.key ? "..." : row.id ? "Modifier" : "Enregistrer"}</Button>
+                <Button type="button" size="sm" className="vehicle-save-row" disabled={Boolean(savingKey)} onClick={() => void save(row)}><Save className="mr-1 h-4 w-4" />{savingKey === row.key ? "..." : row.id ? "Modifier" : "Enregistrer"}</Button>
                 <Button type="button" size="icon" variant="ghost" aria-label={row.id ? "Annuler la modification" : "Supprimer la ligne"} title={row.id ? "Annuler la modification" : "Supprimer la ligne"} disabled={(rows.length === 1 && !row.id) || Boolean(savingKey)} onClick={() => removeRow(row.key)}><Trash2 className="h-4 w-4" /></Button>
               </div></td>
             </tr>)}</tbody>
@@ -238,6 +252,8 @@ export default function FormVehicule({ siteId, onSaved, editingVehicle, onCancel
         <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setRows((current) => [...current, newRow()])}><Plus className="mr-2 h-4 w-4" />Nouvelle ligne</Button></div>
         {!siteId && <p className="text-sm text-muted-foreground">Selectionnez un site pour enregistrer un mouvement.</p>}
       </div>
-    </Panel>
+      </div>
+      </DialogContent>
+    </Dialog>
   );
 }
