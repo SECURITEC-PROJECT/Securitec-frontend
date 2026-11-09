@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { serviceApi, type KeyTrackingEntry, type RegisterEmployeeOption } from "@/lib/service-api";
-import { Check, CheckCircle2, ChevronsUpDown, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
+import { Check, CheckCircle2, ChevronsUpDown, Download, FileDown, FileUp, Plus, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -132,6 +134,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [entriesForSite, setEntriesForSite] = useState("");
   const [search, setSearch] = useState("");
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const [returningEntryId, setReturningEntryId] = useState<string | number | null>(null);
   const [returnDialogEntry, setReturnDialogEntry] = useState<KeyTrackingEntry | null>(null);
   const [returnerChoice, setReturnerChoice] = useState<"" | "other" | "not-returned">("");
@@ -228,6 +231,88 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       setSavingRowId(null);
     }
   };
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!siteId) { toast.error("Sélectionnez un site avant l'importation."); return; }
+    if (!keyTypes.length) { toast.error("Attendez le chargement des types de clés avant l'importation."); return; }
+    if (siteEmployeesFor !== siteId) { toast.error("Attendez le chargement des employés du site avant l'importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalize = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      const headers = (sheet[0] || []).map(normalize);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.includes(header));
+      const col = {
+        date: column("date", "date sortie"), time: column("heure", "heure sortie", "heure de sortie"),
+        fullName: column("nom et prenom", "nom prenom", "personne"), lastName: column("nom", "nom de famille"),
+        firstName: column("prenom", "prenom"), matricule: column("matricule"),
+        keyType: column("type de cle", "type cle", "cle", "trousse cle"),
+        quantity: column("nombre", "nombre de cles", "quantite", "quantite de cles"), lieu: column("lieu", "lieu de sortie"),
+      };
+      if ((col.fullName < 0 && col.lastName < 0) || col.keyType < 0 || col.quantity < 0 || col.lieu < 0) {
+        throw new Error("Colonnes requises manquantes : Nom, Type de clé, Nombre et Lieu.");
+      }
+      const excelDate = (value: string) => {
+        const text = value.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+        const fr = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+        if (fr) return `${fr[3]}-${fr[2].padStart(2,"0")}-${fr[1].padStart(2,"0")}`;
+        const serial = Number(text);
+        if (Number.isFinite(serial) && serial > 20000 && serial < 80000) return new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10);
+        return "";
+      };
+      const excelTime = (value: string) => {
+        const text = value.trim();
+        const serial = Number(text);
+        if (Number.isFinite(serial) && serial >= 0 && serial < 1) {
+          const minutes = Math.round(serial * 24 * 60);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2,"0")}:${String(minutes % 60).padStart(2,"0")}`;
+        }
+        const match = /^(\d{1,2}):(\d{2})/.exec(text);
+        return match ? `${match[1].padStart(2,"0")}:${match[2]}` : heureActuelle();
+      };
+      const data = sheet.slice(1).map((cells, index) => {
+        const get = (index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+        const fullName = get(col.fullName) || [get(col.lastName), get(col.firstName)].filter(Boolean).join(" ");
+        const employee = availableEmployees.find((item) => normalize(`${item.lastName} ${item.firstName}`) === normalize(fullName));
+        const keyTypeValue = keyTypes.find((item) => normalize(item) === normalize(get(col.keyType)));
+        return {
+          line: index + 2, date: excelDate(get(col.date)) || dateActuelle(), time: excelTime(get(col.time)), fullName,
+          matricule: get(col.matricule) || employee?.matricule || "", keyType: keyTypeValue || "", quantity: Number(get(col.quantity)), lieu: get(col.lieu), employee,
+        };
+      }).filter((row) => row.fullName || row.keyType || row.lieu);
+      if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let saved = 0;
+      let queued = 0;
+      const failures: string[] = [];
+      for (const row of data) {
+        if (!row.fullName || !row.keyType || !row.lieu || !Number.isInteger(row.quantity) || row.quantity < 1 || row.quantity > 10000) {
+          failures.push(`Ligne ${row.line} : nom, type de clé, lieu ou quantité invalide.`); continue;
+        }
+        const parts = row.fullName.trim().split(/\s+/);
+        try {
+          const result = await serviceApi.createKeyTracking({
+            date: row.date, employeeId: row.employee?.id || "", lastName: row.employee?.lastName || parts[0],
+            firstName: row.employee?.firstName || parts.slice(1).join(" "), matricule: row.matricule,
+            keyType: row.keyType, quantity: row.quantity, departureTime: row.time, siteId, lieu: row.lieu,
+          });
+          saved += 1;
+          if (result.pendingSync) queued += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      const updatedEntries = await serviceApi.listKeyTracking(siteId);
+      setEntries(updatedEntries);
+      setEntriesForSite(siteId);
+      if (saved) toast.success(`${saved} mouvement(s) ajouté(s) au registre${queued ? ` (${queued} en attente de synchronisation)` : " et enregistré(s) dans la base"}.`);
+      if (failures.length) toast.error(saved ? `${failures.length} ligne(s) n'ont pas été importées. Vérifiez les champs et les habilitations.` : failures.slice(0, 3).join(" "));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
+    }
+  };
   const handleReturn = async (entry: KeyTrackingEntry, returnerType: "same" | "other", otherEmployeeId?: string) => {
     setReturningEntryId(entry.id);
     try {
@@ -300,6 +385,18 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       entry.returnerMatricule ?? "",
     ].join(" ")).includes(normalizedSearch),
   );
+  const handleExport = () => {
+    const rows = filteredEntries.map((entry) => [
+      entry.date, entry.departureTime, `${entry.lastName} ${entry.firstName}`.trim(), entry.matricule || "", entry.keyType,
+      entry.quantity, entry.lieu || "", entry.observations || "", entry.returnDate || "", entry.returnTime || "",
+      `${entry.returnerLastName || ""} ${entry.returnerFirstName || ""}`.trim(), entry.returnerMatricule || "",
+      entry.notReturned ? "Non rendu" : entry.returnTime ? "Rendu" : "En circulation",
+    ]);
+    exportXlsx(`registre-mouvements-cles-${dateActuelle()}.xlsx`, "Mouvements de clés", [
+      "Date sortie", "Heure sortie", "Nom et prénom", "Matricule", "Type de clé", "Nombre", "Lieu", "Observation",
+      "Date retour", "Heure retour", "Personne qui a rendu", "Matricule du retour", "Statut",
+    ], rows);
+  };
   const employeeOptions = availableEmployees.map((employee) => ({
     value: employee.id,
     label: `${employee.lastName} ${employee.firstName}`,
@@ -384,9 +481,21 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       <section id="key-movements-print-area" className="keys-history space-y-3 rounded-lg border bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="keys-panel-heading font-semibold">Historique et retour des clés</h2>
-          <Button type="button" variant="outline" className="keys-print-button print:hidden" disabled={!siteId || !visibleEntries.length} onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" /> Imprimer tous les mouvements
-          </Button>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <label className={`inline-flex h-10 cursor-pointer items-center rounded-md border px-3 text-sm font-medium ${!siteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+              <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-mouvements-cles.xlsx", "Mouvements de clés", ["Date sortie", "Heure sortie", "Nom et prénom", "Matricule", "Type de clé", "Nombre", "Lieu"], [])}>
+              <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
+            </Button>
+            <Button type="button" variant="outline" className="keys-print-button" disabled={!filteredEntries.length} onClick={handleExport}>
+              <Download className="mr-2 h-4 w-4" /> Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" className="keys-print-button" disabled={!siteId || !visibleEntries.length} onClick={handlePrint}>
+              <Printer className="mr-2 h-4 w-4" /> Imprimer tous les mouvements
+            </Button>
+          </div>
         </div>
         <div className="relative key-movements-screen">
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
