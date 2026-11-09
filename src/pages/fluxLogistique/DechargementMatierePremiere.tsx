@@ -1,15 +1,16 @@
-import { PageHeader, Panel } from "@/components/PageHeader";
+import { Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
-import { Download, FileDown, FileUp, Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, FileDown, FileUp, MapPin, PackageCheck, Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
@@ -95,6 +96,7 @@ export default function DechargementMatierePremiere() {
   const [provenance, setProvenance] = useState("");
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [registry, setRegistry] = useState<{
@@ -103,7 +105,11 @@ export default function DechargementMatierePremiere() {
     error: string;
   }>({ siteId: "", entries: [], error: "" });
   const [search, setSearch] = useState("");
-  const [searchDate, setSearchDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
@@ -146,11 +152,20 @@ export default function DechargementMatierePremiere() {
   const entriesError = registry.siteId === selectedSiteId ? registry.error : "";
   const loadingEntries = Boolean(selectedSiteId) && registry.siteId !== selectedSiteId;
   const filteredEntries = entries.filter((entry) => {
-    const matchesDate = !searchDate || entry.date?.slice(0, 10) === searchDate;
+    const entryDate = entry.date?.slice(0, 10) || "";
+    const matchesDate = (!dateFrom || entryDate >= dateFrom) && (!dateTo || entryDate <= dateTo);
+    const matchesStatus = statusFilter === "all" || (statusFilter === "pending" ? entry.pendingSync : !entry.pendingSync);
     const matchesText = [entry.date, entry.heurePointe, entry.immatriculationVehicule, entry.vehicule, entry.designation, entry.document, entry.provenance]
       .some((value) => value?.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
-    return matchesDate && matchesText;
+    return matchesDate && matchesText && matchesStatus;
   });
+  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageNumbers = Array.from(
+    { length: Math.min(pageCount, currentPage + 1) - Math.max(1, currentPage - 1) + 1 },
+    (_, index) => Math.max(1, currentPage - 1) + index,
+  );
   const rowsForExport = (source: MatierePremiereEntry[]) => source.map((entry) => [
     entry.date?.slice(0, 10) || "",
     entry.heurePointe || "",
@@ -172,6 +187,7 @@ export default function DechargementMatierePremiere() {
     setDocument("");
     setProvenance("");
     setEditingId(null);
+    setFormOpen(false);
   };
 
   const startEditing = (entry: MatierePremiereEntry) => {
@@ -184,7 +200,7 @@ export default function DechargementMatierePremiere() {
     setQuantite(entry.quantite == null ? "" : String(entry.quantite));
     setDocument(entry.document || "");
     setProvenance(entry.provenance || "");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -406,14 +422,25 @@ export default function DechargementMatierePremiere() {
   };
 
   return (
-    <div className="raw-material-module space-y-5">
-      <PageHeader
-        title="Déchargement matière première"
-        subtitle="Enregistrement des réceptions de matière première"
-      />
+    <div className="raw-material-module space-y-4">
+      <section className="raw-material-hero">
+        <div className="raw-material-hero-icon"><PackageCheck aria-hidden="true" /></div>
+        <div>
+          <h1>Déchargement matière première</h1>
+          <p>Enregistrez et suivez les réceptions de matières premières</p>
+        </div>
+      </section>
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <Panel title={editingId ? "Modifier un déchargement" : "Réception de matière première"}>
-          <form className="raw-material-form w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="raw-material-form-modal">
+          <DialogHeader className="raw-material-form-modal-header">
+            <div className="raw-material-form-modal-icon"><PackageCheck aria-hidden="true" /></div>
+            <div>
+              <DialogTitle>{editingId ? "Modifier un déchargement" : "Nouvelle réception de matière première"}</DialogTitle>
+              <DialogDescription>Complétez les informations du déchargement puis enregistrez.</DialogDescription>
+            </div>
+          </DialogHeader>
+          <form className="raw-material-form w-full space-y-5" onSubmit={(event) => void submit(event)}>
             <SitePicker
               id="matiere-site"
               value={selectedSiteName}
@@ -428,7 +455,7 @@ export default function DechargementMatierePremiere() {
                 setImmatriculationVehicule("");
               }}
             />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="raw-material-form-fields grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="matiere-date">Date</Label>
                 <Input id="matiere-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
@@ -442,7 +469,7 @@ export default function DechargementMatierePremiere() {
                 <Input id="matiere-vehicule" required maxLength={160} autoComplete="off" placeholder="Saisir le véhicule" value={vehicule} onChange={(event) => setVehicule(event.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="matiere-immatriculation">Immatriculation du camion</Label>
+                <Label htmlFor="matiere-immatriculation">Immatriculation camion</Label>
                 <Input id="matiere-immatriculation" required maxLength={100} autoComplete="off" placeholder="Saisir l’immatriculation" value={immatriculationVehicule} onChange={(event) => setImmatriculationVehicule(event.target.value)} />
               </div>
               <div className="space-y-2">
@@ -479,77 +506,112 @@ export default function DechargementMatierePremiere() {
                 <Label htmlFor="matiere-document">Bon de livraison / facture</Label>
                 <Input id="matiere-document" required maxLength={160} value={document} onChange={(event) => setDocument(event.target.value)} />
               </div>
-              <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+              <div className="space-y-2">
                 <Label htmlFor="matiere-provenance">Provenance</Label>
                 <Input id="matiere-provenance" required maxLength={255} value={provenance} onChange={(event) => setProvenance(event.target.value)} />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex justify-end">
               <Button type="submit" disabled={saving || !selectedSiteName.trim()}>
                 {saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer le déchargement"}
               </Button>
-              {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
             </div>
           </form>
-      </Panel>
+        </DialogContent>
+      </Dialog>
       <section id="raw-material-print-area" className="raw-material-registry">
       <Panel>
-        <div className="mb-4 flex flex-col gap-3 border-b pb-3 raw-material-screen xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 xl:flex-[0_1_25%]">
-            <h2 className="text-sm font-semibold text-foreground">Registre des déchargements</h2>
-          </div>
-          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:w-auto xl:flex-[1_1_0%] xl:grid-cols-4">
-            <label className={`inline-flex h-10 min-w-0 w-full cursor-pointer items-center justify-center whitespace-nowrap rounded-md border px-2 text-center text-xs font-medium ${!selectedSiteId || importing || saving ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
-              <FileUp className="mr-1.5 h-4 w-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
-              <input
-                className="sr-only"
-                type="file"
-                accept=".xlsx,.csv,text/csv"
-                disabled={!selectedSiteId || importing || saving}
-                onChange={(event) => { void importEntries(event.target.files?.[0]); event.currentTarget.value = ""; }}
-              />
+        <div className="raw-material-registry-toolbar raw-material-screen">
+          <h2>Registre des déchargements</h2>
+          <div className="raw-material-registry-actions">
+            <Button type="button" className="raw-material-primary-action" onClick={() => {
+              clearForm();
+              setFormOpen(true);
+            }}>
+              <PackageCheck className="h-4 w-4 shrink-0" />Nouveau déchargement
+            </Button>
+            <label className={`raw-material-import-action ${!selectedSiteId || importing || saving ? "pointer-events-none opacity-50" : ""}`}>
+              <FileUp className="h-4 w-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!selectedSiteId || importing || saving} onChange={(event) => { void importEntries(event.target.files?.[0]); event.currentTarget.value = ""; }} />
             </label>
-            <Button className="w-full min-w-0 whitespace-nowrap px-2 text-xs" type="button" variant="outline" onClick={() => exportXlsx("modele-dechargement-matiere-premiere.xlsx", "Matière première", registryHeaders, [])}>
-              <FileDown className="mr-1.5 h-4 w-4 shrink-0" />Modèle Excel
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-dechargement-matiere-premiere.xlsx", "Matière première", registryHeaders, [])}>
+              <FileDown className="h-4 w-4 shrink-0" />Modèle Excel
             </Button>
-            <Button className="w-full min-w-0 whitespace-nowrap px-2 text-xs" type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`dechargement-matiere-premiere-${today()}.xlsx`, "Matière première", registryHeaders, rowsForExport(filteredEntries))}>
-              <Download className="mr-1.5 h-4 w-4 shrink-0" />Exporter Excel
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`dechargement-matiere-premiere-${today()}.xlsx`, "Matière première", registryHeaders, rowsForExport(filteredEntries))}>
+              <Download className="h-4 w-4 shrink-0" />Exporter Excel
             </Button>
-            <Button type="button" variant="outline" className="raw-material-print-button w-full min-w-0 whitespace-nowrap px-2 text-xs print:hidden" disabled={!selectedSiteId || !filteredEntries.length} onClick={handlePrintRegistry}>
-              <Printer className="mr-1.5 h-4 w-4 shrink-0" />Imprimer les lignes (Word)
+            <Button type="button" variant="outline" className="raw-material-print-button" disabled={!selectedSiteId || !filteredEntries.length} onClick={handlePrintRegistry}>
+              <Printer className="h-4 w-4 shrink-0" />Imprimer les lignes (Word)
             </Button>
           </div>
         </div>
-        <div className="mb-4 flex flex-col gap-3 raw-material-screen sm:flex-row sm:items-center">
-          <div className="relative min-w-0 flex-1">
+        <div className="raw-material-filter-grid raw-material-screen">
+          <label className="raw-material-filter-field raw-material-period-filter">
+            <span><CalendarDays aria-hidden="true" />Période</span>
+            <div className="raw-material-date-range">
+              <Input aria-label="Date de début" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
+              <span aria-hidden="true">–</span>
+              <Input aria-label="Date de fin" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
+            </div>
+          </label>
+          <label className="raw-material-filter-field">
+            <span><MapPin aria-hidden="true" />Site</span>
+            <select
+              value={selectedSiteName}
+              onChange={(event) => {
+                const nextSite = sites.find((item) => item.name === event.target.value);
+                setSiteName(event.target.value);
+                setSiteType(nextSite?.type || "USINE");
+                setPage(1);
+              }}
+              disabled={sites.length <= 1}
+            >
+              <option value="">Sélectionner un site</option>
+              {sites.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+            </select>
+          </label>
+          <label className="raw-material-filter-field">
+            <span><CheckCircle2 aria-hidden="true" />Statut</span>
+            <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}>
+              <option value="all">Tous</option>
+              <option value="recorded">Enregistré</option>
+              <option value="pending">En attente de synchronisation</option>
+            </select>
+          </label>
+          <label className="raw-material-filter-field raw-material-search-filter">
+            <span><Search aria-hidden="true" />Recherche</span>
+            <div className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label="Rechercher dans le registre"
               className="h-10 w-full pl-9"
-              placeholder="Rechercher immatriculation, véhicule, désignation…"
+              placeholder="Véhicule, désignation, document…"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
             />
-          </div>
-          <div className="flex items-center gap-2 sm:shrink-0">
-            <Label htmlFor="matiere-search-date" className="whitespace-nowrap">Filtrer par date</Label>
-            <Input
-              id="matiere-search-date"
-              type="date"
-              aria-label="Filtrer le registre par date"
-              className="w-auto"
-              value={searchDate}
-              onChange={(event) => setSearchDate(event.target.value)}
-            />
-          </div>
+            </div>
+          </label>
+        </div>
+        <div className="raw-material-results-summary raw-material-screen">
+          <p><CheckCircle2 aria-hidden="true" />{filteredEntries.length} déchargement(s) trouvé(s)</p>
+          <label>
+            Afficher
+            <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+              <option value={10}>10 lignes</option>
+              <option value={25}>25 lignes</option>
+              <option value={50}>50 lignes</option>
+              <option value={100}>100 lignes</option>
+            </select>
+          </label>
         </div>
         {entriesError ? (
           <p className="raw-material-screen text-sm text-destructive">{entriesError}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border raw-material-screen">
-            <table className="raw-material-table w-full min-w-[1000px] text-left text-sm">
+            <table className="raw-material-table w-full min-w-[1120px] text-left text-sm">
               <thead className="raw-material-table-head bg-muted/60 text-xs uppercase text-muted-foreground">
                 <tr>
+                  <th className="px-4 py-3">N°</th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Heure de pointe</th>
                   <th className="px-4 py-3">Véhicule</th>
@@ -558,18 +620,20 @@ export default function DechargementMatierePremiere() {
                   <th className="px-4 py-3">Quantité</th>
                   <th className="px-4 py-3">Bon de livraison / facture</th>
                   <th className="px-4 py-3">Provenance</th>
+                  <th className="px-4 py-3">Statut</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {loadingEntries ? (
-                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={9}>Chargement du registre…</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={11}>Chargement du registre…</td></tr>
                 ) : filteredEntries.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={9}>
+                  <tr><td className="px-4 py-6 text-center text-muted-foreground" colSpan={11}>
                     {entries.length === 0 ? "Aucun déchargement enregistré." : "Aucun résultat pour ces critères."}
                   </td></tr>
-                ) : filteredEntries.map((entry) => (
+                ) : pageEntries.map((entry, index) => (
                   <tr key={entry.id} className="raw-material-table-row">
+                    <td className="whitespace-nowrap px-4 py-3">{(currentPage - 1) * pageSize + index + 1}</td>
                     <td className="whitespace-nowrap px-4 py-3">{entry.date?.slice(0, 10).split("-").reverse().join("/") || "—"}</td>
                     <td className="px-4 py-3">{entry.heurePointe || "—"}</td>
                     <td className="px-4 py-3">{entry.vehicule || "—"}</td>
@@ -578,6 +642,11 @@ export default function DechargementMatierePremiere() {
                     <td className="px-4 py-3">{entry.quantite ?? "—"}</td>
                     <td className="px-4 py-3">{entry.document || "—"}</td>
                     <td className="px-4 py-3">{entry.provenance || "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`raw-material-status ${entry.pendingSync ? "raw-material-status--pending" : ""}`}>
+                        {entry.pendingSync ? "En attente de synchronisation" : "Enregistré"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <Button
@@ -620,6 +689,26 @@ export default function DechargementMatierePremiere() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loadingEntries && !entriesError && (
+          <div className="raw-material-pagination raw-material-screen">
+            <span>
+              {filteredEntries.length ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredEntries.length)} sur ${filteredEntries.length}` : "Aucun résultat"}
+            </span>
+            <div>
+              <Button type="button" variant="outline" size="icon" aria-label="Page précédente" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+                <ChevronLeft aria-hidden="true" />
+              </Button>
+              {pageNumbers.map((pageNumber) => (
+                <Button key={pageNumber} type="button" variant={pageNumber === currentPage ? "default" : "outline"} className="raw-material-page-number" aria-current={pageNumber === currentPage ? "page" : undefined} onClick={() => setPage(pageNumber)}>
+                  {pageNumber}
+                </Button>
+              ))}
+              <Button type="button" variant="outline" size="icon" aria-label="Page suivante" disabled={currentPage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>
+                <ChevronRight aria-hidden="true" />
+              </Button>
+            </div>
           </div>
         )}
         {!loadingEntries && !entriesError && (
