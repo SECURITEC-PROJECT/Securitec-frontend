@@ -1,13 +1,12 @@
-import { PageHeader } from "@/components/PageHeader";
-import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock3, History, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import TableauPriseDePoste, { type ShiftFormData } from "./TableauPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
 import { serviceApi } from "@/lib/service-api";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function PriseDePoste() {
   const navigate = useNavigate();
@@ -17,6 +16,7 @@ export default function PriseDePoste() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [selectedShiftForEnd, setSelectedShiftForEnd] = useState<Shift | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStartModalOpen, setIsStartModalOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -171,48 +171,37 @@ export default function PriseDePoste() {
     }
   };
 
-  const activeShifts = shifts.filter((shift) => !shift.ended_at && shift.pendingSyncAction !== "open");
-  const pendingShifts = shifts.filter((shift) => shift.pendingSync);
-  const pendingServices = new Set(pendingShifts.map((shift) => shift.serviceId || shift.id));
-  const finishedServices = new Set(shifts.filter((shift) => shift.ended_at).map((shift) => shift.serviceId || shift.id));
-  const activeServices = new Set(activeShifts.map((shift) => shift.serviceId || shift.id));
-  const shiftSummary = [
-    { label: "Services en cours", value: activeServices.size, hint: "Postes actuellement ouverts", icon: CheckCircle2, color: "green" },
-    { label: "Agents présents", value: activeShifts.length, hint: "Effectif en service", icon: UsersRound, color: "blue" },
-    { label: "À confirmer", value: pendingServices.size, hint: "Synchronisation requise", icon: Clock3, color: "orange" },
-    { label: "Services terminés", value: finishedServices.size, hint: "Dans l’historique", icon: History, color: "purple" },
-  ];
-
   return (
     <div className="shift-page space-y-4">
-      <PageHeader
-        title="Prise de poste"
-        subtitle="Contrôle de l'équipement et ouverture du service"
-      />
-
-
-
       <div className="grid grid-cols-1 gap-4">
-        <TableauPriseDePoste
-          onStart={handleStart}
-          initialSiteId={routeContext?.siteId}
-          initialPosteId={routeContext?.posteId}
-          initialPosteNom={routeContext?.posteNom}
-        />
-      <section className="shift-overview grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Résumé des services">
-        {shiftSummary.map(({ label, value, hint, icon: Icon, color }) => <article key={label} className={`shift-overview-card shift-overview-card--${color}`}>
-          <div className="flex items-center justify-between"><span className="shift-overview-icon"><Icon /></span><span className="shift-overview-label">{label}</span></div>
-          <strong>{value}</strong><small>{hint}</small>
-        </article>)}
-      </section>
         <ListHistoriquePriseDePoste
           shifts={shifts}
+          onNewShift={() => setIsStartModalOpen(true)}
           onOpenEndDialog={handleOpenEndDialog}
           onDeleteShift={handleDeleteShift}
           onImportShift={handleImportShift}
           onRefresh={refreshShifts}
         />
       </div>
+
+      <Dialog open={isStartModalOpen} onOpenChange={setIsStartModalOpen}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1440px] max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Nouvelle prise de service</DialogTitle>
+            <DialogDescription>Saisissez les agents et le service dans le tableau, puis ouvrez la prise de poste.</DialogDescription>
+          </DialogHeader>
+          <TableauPriseDePoste
+            onStart={async (data, options) => {
+              const saved = await handleStart(data, options);
+              if (saved) setIsStartModalOpen(false);
+              return saved;
+            }}
+            initialSiteId={routeContext?.siteId}
+            initialPosteId={routeContext?.posteId}
+            initialPosteNom={routeContext?.posteNom}
+          />
+        </DialogContent>
+      </Dialog>
 
       {isModalOpen && selectedShiftForEnd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
