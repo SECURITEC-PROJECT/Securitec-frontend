@@ -13,8 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { serviceApi, type KeyTrackingEntry, type RegisterEmployeeOption } from "@/lib/service-api";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
-import { Check, CheckCircle2, ChevronsUpDown, Download, FileDown, FileUp, Plus, Printer, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, ChevronsUpDown, Download, FileDown, FileUp, MapPin, Plus, Printer, Search, Trash2, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 interface SearchOption {
@@ -124,7 +124,22 @@ interface KeyDraft {
 }
 const nouvelleLigne = (): KeyDraft => ({ id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, date: dateActuelle(), employeeId: "", personName: "", matricule: "", keyType: "", quantity: "1", lieu: "" });
 
-export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
+interface KeySiteOption {
+  id: string;
+  name: string;
+}
+
+export default function GestionClesPanel({
+  siteId = "",
+  sites = [],
+  onSiteChange,
+  siteError,
+}: {
+  siteId?: string;
+  sites?: KeySiteOption[];
+  onSiteChange?: (siteId: string) => void;
+  siteError?: string;
+}) {
   const [draftRows, setDraftRows] = useState<KeyDraft[]>(() => [nouvelleLigne()]);
   const [currentTime, setCurrentTime] = useState(heureActuelle);
   const [keyTypes, setKeyTypes] = useState<string[]>([]);
@@ -133,6 +148,13 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
   const [entriesForSite, setEntriesForSite] = useState("");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [employeeFilter, setEmployeeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
+  const [showEntryForm, setShowEntryForm] = useState(false);
   const [savingRowId, setSavingRowId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [returningEntryId, setReturningEntryId] = useState<string | number | null>(null);
@@ -382,10 +404,24 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   };
 
   const availableEmployees = siteEmployeesFor === siteId ? siteEmployees : [];
-  const visibleEntries = entriesForSite === siteId ? entries : [];
+  const visibleEntries = useMemo(() => entriesForSite === siteId ? entries : [], [entriesForSite, entries, siteId]);
   const normalizedSearch = normaliserRecherche(search.trim());
-  const filteredEntries = visibleEntries.filter((entry) =>
-    normaliserRecherche([
+  const filterEmployeeOptions = useMemo(() => Array.from(new Map(visibleEntries.map((entry) => {
+    const name = `${entry.lastName} ${entry.firstName}`.trim();
+    return [normaliserRecherche(name), name] as const;
+  })).entries()).filter(([value]) => value), [visibleEntries]);
+  const filteredEntries = useMemo(() => visibleEntries.filter((entry) => {
+    const entryDate = String(entry.date || "").slice(0, 10);
+    if (dateFrom && entryDate < dateFrom) return false;
+    if (dateTo && entryDate > dateTo) return false;
+    const identity = normaliserRecherche(`${entry.lastName} ${entry.firstName}`.trim());
+    if (employeeFilter && identity !== employeeFilter) return false;
+    const status = entry.pendingSync ? "pending"
+      : entry.notReturned ? "not-returned"
+      : entry.returnTime ? "returned"
+      : "circulating";
+    if (statusFilter !== "all" && status !== statusFilter) return false;
+    return !normalizedSearch || normaliserRecherche([
       entry.date,
       formaterDate(entry.date),
       entry.lastName,
@@ -401,7 +437,14 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       entry.returnerLastName ?? "",
       entry.returnerFirstName ?? "",
       entry.returnerMatricule ?? "",
-    ].join(" ")).includes(normalizedSearch),
+    ].join(" ")).includes(normalizedSearch);
+  }), [visibleEntries, dateFrom, dateTo, employeeFilter, statusFilter, normalizedSearch]);
+  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageNumbers = Array.from(
+    { length: Math.min(pageCount, currentPage + 1) - Math.max(1, currentPage - 1) + 1 },
+    (_, index) => Math.max(1, currentPage - 1) + index,
   );
   const handleExport = () => {
     const rows = filteredEntries.map((entry) => [
@@ -436,16 +479,22 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
 
   return (
     <div className="keys-module-panels space-y-4">
-      <section className="keys-entry-panel rounded-lg border bg-card p-4 shadow-sm" aria-label="Nouvelle sortie de clé">
-        <div className="keys-entry-toolbar">
-          <div>
-            <h2 className="keys-panel-heading font-semibold">Enregistrer une sortie de clé</h2>
-            <p className="text-xs text-muted-foreground">Saisissez chaque mouvement dans une ligne, puis enregistrez-la.</p>
-          </div>
-          <Button type="button" variant="outline" onClick={() => setDraftRows((current) => [...current, nouvelleLigne()])} disabled={!siteId}>
-            <Plus aria-hidden="true" className="mr-2 h-4 w-4" /> Nouvelle ligne
-          </Button>
-        </div>
+      <Dialog open={showEntryForm} onOpenChange={setShowEntryForm}>
+        <DialogContent className="keys-entry-modal">
+          <DialogHeader className="keys-entry-modal-header">
+            <div className="keys-entry-modal-icon"><Plus aria-hidden="true" /></div>
+            <div>
+              <DialogTitle>Enregistrer une sortie de clé</DialogTitle>
+              <DialogDescription>Saisissez chaque mouvement dans une ligne, puis enregistrez-la.</DialogDescription>
+            </div>
+          </DialogHeader>
+          <section className="keys-entry-panel" aria-label="Nouvelle sortie de clé">
+            <div className="keys-entry-toolbar">
+              <p>Les champs marqués d’un astérisque sont obligatoires.</p>
+              <Button type="button" variant="outline" onClick={() => setDraftRows((current) => [...current, nouvelleLigne()])} disabled={!siteId}>
+                <Plus aria-hidden="true" className="mr-2 h-4 w-4" /> Nouvelle ligne
+              </Button>
+            </div>
         {!siteId && <p className="mb-3 text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
         {siteId && siteEmployeesFor === siteId && !availableEmployees.length && (
           <p className="mb-3 text-sm text-muted-foreground">Aucun employé enregistré sur ce site ; vous pouvez saisir son nom manuellement.</p>
@@ -494,49 +543,105 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
             })}</tbody>
           </table>
         </div>
-      </section>
+          </section>
+          <DialogFooter className="keys-entry-modal-footer">
+            <Button type="button" variant="outline" onClick={() => setShowEntryForm(false)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section id="key-movements-print-area" className="keys-history space-y-3 rounded-lg border bg-card p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="keys-history-toolbar">
           <h2 className="keys-panel-heading font-semibold">Historique et retour des clés</h2>
-          <div className="flex flex-wrap gap-2 print:hidden">
-            <label className={`inline-flex h-10 cursor-pointer items-center rounded-md border px-3 text-sm font-medium ${!siteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
-              <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
+          <div className="keys-history-actions print:hidden">
+            <Button type="button" onClick={() => setShowEntryForm((shown) => !shown)}>
+              <Plus className="mr-2 h-4 w-4" />Nouvelle sortie
+            </Button>
+            <label className={`keys-import-button ${!siteId || importing ? "pointer-events-none opacity-50" : ""}`}>
+              <FileUp className="h-4 w-4 shrink-0" /> {importing ? "Importation…" : "Importer Excel / CSV"}
               <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
             </label>
             <Button type="button" variant="outline" onClick={() => exportXlsx("modele-mouvements-cles.xlsx", "Mouvements de clés", ["Date sortie", "Heure sortie", "Nom et prénom", "Matricule", "Type de clé", "Nombre", "Lieu", "Observation", "Date retour", "Heure retour", "Personne qui a rendu", "Matricule du retour", "Statut"], [])}>
-              <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
+              <FileDown className="h-4 w-4 shrink-0" />Modèle Excel
             </Button>
             <Button type="button" variant="outline" className="keys-print-button" disabled={!filteredEntries.length} onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" /> Exporter Excel
+              <Download className="h-4 w-4 shrink-0" />Exporter Excel
             </Button>
             <Button type="button" variant="outline" className="keys-print-button" disabled={!siteId || !visibleEntries.length} onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimer tous les mouvements
+              <Printer className="h-4 w-4 shrink-0" />Imprimer les lignes (Word)
             </Button>
           </div>
         </div>
-        <div className="relative key-movements-screen">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Rechercher un mouvement de clé"
-            placeholder="Rechercher par nom, matricule, type de clé, date ou heure de retour…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="min-h-11 pl-9"
-          />
+        <div className="keys-filter-grid key-movements-screen">
+          <label className="keys-filter-field">
+            <span><CalendarDays aria-hidden="true" />Période</span>
+            <div className="keys-date-range">
+              <Input aria-label="Date de début" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
+              <span aria-hidden="true">–</span>
+              <Input aria-label="Date de fin" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
+            </div>
+          </label>
+          <label className="keys-filter-field">
+            <span><UserRound aria-hidden="true" />Agent</span>
+            <select value={employeeFilter} onChange={(event) => { setEmployeeFilter(event.target.value); setPage(1); }}>
+              <option value="">Tous les agents</option>
+              {filterEmployeeOptions.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            </select>
+          </label>
+          <label className="keys-filter-field">
+            <span><MapPin aria-hidden="true" />Site</span>
+            <select value={siteId} onChange={(event) => { onSiteChange?.(event.target.value); setPage(1); }} disabled={sites.length <= 1}>
+              <option value="">Sélectionner un site</option>
+              {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+            </select>
+          </label>
+          <label className="keys-filter-field">
+            <span><CheckCircle2 aria-hidden="true" />Statut</span>
+            <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}>
+              <option value="all">Tous</option>
+              <option value="circulating">En circulation</option>
+              <option value="returned">Rendu</option>
+              <option value="not-returned">Non rendu</option>
+              <option value="pending">En attente de synchronisation</option>
+            </select>
+          </label>
+          <label className="keys-filter-field keys-filter-search">
+            <span><Search aria-hidden="true" />Recherche</span>
+            <Input
+              aria-label="Rechercher un mouvement de clé"
+              placeholder="Nom, matricule, clé…"
+              value={search}
+              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+            />
+          </label>
+        </div>
+        {siteError && <p className="text-sm text-destructive">{siteError}</p>}
+        {!siteError && !sites.length && <p className="text-sm text-muted-foreground">Aucun site actif n’est associé ou disponible pour ce compte.</p>}
+        <div className="keys-results-summary key-movements-screen">
+          <p><CheckCircle2 aria-hidden="true" />{filteredEntries.length} mouvement(s) trouvé(s)</p>
+          <label>
+            Afficher
+            <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+              <option value={10}>10 lignes</option>
+              <option value={25}>25 lignes</option>
+              <option value={50}>50 lignes</option>
+              <option value={100}>100 lignes</option>
+            </select>
+          </label>
         </div>
         <div className="max-h-[520px] overflow-auto key-movements-screen">
-          <table className="w-full min-w-[1280px] border-collapse text-left text-sm">
+          <table className="keys-history-table w-full min-w-[1050px] border-collapse text-left text-sm">
             <thead className="keys-table-head sticky top-0 bg-muted">
               <tr>
-                {["Date sortie", "Nom et prénom", "Matricule", "Heure de sortie", "Type de clé", "Nombre de clés", "Lieu", "Observation", "Date retour", "Personne qui a rendu", "Heure de retour"].map((label) => (
+                {["N°", "Date sortie", "Nom et prénom", "Matricule", "Heure sortie", "Type de clé", "Nombre", "Lieu", "Statut", "Action"].map((label) => (
                   <th key={label} className="border-b px-3 py-2 font-medium">{label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filteredEntries.map((entry) => (
+              {pageEntries.map((entry, index) => (
                 <tr key={entry.id} className={`keys-table-row border-b last:border-0 ${entry.notReturned ? "keys-table-row--alert" : entry.returnTime ? "keys-table-row--returned" : "keys-table-row--pending"}`}>
+                  <td className="px-3 py-2">{(currentPage - 1) * pageSize + index + 1}</td>
                   <td className="px-3 py-2">{formaterDate(entry.date)}</td>
                   <td className="px-3 py-2">{entry.lastName} {entry.firstName}</td>
                   <td className="px-3 py-2">{entry.matricule}</td>
@@ -544,23 +649,30 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                   <td className="px-3 py-2">{entry.keyType}</td>
                   <td className="px-3 py-2">{entry.quantity}</td>
                   <td className="px-3 py-2">{entry.lieu || "—"}</td>
-                  <td className="whitespace-pre-wrap px-3 py-2">{entry.observations || "—"}</td>
-                  <td className="px-3 py-2">{entry.returnDate ? formaterDate(entry.returnDate) : "—"}</td>
-                  <td className="px-3 py-2">{entry.returnerLastName || entry.returnerFirstName
-                    ? `${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""} · ${entry.returnerMatricule ?? "—"}`
-                    : "—"}</td>
                   <td className="px-3 py-2">
                     {entry.pendingSync ? (
-                      <span className="font-medium text-amber-700" title={entry.pendingSyncError || undefined}>
+                      <span className="keys-status keys-status--pending" title={entry.pendingSyncError || undefined}>
                         {entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}
                       </span>
                     ) : entry.notReturned ? (
-                      <span className="font-medium text-destructive">Non rendu</span>
+                      <span className="keys-status keys-status--alert">Non rendu</span>
                     ) : entry.returnTime ? (
-                      <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" /> {entry.returnTime}
+                      <span className="keys-status keys-status--returned">
+                        <CheckCircle2 aria-hidden="true" /> Rendu · {entry.returnTime}
                       </span>
                     ) : (
+                      <span className="keys-status">En circulation</span>
+                    )}
+                    {(entry.returnDate || entry.returnerLastName || entry.returnerFirstName || entry.observations) && (
+                      <span className="keys-status-detail">
+                        {entry.returnDate && `Le ${formaterDate(entry.returnDate)}`}
+                        {(entry.returnerLastName || entry.returnerFirstName) && ` · ${entry.returnerLastName ?? ""} ${entry.returnerFirstName ?? ""}`.trim()}
+                        {entry.observations && ` · ${entry.observations}`}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {!entry.pendingSync && !entry.notReturned && !entry.returnTime ? (
                       <Button
                         type="button"
                         size="sm"
@@ -573,22 +685,40 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
                           setReturnerEmployeeId("");
                         }}
                       >
-                        {returningEntryId === entry.id ? "Enregistrement…" : `Enregistrer le retour (${currentTime})`}
+                        {returningEntryId === entry.id ? "Enregistrement…" : "Enregistrer le retour"}
                       </Button>
-                    )}
+                    ) : <span className="text-muted-foreground">—</span>}
                   </td>
                 </tr>
               ))}
               {siteId && entriesForSite === siteId && !filteredEntries.length && (
-                <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">
-                  {visibleEntries.length ? "Aucun mouvement ne correspond à votre recherche." : "Aucun mouvement de clé enregistré pour ce site."}
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
+                  {visibleEntries.length ? "Aucun mouvement ne correspond aux filtres sélectionnés." : "Aucun mouvement de clé enregistré pour ce site."}
                 </td></tr>
               )}
               {!siteId && (
-                <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les mouvements.</td></tr>
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">Sélectionnez un site pour afficher les mouvements.</td></tr>
               )}
             </tbody>
           </table>
+        </div>
+        <div className="keys-pagination key-movements-screen">
+          <span>
+            {filteredEntries.length ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredEntries.length)} sur ${filteredEntries.length}` : "Aucun résultat"}
+          </span>
+          <div>
+            <Button type="button" variant="outline" size="icon" aria-label="Page précédente" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+              <ChevronLeft aria-hidden="true" />
+            </Button>
+            {pageNumbers.map((pageNumber) => (
+              <Button key={pageNumber} type="button" variant={pageNumber === currentPage ? "default" : "outline"} className="keys-page-number" aria-current={pageNumber === currentPage ? "page" : undefined} onClick={() => setPage(pageNumber)}>
+                {pageNumber}
+              </Button>
+            ))}
+            <Button type="button" variant="outline" size="icon" aria-label="Page suivante" disabled={currentPage >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
         </div>
         <div className="key-movements-print hidden">
           <h1 className="mb-1 text-xl font-bold">Historique des mouvements de clés</h1>
