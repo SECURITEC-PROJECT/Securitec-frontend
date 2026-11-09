@@ -1,4 +1,4 @@
-import { PageHeader, Panel } from "@/components/PageHeader";
+﻿import { PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { readXlsxRows } from "@/lib/read-xlsx";
 import { exportXlsx } from "@/lib/export-xlsx";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface DepotageEntry {
   id: string;
@@ -86,6 +87,7 @@ export default function DepotageFuelGasoil() {
   const [search, setSearch] = useState("");
   const [searchDate, setSearchDate] = useState("");
   const [importing, setImporting] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
@@ -149,7 +151,7 @@ export default function DepotageFuelGasoil() {
       cree: entry.cree || "", chauffeur: entry.chauffeur || "", magasinier: entry.magasinier || "",
     };
     setDrafts((current) => [draft, ...current.filter((row) => row.id !== entry.id)]);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const saveDraft = async (row: FuelDraft) => {
@@ -180,6 +182,7 @@ export default function DepotageFuelGasoil() {
         toast.success("Depotage fuel/gasoil enregistre.");
       }
       clearDraft(row.key);
+      if (row.id || drafts.length === 1) setFormOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -295,7 +298,10 @@ export default function DepotageFuelGasoil() {
     <div className="fuel-module space-y-5">
       <PageHeader title="Dépotage fuel et gasoil" subtitle="Enregistrement des réceptions de fuel et de gasoil" />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <Panel title="Saisie des depotages - tableau type Excel">
+      <div className="flex justify-end"><Button type="button" className="fuel-primary-action" onClick={() => { setDrafts([newFuelDraft()]); setFormOpen(true); }}><Plus className="mr-2 h-4 w-4" />Nouveau dépotage</Button></div>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="fuel-entry-dialog w-[calc(100vw-1rem)] max-w-[1100px] max-h-[92vh] overflow-y-auto p-5 sm:p-7">
+          <DialogHeader><DialogTitle>{drafts.some((row) => row.id) ? "Modifier un dépotage" : "Nouveau dépotage fuel / gasoil"}</DialogTitle><DialogDescription>Complétez les informations de la réception puis enregistrez.</DialogDescription></DialogHeader>
         <div className="space-y-4">
           <SitePicker
             id="fuel-site"
@@ -334,7 +340,9 @@ export default function DepotageFuelGasoil() {
           <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newFuelDraft()])}><Plus className="mr-2 h-4 w-4" />Nouvelle ligne</Button></div>
           {siteError && <p className="text-sm text-destructive">{siteError}</p>}
         </div>
-      </Panel>
+          <div className="mt-4 flex justify-end"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></div>
+        </DialogContent>
+      </Dialog>
 
       <section id="fuel-registry-print-area" className="fuel-registry">
       <Panel title="Registre des dépotages">
