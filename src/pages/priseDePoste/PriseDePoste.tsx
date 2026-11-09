@@ -4,7 +4,7 @@ import { CheckCircle2, Clock3, History, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import FormPriseDePoste, { type ShiftFormData } from "./FormPriseDePoste";
+import TableauPriseDePoste, { type ShiftFormData } from "./TableauPriseDePoste";
 import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDePoste";
 
 import { serviceApi } from "@/lib/service-api";
@@ -57,7 +57,7 @@ export default function PriseDePoste() {
     };
   }, []);
 
-  const handleStart = async (data: ShiftFormData): Promise<boolean> => {
+  const handleStart = async (data: ShiftFormData, options?: { navigateToPost?: boolean }): Promise<boolean> => {
     try {
       const result = await serviceApi.startShift({ ...data });
       const newShifts: Shift[] = Array.isArray(result.shifts) ? result.shifts : [result];
@@ -72,7 +72,7 @@ export default function PriseDePoste() {
         localStorage.setItem(`securitec-logistics-shift:${data.siteId}:${data.posteId}`, result.serviceId);
       }
       toast.success(`Service ${data.shiftType.toLowerCase()} ouvert au ${data.posteNom} avec ${newShifts.length} agent(s).`);
-      if (data.posteId) navigate(`/dashboard/postes/${data.posteId}`, { state: { siteId: data.siteId, posteNom: data.posteNom } });
+      if (options?.navigateToPost !== false && data.posteId) navigate(`/dashboard/postes/${data.posteId}`, { state: { siteId: data.siteId, posteNom: data.posteNom } });
       return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer la prise de poste.");
@@ -189,20 +189,21 @@ export default function PriseDePoste() {
         subtitle="Contrôle de l'équipement et ouverture du service"
       />
 
+
+
+      <div className="grid grid-cols-1 gap-4">
+        <TableauPriseDePoste
+          onStart={handleStart}
+          initialSiteId={routeContext?.siteId}
+          initialPosteId={routeContext?.posteId}
+          initialPosteNom={routeContext?.posteNom}
+        />
       <section className="shift-overview grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Résumé des services">
         {shiftSummary.map(({ label, value, hint, icon: Icon, color }) => <article key={label} className={`shift-overview-card shift-overview-card--${color}`}>
           <div className="flex items-center justify-between"><span className="shift-overview-icon"><Icon /></span><span className="shift-overview-label">{label}</span></div>
           <strong>{value}</strong><small>{hint}</small>
         </article>)}
       </section>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <FormPriseDePoste
-          onStart={handleStart}
-          initialSiteId={routeContext?.siteId}
-          initialPosteId={routeContext?.posteId}
-          initialPosteNom={routeContext?.posteNom}
-        />
         <ListHistoriquePriseDePoste
           shifts={shifts}
           onOpenEndDialog={handleOpenEndDialog}

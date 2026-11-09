@@ -11,8 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { serviceApi, type KeyTrackingEntry, type RegisterEmployeeOption } from "@/lib/service-api";
-import { Check, CheckCircle2, ChevronsUpDown, KeyRound, Printer, Search } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { Check, CheckCircle2, ChevronsUpDown, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 interface SearchOption {
@@ -110,10 +110,20 @@ const formaterDate = (value: string) => {
 };
 
 const heureActuelle = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
-const nouveauFormulaire = () => ({ date: dateActuelle(), employeeId: "", keyType: "", quantity: "1", lieu: "" });
+interface KeyDraft {
+  id: string;
+  date: string;
+  employeeId: string;
+  personName: string;
+  matricule: string;
+  keyType: string;
+  quantity: string;
+  lieu: string;
+}
+const nouvelleLigne = (): KeyDraft => ({ id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, date: dateActuelle(), employeeId: "", personName: "", matricule: "", keyType: "", quantity: "1", lieu: "" });
 
 export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
-  const [form, setForm] = useState(nouveauFormulaire);
+  const [draftRows, setDraftRows] = useState<KeyDraft[]>(() => [nouvelleLigne()]);
   const [currentTime, setCurrentTime] = useState(heureActuelle);
   const [keyTypes, setKeyTypes] = useState<string[]>([]);
   const [siteEmployees, setSiteEmployees] = useState<RegisterEmployeeOption[]>([]);
@@ -121,7 +131,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   const [entries, setEntries] = useState<KeyTrackingEntry[]>([]);
   const [entriesForSite, setEntriesForSite] = useState("");
   const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [savingRowId, setSavingRowId] = useState<string | null>(null);
   const [returningEntryId, setReturningEntryId] = useState<string | number | null>(null);
   const [returnDialogEntry, setReturnDialogEntry] = useState<KeyTrackingEntry | null>(null);
   const [returnerChoice, setReturnerChoice] = useState<"" | "other" | "not-returned">("");
@@ -180,34 +190,44 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
     return () => { active = false; };
   }, [siteId]);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
+  const handleSubmit = async (draft: KeyDraft) => {
+    if (!siteId || savingRowId) return;
+    setSavingRowId(draft.id);
     try {
-      const employee = availableEmployees.find((item) => item.id === form.employeeId);
-      if (!employee) throw new Error("Sélectionnez un employé actif.");
+      const employee = availableEmployees.find((item) => item.id === draft.employeeId);
+      if (!draft.date) throw new Error("Saisissez la date de sortie.");
+      if (!draft.personName.trim()) throw new Error("Saisissez le nom de la personne.");
+      if (!draft.keyType) throw new Error("Sélectionnez un type de clé.");
+      if (!draft.lieu.trim()) throw new Error("Indiquez le lieu de sortie.");
+      const quantity = Number(draft.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10000) throw new Error("Le nombre de clés doit être compris entre 1 et 10 000.");
+      const parts = draft.personName.trim().split(/\s+/);
       await serviceApi.createKeyTracking({
-        ...form,
-        lastName: employee.lastName,
-        firstName: employee.firstName,
-        matricule: employee.matricule,
-        lieu: form.lieu.trim(),
+        date: draft.date,
+        employeeId: employee?.id || "",
+        keyType: draft.keyType,
+        quantity,
+        lieu: draft.lieu.trim(),
+        lastName: employee?.lastName || parts[0],
+        firstName: employee?.firstName || parts.slice(1).join(" "),
+        matricule: employee?.matricule || draft.matricule.trim(),
         departureTime: heureActuelle(),
-        quantity: Number(form.quantity),
         siteId,
       });
       toast.success("Sortie de clé enregistrée.");
-      setForm(nouveauFormulaire());
+      setDraftRows((current) => {
+        const remaining = current.filter((row) => row.id !== draft.id);
+        return remaining.length ? remaining : [nouvelleLigne()];
+      });
       const rows = await serviceApi.listKeyTracking(siteId);
       setEntries(rows);
       setEntriesForSite(siteId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de la sortie impossible.");
     } finally {
-      setSaving(false);
+      setSavingRowId(null);
     }
   };
-
   const handleReturn = async (entry: KeyTrackingEntry, returnerType: "same" | "other", otherEmployeeId?: string) => {
     setReturningEntryId(entry.id);
     try {
@@ -292,67 +312,74 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
   }));
   const siteEmployeeOptions = employeeOptions;
   const selectedReturner = siteEmployees.find((employee) => employee.id === returnerEmployeeId);
+  const updateDraft = (id: string, changes: Partial<KeyDraft>) => {
+    setDraftRows((current) => current.map((row) => row.id === id ? { ...row, ...changes } : row));
+  };
+  const removeDraft = (id: string) => {
+    setDraftRows((current) => current.length > 1 ? current.filter((row) => row.id !== id) : [nouvelleLigne()]);
+  };
 
   return (
     <div className="keys-module-panels space-y-4">
-      <form onSubmit={handleSubmit} className="keys-form space-y-4 rounded-lg border bg-card p-4 shadow-sm">
-        <h2 className="keys-panel-heading font-semibold">Enregistrer une sortie de clé</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Date</span>
-            <Input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
-          </label>
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Nom et prénom</span>
-            <SearchableSelect
-              value={form.employeeId}
-              options={employeeOptions}
-              placeholder={siteEmployeesFor === siteId ? "Sélectionner un employé" : "Chargement des employés…"}
-              searchPlaceholder="Rechercher un employé..."
-              emptyMessage="Aucun employé correspondant."
-              disabled={siteEmployeesFor !== siteId || !employeeOptions.length}
-              onChange={(employeeId) => setForm({ ...form, employeeId })}
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Matricule</span>
-            <Input readOnly value={availableEmployees.find((employee) => employee.id === form.employeeId)?.matricule ?? ""} placeholder="Automatique" />
-          </label>
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Heure de sortie</span>
-            <Input readOnly type="time" value={currentTime} aria-describedby="key-departure-time-help" />
-            <span id="key-departure-time-help" className="text-xs text-muted-foreground">Heure enregistrée au clic.</span>
+      <section className="keys-entry-panel rounded-lg border bg-card p-4 shadow-sm" aria-label="Nouvelle sortie de clé">
+        <div className="keys-entry-toolbar">
+          <div>
+            <h2 className="keys-panel-heading font-semibold">Enregistrer une sortie de clé</h2>
+            <p className="text-xs text-muted-foreground">Saisissez chaque mouvement dans une ligne, puis enregistrez-la.</p>
           </div>
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Type de clé</span>
-            <SearchableSelect
-              value={form.keyType}
-              options={keyTypeOptions}
-              placeholder="Sélectionner un type de clé"
-              searchPlaceholder="Rechercher un type de clé..."
-              emptyMessage="Aucun type de clé correspondant."
-              onChange={(keyType) => setForm({ ...form, keyType })}
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Nombre de clés</span>
-            <Input required type="number" min="1" max="10000" step="1" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} />
-          </label>
-          <label className="space-y-1">
-            <span className="text-sm font-medium">Lieu</span>
-            <Input required maxLength={255} value={form.lieu} onChange={(event) => setForm({ ...form, lieu: event.target.value })} placeholder="Bureau, magasin…" />
-          </label>
-        </div>
-        {!siteId && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
-        {siteId && siteEmployeesFor === siteId && !availableEmployees.length && (
-          <p className="text-sm text-muted-foreground">Aucun employé actif disponible sur ce site.</p>
-        )}
-        <div className="flex justify-end">
-          <Button type="submit" disabled={saving || !siteId || !form.keyType || !availableEmployees.some((employee) => employee.id === form.employeeId)}>
-            <KeyRound className="mr-2 h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}
+          <Button type="button" variant="outline" onClick={() => setDraftRows((current) => [...current, nouvelleLigne()])} disabled={!siteId}>
+            <Plus aria-hidden="true" className="mr-2 h-4 w-4" /> Nouvelle ligne
           </Button>
         </div>
-      </form>
+        {!siteId && <p className="mb-3 text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
+        {siteId && siteEmployeesFor === siteId && !availableEmployees.length && (
+          <p className="mb-3 text-sm text-muted-foreground">Aucun employé enregistré sur ce site ; vous pouvez saisir son nom manuellement.</p>
+        )}
+        <div className="keys-entry-scroll">
+          <table className="keys-entry-table">
+            <thead><tr>
+              <th scope="col">Date sortie</th><th scope="col">Nom et prénom *</th><th scope="col">Matricule</th><th scope="col">Heure sortie</th>
+              <th scope="col">Type de clé *</th><th scope="col">Nombre *</th><th scope="col">Lieu *</th><th scope="col">Action</th>
+            </tr></thead>
+            <tbody>{draftRows.map((row) => {
+              const employee = availableEmployees.find((item) => item.id === row.employeeId);
+              const quantity = Number(row.quantity);
+              const canSave = Boolean(siteId && row.date && row.personName.trim() && row.keyType && row.lieu.trim() && Number.isInteger(quantity) && quantity >= 1 && quantity <= 10000);
+              return <tr key={row.id}>
+                <td><Input aria-label="Date de sortie" type="date" value={row.date} onChange={(event) => updateDraft(row.id, { date: event.target.value })} /></td>
+                <td><Input aria-label="Nom et prénom de la personne" list={`key-employee-options-${row.id}`} value={row.personName} onChange={(event) => {
+                  const personName = event.target.value;
+                  const match = availableEmployees.find((item) => `${item.lastName} ${item.firstName}`.trim().toLocaleLowerCase("fr") === personName.trim().toLocaleLowerCase("fr"));
+                  updateDraft(row.id, { personName, employeeId: match?.id || "", matricule: match?.matricule || "" });
+                }} placeholder="Nom et prénom" />
+                  <datalist id={`key-employee-options-${row.id}`}>{availableEmployees.map((item) => <option key={item.id} value={`${item.lastName} ${item.firstName}`.trim()} />)}</datalist>
+                </td>
+                <td><Input aria-label="Matricule (facultatif)" value={employee?.matricule || row.matricule} onChange={(event) => updateDraft(row.id, { matricule: event.target.value, employeeId: "" })} placeholder="Matricule" /></td>
+                <td>{currentTime}</td>
+                <td><SearchableSelect
+                  value={row.keyType}
+                  options={keyTypeOptions}
+                  placeholder="Choisir une clé"
+                  searchPlaceholder="Rechercher un type de clé…"
+                  emptyMessage="Aucun type de clé correspondant."
+                  disabled={!keyTypeOptions.length}
+                  onChange={(keyType) => updateDraft(row.id, { keyType })}
+                /></td>
+                <td><Input aria-label="Nombre de clés" type="number" min="1" max="10000" step="1" value={row.quantity} onChange={(event) => updateDraft(row.id, { quantity: event.target.value })} /></td>
+                <td><Input aria-label="Lieu de sortie" maxLength={255} value={row.lieu} onChange={(event) => updateDraft(row.id, { lieu: event.target.value })} placeholder="Bureau, magasin…" /></td>
+                <td className="keys-entry-actions">
+                  <Button type="button" size="sm" onClick={() => void handleSubmit(row)} disabled={!canSave || savingRowId !== null}>
+                    {savingRowId === row.id ? "Enregistrement…" : "Enregistrer"}
+                  </Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="Supprimer cette ligne" title="Supprimer cette ligne" onClick={() => removeDraft(row.id)} disabled={savingRowId !== null}>
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                </td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      </section>
 
       <section id="key-movements-print-area" className="keys-history space-y-3 rounded-lg border bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
