@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,12 +6,13 @@ import { useSites } from "@/hooks/useSites";
 import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
-import { Pencil, Plus, Printer, Save, Search, Trash2, X, FileUp, FileDown, Download } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Printer, Save, Search, Trash2, X, FileUp, FileDown, Download } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
 import { useLocation } from "react-router-dom";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const DESIGNATION_GROUPS = [
   { label: "Bouteilles vides", options: ["Bouteilles vides - 65 Cl", "Bouteilles vides - 50 Cl", "Bouteilles vides - 33 Cl"] },
@@ -99,6 +99,10 @@ export default function DechargementBouteillesVides() {
   const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [designationFilter, setDesignationFilter] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
   const [pontBasculePost, setPontBasculePost] = useState(false);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
@@ -141,7 +145,10 @@ export default function DechargementBouteillesVides() {
       entry.produit ?? "",
       entry.remarque ?? "",
       ...entry.detailsBouteilles.flatMap((line) => [line.designation, String(line.quantite)]),
-    ].join(" ")).includes(normalizedSearch),
+    ].join(" ")).includes(normalizedSearch)
+    && (!dateFrom || String(entry.date).slice(0, 10) >= dateFrom)
+    && (!dateTo || String(entry.date).slice(0, 10) <= dateTo)
+    && (!designationFilter || entry.detailsBouteilles.some((line) => line.designation === designationFilter)),
   );
   const rowsForExport = (source: EmptyBottleDelivery[]) => source.map((entry) => {
     const quantities = new Map(entry.detailsBouteilles.map((line) => [line.designation, line.quantite]));
@@ -267,6 +274,7 @@ export default function DechargementBouteillesVides() {
           : "Réception de bouteilles enregistrée.");
       }
       resetForm();
+      setFormOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -297,7 +305,7 @@ export default function DechargementBouteillesVides() {
         quantite: String(line.quantite),
       })),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const deleteEntry = async (entry: EmptyBottleDelivery) => {
@@ -502,18 +510,26 @@ export default function DechargementBouteillesVides() {
 
   return (
     <div className="empty-bottles-module space-y-5">
-      <PageHeader
-        title="Déchargement de bouteilles vides"
-        subtitle="Enregistrement des réceptions de bouteilles vides, par véhicule, format et quantité."
-      />
-      <div className="max-w-xl"><SitePicker {...siteProps} /></div>
-      {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-
-      <form onSubmit={(event) => void submit(event)} className="empty-bottles-form overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="empty-bottles-form-heading border-b px-5 py-4">
-          <h2 className="font-semibold text-primary">{editingEntry ? "Modifier une réception" : "Enregistrer une réception"}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Renseignez les informations du véhicule et les quantités reçues.</p>
+      <header className="empty-bottles-registry-heading">
+        <div className="empty-bottles-registry-heading__identity">
+          <span className="empty-bottles-registry-heading__icon"><ClipboardList aria-hidden="true" /></span>
+          <div><h1>Déchargement bouteilles vides</h1><p>Suivez les réceptions par véhicule, format et quantité</p></div>
         </div>
+        <div className="empty-bottles-registry-heading__controls">
+          <SitePicker {...siteProps} />
+          <Button type="button" className="empty-bottles-new-button" onClick={() => { resetForm(); setFormOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" /> Nouvelle réception
+          </Button>
+        </div>
+      </header>
+      {siteError && <p className="text-sm text-destructive">{siteError}</p>}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="empty-bottles-entry-dialog w-[calc(100vw-1rem)] max-w-[1440px] max-h-[94vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>{editingEntry ? "Modifier une réception" : "Nouvelle réception de bouteilles vides"}</DialogTitle>
+            <DialogDescription>Renseignez les informations du véhicule et les quantités reçues.</DialogDescription>
+          </DialogHeader>
+      <form onSubmit={(event) => void submit(event)} className="empty-bottles-form overflow-hidden rounded-xl border bg-card shadow-sm">
         <div className="space-y-6 p-5">
           <section className="space-y-3">
             <h3 className="text-sm font-semibold">Informations du véhicule</h3>
@@ -652,37 +668,37 @@ export default function DechargementBouteillesVides() {
         </div>
         {!site?.id && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer une réception.</p>}
         <div className="flex flex-wrap justify-end gap-2 border-t bg-muted/20 px-5 py-4">
-          {editingEntry && <Button type="button" variant="outline" onClick={resetForm}><X /> Annuler</Button>}
+          {editingEntry && <Button type="button" variant="outline" onClick={() => { resetForm(); setFormOpen(false); }}><X /> Annuler</Button>}
           <Button type="submit" disabled={saving || !site?.id}>
             <Save /> {saving ? "Enregistrement…" : editingEntry ? "Enregistrer les modifications" : "Enregistrer la réception"}
           </Button>
         </div>
       </form>
+        </DialogContent>
+      </Dialog>
 
       <section id="empty-bottles-print-area" className="empty-bottles-registry space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 border-b pb-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <h2 className="font-semibold text-primary">Registre des réceptions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Historique des déchargements pour le site sélectionné.</p>
-          </div>
-          <div className="grid w-full grid-cols-1 gap-2 empty-bottles-screen sm:grid-cols-2 xl:max-w-[76%] xl:grid-cols-4">
+        <div className="empty-bottles-toolbar empty-bottles-screen">
+          <div className="empty-bottles-toolbar__label">Registre des réceptions <span>{filteredEntries.length} enregistrement(s)</span></div>
+          <div className="empty-bottles-toolbar__actions">
             <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!site?.id || importing || saving ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
               <FileUp className="mr-2 h-4 w-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
               <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || importing || saving} onChange={(event) => { void importDeliveries(event.target.files?.[0]); event.currentTarget.value = ""; }} />
             </label>
-            <Button className="w-full" type="button" variant="outline" onClick={() => exportXlsx("modele-receptions-bouteilles-vides.xlsx", "Réceptions bouteilles vides", DELIVERY_HEADERS, [])}>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-receptions-bouteilles-vides.xlsx", "Réceptions bouteilles vides", DELIVERY_HEADERS, [])}>
               <FileDown className="mr-2 h-4 w-4" />Modèle Excel
             </Button>
-            <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`receptions-bouteilles-vides-${today()}.xlsx`, "Réceptions bouteilles vides", DELIVERY_HEADERS, rowsForExport(filteredEntries))}>
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`receptions-bouteilles-vides-${today()}.xlsx`, "Réceptions bouteilles vides", DELIVERY_HEADERS, rowsForExport(filteredEntries))}>
               <Download className="mr-2 h-4 w-4" />Exporter Excel
             </Button>
-            <Button type="button" variant="outline" className="empty-bottles-print-button w-full" disabled={!site?.id || !filteredEntries.length} onClick={handlePrint}>
+            <Button type="button" variant="outline" className="empty-bottles-print-button" disabled={!site?.id || !filteredEntries.length} onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" />Imprimer les lignes (Word)
             </Button>
             <span className="sr-only" aria-live="polite">{filteredEntries.length} réception{filteredEntries.length === 1 ? "" : "s"} affichée{filteredEntries.length === 1 ? "" : "s"}</span>
           </div>
         </div>
-        <div className="relative w-full empty-bottles-screen">
+        <div className="empty-bottles-filters empty-bottles-screen">
+          <label className="empty-bottles-search"><span>Recherche</span><div className="relative">
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label="Rechercher une réception de bouteilles vides"
@@ -691,6 +707,11 @@ export default function DechargementBouteillesVides() {
             onChange={(event) => setSearch(event.target.value)}
             className="min-h-11 pl-9"
           />
+          </div></label>
+          <label>Période du<input type="date" max={dateTo || undefined} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+          <label>Au<input type="date" min={dateFrom || undefined} value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+          <label>Format<select value={designationFilter} onChange={(event) => setDesignationFilter(event.target.value)}><option value="">Tous les formats</option>{DESIGNATION_GROUPS.map((group) => <optgroup key={group.label} label={group.label}>{group.options.map((designation) => <option key={designation} value={designation}>{designation.split(" - ").slice(1).join(" - ")}</option>)}</optgroup>)}</select></label>
+          {(search || dateFrom || dateTo || designationFilter) && <Button type="button" variant="ghost" onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setDesignationFilter(""); }}>Effacer</Button>}
         </div>
         <div className="max-h-[520px] overflow-auto empty-bottles-screen">
           <table className="empty-bottles-table w-full min-w-[1400px] border-collapse text-left text-sm">

@@ -733,3 +733,45 @@
   .aps-events-toolbar { grid-template-columns: minmax(0, 1fr); }
   .aps-events-toolbar > div:last-child { grid-column: auto; }
 }
+
+/* Empty bottle deliveries registry dashboard. */
+.empty-bottles-registry-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 4px 15px; border-bottom: 1px solid #e7edf6; }
+.empty-bottles-registry-heading__identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.empty-bottles-registry-heading__identity h1 { margin: 0; color: #14294c; font-size: 17px; font-weight: 700; }
+.empty-bottles-registry-heading__identity p { margin: 3px 0 0; color: #69788e; font-size: 12px; }
+.empty-bottles-registry-heading__icon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: #eaf2ff; color: #1764db; }
+.empty-bottles-registry-heading__icon svg { width: 22px; height: 22px; }
+.empty-bottles-registry-heading__controls { display: flex; align-items: end; gap: 12px; }
+.empty-bottles-registry-heading__controls > div:first-child { min-width: 220px; }
+.empty-bottles-registry-heading__controls label { color: #45566f; font-size: 11px; }
+.empty-bottles-registry-heading__controls select { height: 38px; border-color: #d9e1ec; border-radius: 7px; background: #fff; }
+.empty-bottles-new-button { flex: 0 0 auto; background: #1261df; color: #fff; box-shadow: 0 3px 9px #1261df30; }
+.empty-bottles-new-button:hover { background: #0e52c2; }
+.empty-bottles-registry { gap: 12px; border-color: #e0e7f1; border-radius: 10px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
+.empty-bottles-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #e6ebf2; }
+.empty-bottles-toolbar__label { color: #263b5b; font-size: 13px; font-weight: 700; }
+.empty-bottles-toolbar__label span { margin-left: 7px; color: #72819a; font-size: 11px; font-weight: 400; }
+.empty-bottles-toolbar__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.empty-bottles-toolbar__actions button, .empty-bottles-toolbar__actions label { border-color: #dce4f0; border-radius: 7px; color: #28466f; }
+.empty-bottles-filters { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 10px; padding: 12px; border: 1px solid #e0e8f3; border-radius: 9px; background: #f8faff; }
+.empty-bottles-filters label { display: grid; min-width: 0; gap: 5px; color: #45566f; font-size: 11px; font-weight: 600; }
+.empty-bottles-filters input, .empty-bottles-filters select { width: 100%; min-width: 0; height: 38px; border: 1px solid #d9e1ec; border-radius: 7px; background: #fff; padding: 0 10px; color: #26354a; font-size: 12px; }
+.empty-bottles-search input { padding-left: 36px; }
+.empty-bottles-table { border-color: #dce4ef; border-collapse: separate; border-spacing: 0; }
+.empty-bottles-table-head th { border-color: #d5e1f2; background: #eaf2ff !important; color: #1d3558; font-size: 11px; font-weight: 700; }
+.empty-bottles-table td { border-color: #e9edf3; color: #34435a; }
+.empty-bottles-table-row:nth-child(even) { background: #f9fbfe; }
+.empty-bottles-registry .empty-bottles-table-row:hover { background: #f0f6ff; }
+.empty-bottles-entry-dialog .empty-bottles-form { border-top-color: #1764db; }
+@media (max-width: 900px) { .empty-bottles-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .empty-bottles-search { grid-column: 1 / -1; } }
+@media (max-width: 640px) {
+  .empty-bottles-registry-heading { align-items: stretch; flex-direction: column; }
+  .empty-bottles-registry-heading__controls { align-items: stretch; flex-direction: column; }
+  .empty-bottles-registry-heading__controls > div:first-child { min-width: 0; width: 100%; }
+  .empty-bottles-new-button { width: 100%; }
+  .empty-bottles-toolbar { align-items: flex-start; flex-direction: column; }
+  .empty-bottles-toolbar__actions { width: 100%; }
+  .empty-bottles-toolbar__actions > * { flex: 1 1 auto; justify-content: center; }
+  .empty-bottles-filters { grid-template-columns: minmax(0, 1fr); }
+  .empty-bottles-search { grid-column: auto; }
+}
