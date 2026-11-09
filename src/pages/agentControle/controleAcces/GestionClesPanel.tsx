@@ -248,6 +248,9 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         firstName: column("prenom", "prenom"), matricule: column("matricule"),
         keyType: column("type de cle", "type cle", "cle", "trousse cle"),
         quantity: column("nombre", "nombre de cles", "quantite", "quantite de cles"), lieu: column("lieu", "lieu de sortie"),
+        observations: column("observation", "observations"), returnDate: column("date retour", "date de retour"),
+        returnTime: column("heure retour", "heure de retour"), returner: column("personne qui a rendu", "personne qui rend", "retourneur"),
+        returnerMatricule: column("matricule du retour", "matricule retourneur", "matricule retour"), status: column("statut", "etat"),
       };
       if ((col.fullName < 0 && col.lastName < 0) || col.keyType < 0 || col.quantity < 0 || col.lieu < 0) {
         throw new Error("Colonnes requises manquantes : Nom, Type de clé, Nombre et Lieu.");
@@ -263,13 +266,14 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
       };
       const excelTime = (value: string) => {
         const text = value.trim();
+        if (!text) return "";
         const serial = Number(text);
         if (Number.isFinite(serial) && serial >= 0 && serial < 1) {
           const minutes = Math.round(serial * 24 * 60);
           return `${String(Math.floor(minutes / 60) % 24).padStart(2,"0")}:${String(minutes % 60).padStart(2,"0")}`;
         }
         const match = /^(\d{1,2}):(\d{2})/.exec(text);
-        return match ? `${match[1].padStart(2,"0")}:${match[2]}` : heureActuelle();
+        return match ? `${match[1].padStart(2,"0")}:${match[2]}` : "";
       };
       const data = sheet.slice(1).map((cells, index) => {
         const get = (index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
@@ -277,8 +281,10 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         const employee = availableEmployees.find((item) => normalize(`${item.lastName} ${item.firstName}`) === normalize(fullName));
         const keyTypeValue = keyTypes.find((item) => normalize(item) === normalize(get(col.keyType)));
         return {
-          line: index + 2, date: excelDate(get(col.date)) || dateActuelle(), time: excelTime(get(col.time)), fullName,
+          line: index + 2, date: excelDate(get(col.date)) || dateActuelle(), time: excelTime(get(col.time)) || heureActuelle(), fullName,
           matricule: get(col.matricule) || employee?.matricule || "", keyType: keyTypeValue || "", quantity: Number(get(col.quantity)), lieu: get(col.lieu), employee,
+          observations: get(col.observations), returnDate: excelDate(get(col.returnDate)), returnDateProvided: Boolean(get(col.returnDate)), returnTime: excelTime(get(col.returnTime)),
+          returner: get(col.returner), returnerMatricule: get(col.returnerMatricule), status: normalize(get(col.status)),
         };
       }).filter((row) => row.fullName || row.keyType || row.lieu);
       if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
@@ -289,12 +295,24 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
         if (!row.fullName || !row.keyType || !row.lieu || !Number.isInteger(row.quantity) || row.quantity < 1 || row.quantity > 10000) {
           failures.push(`Ligne ${row.line} : nom, type de clé, lieu ou quantité invalide.`); continue;
         }
+        if ((row.returnDateProvided && !row.returnDate) || (row.returnTime && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(row.returnTime))) {
+          failures.push(`Ligne ${row.line} : date de retour invalide.`); continue;
+        }
+        if ((row.status === "rendu" || row.status === "retourne") && !row.returnTime) {
+          failures.push(`Ligne ${row.line} : l'heure de retour est requise pour un statut rendu.`); continue;
+        }
         const parts = row.fullName.trim().split(/\s+/);
+        const returnerParts = row.returner.trim().split(/\s+/).filter(Boolean);
         try {
           const result = await serviceApi.createKeyTracking({
             date: row.date, employeeId: row.employee?.id || "", lastName: row.employee?.lastName || parts[0],
             firstName: row.employee?.firstName || parts.slice(1).join(" "), matricule: row.matricule,
             keyType: row.keyType, quantity: row.quantity, departureTime: row.time, siteId, lieu: row.lieu,
+            observations: row.observations,
+            ...(row.returnDate ? { returnDate: row.returnDate } : {}),
+            ...(row.returnTime ? { returnTime: row.returnTime } : {}),
+            ...(row.returner ? { returnerLastName: returnerParts[0] || "", returnerFirstName: returnerParts.slice(1).join(" "), returnerMatricule: row.returnerMatricule } : {}),
+            notReturned: row.status.includes("non rendu"),
           });
           saved += 1;
           if (result.pendingSync) queued += 1;
@@ -486,7 +504,7 @@ export default function GestionClesPanel({ siteId = "" }: { siteId?: string }) {
               <FileUp className="mr-2 h-4 w-4" /> {importing ? "Importation…" : "Importer Excel / CSV"}
               <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
             </label>
-            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-mouvements-cles.xlsx", "Mouvements de clés", ["Date sortie", "Heure sortie", "Nom et prénom", "Matricule", "Type de clé", "Nombre", "Lieu"], [])}>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-mouvements-cles.xlsx", "Mouvements de clés", ["Date sortie", "Heure sortie", "Nom et prénom", "Matricule", "Type de clé", "Nombre", "Lieu", "Observation", "Date retour", "Heure retour", "Personne qui a rendu", "Matricule du retour", "Statut"], [])}>
               <FileDown className="mr-2 h-4 w-4" /> Modèle Excel
             </Button>
             <Button type="button" variant="outline" className="keys-print-button" disabled={!filteredEntries.length} onClick={handleExport}>

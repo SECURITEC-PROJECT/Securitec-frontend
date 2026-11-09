@@ -9,8 +9,6 @@ import ListHistoriquePriseDePoste, { type Shift } from "./ListHistoriquePriseDeP
 
 import { serviceApi } from "@/lib/service-api";
 
-const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
-
 export default function PriseDePoste() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,6 +76,20 @@ export default function PriseDePoste() {
       toast.error(error instanceof Error ? error.message : "Impossible d'enregistrer la prise de poste.");
       return false;
     }
+  };
+
+  const handleImportShift = async (data: ShiftFormData) => {
+    await serviceApi.startShift({ ...data });
+  };
+
+  const refreshShifts = async () => {
+    setShifts(await serviceApi.listShifts(undefined, { includePending: true }));
+  };
+
+  const handleDeleteShift = async (shift: Shift) => {
+    const result = await serviceApi.deleteShift(shift.serviceId || shift.id);
+    await refreshShifts();
+    return result;
   };
 
   const handleOpenEndDialog = (shift: Shift, isOnlyOne: boolean) => {
@@ -159,17 +171,6 @@ export default function PriseDePoste() {
     }
   };
 
-  const fmt = (dateStr: string | null) => {
-    if (!dateStr) return "En cours";
-    const date = new Date(dateStr);
-    if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleTimeString("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: MADAGASCAR_TIME_ZONE,
-    });
-  };
-
   const activeShifts = shifts.filter((shift) => !shift.ended_at && shift.pendingSyncAction !== "open");
   const pendingShifts = shifts.filter((shift) => shift.pendingSync);
   const pendingServices = new Set(pendingShifts.map((shift) => shift.serviceId || shift.id));
@@ -207,7 +208,9 @@ export default function PriseDePoste() {
         <ListHistoriquePriseDePoste
           shifts={shifts}
           onOpenEndDialog={handleOpenEndDialog}
-          fmt={fmt}
+          onDeleteShift={handleDeleteShift}
+          onImportShift={handleImportShift}
+          onRefresh={refreshShifts}
         />
       </div>
 

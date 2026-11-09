@@ -17,10 +17,12 @@ export interface ShiftFormData {
   siteId: string;
   posteId: string;
   posteNom: string;
-  shiftType: "JOUR" | "NUIT";
+  shiftType: "JOUR" | "NUIT" | "";
   chefMatricule: string;
   agentMatricules: string[];
   notes: string;
+  startedAt?: string;
+  endedAt?: string;
 }
 
 interface FormPriseDePosteProps {
