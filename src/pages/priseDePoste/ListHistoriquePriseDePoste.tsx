@@ -1,7 +1,21 @@
 import { Empty, Panel } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
 
 const MADAGASCAR_TIME_ZONE = "Indian/Antananarivo";
+const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").trim();
+const dateInSiteTimeZone = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: MADAGASCAR_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: "year" | "month" | "day") => parts.find((item) => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
 
 // 💡 EXPORT OBLIGATOIRE DE L'INTERFACE SHIFT
 export interface Shift {
@@ -40,6 +54,10 @@ export default function ListHistoriquePriseDePoste({
   onOpenEndDialog,
   fmt,
 }: ListHistoriquePriseDePosteProps) {
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [serviceFilter, setServiceFilter] = useState<"" | "JOUR" | "NUIT">("");
   const groups = Array.from(shifts.reduce((all, shift) => {
     const key = shift.serviceId || shift.id;
     const group = all.get(key) || [];
@@ -51,9 +69,25 @@ export default function ListHistoriquePriseDePoste({
     serviceId,
     agents: members,
   }));
-  const pendingStartShifts = groups.filter((shift) => shift.pendingSyncAction === "open");
-  const activeShifts = groups.filter((shift) => shift.ended_at === null && shift.pendingSyncAction !== "open");
-  const finishedShifts = groups.filter((shift) => shift.ended_at !== null);
+  const query = normalize(search);
+  const filteredGroups = groups.filter((shift) => {
+      const crew = shift.agents || [shift];
+      const searchText = normalize([
+        shift.posteNom, shift.site_de_travail, shift.prestataire, shift.shiftType, shift.notes,
+        shift.ended_at ? "terminé" : "en cours",
+        ...crew.flatMap((agent) => [agent.nom, agent.prenom, agent.matricule, agent.prestataire]),
+      ].filter(Boolean).join(" "));
+      const started = dateInSiteTimeZone(shift.started_at);
+      const ended = shift.ended_at ? dateInSiteTimeZone(shift.ended_at) : started;
+      return (!query || searchText.includes(query))
+        && (!dateFrom || ended >= dateFrom)
+        && (!dateTo || started <= dateTo)
+        && (!serviceFilter || shift.shiftType === serviceFilter);
+  });
+  const allActiveShiftCount = groups.filter((shift) => shift.ended_at === null && shift.pendingSyncAction !== "open").length;
+  const pendingStartShifts = filteredGroups.filter((shift) => shift.pendingSyncAction === "open");
+  const activeShifts = filteredGroups.filter((shift) => shift.ended_at === null && shift.pendingSyncAction !== "open");
+  const finishedShifts = filteredGroups.filter((shift) => shift.ended_at !== null);
 
   const todayStr = new Date().toLocaleDateString("fr-FR", { timeZone: MADAGASCAR_TIME_ZONE });
 
@@ -70,6 +104,18 @@ export default function ListHistoriquePriseDePoste({
 
   return (
     <Panel title="Services en cours & Historique">
+      <div className="shift-history-filters" aria-label="Recherche dans l'historique">
+        <label className="shift-history-filters__search">Recherche
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nom, matricule, poste, site…" />
+        </label>
+        <label>Date de début<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label>
+        <label>Date de fin<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label>
+        <label>Service<select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value as "" | "JOUR" | "NUIT")}>
+          <option value="">Tous</option><option value="JOUR">Jour</option><option value="NUIT">Nuit</option>
+        </select></label>
+        {(search || dateFrom || dateTo || serviceFilter) && <Button type="button" variant="ghost" onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setServiceFilter(""); }}>Effacer</Button>}
+      </div>
+      <p className="shift-history-result-count" aria-live="polite">{filteredGroups.length} service(s) correspondant(s)</p>
       <div className="mb-6">
         <h3 className="shift-section-heading mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           En service ({activeShifts.length}) · <span className="normal-case font-normal text-xs">{todayStr}</span>
@@ -100,7 +146,7 @@ export default function ListHistoriquePriseDePoste({
                 <Button
                   size="sm"
                   className="shift-end-button"
-                  onClick={() => onOpenEndDialog(s, activeShifts.length === 1)}
+                  onClick={() => onOpenEndDialog(s, allActiveShiftCount === 1)}
                   disabled={s.pendingSync}
                 >
                   Terminer
@@ -109,7 +155,7 @@ export default function ListHistoriquePriseDePoste({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground italic">Aucun agent actuellement en service.</p>
+          <p className="text-sm text-muted-foreground italic">{filteredGroups.length ? "Aucun agent actuellement en service." : "Aucun service ne correspond à cette recherche."}</p>
         )}
       </div>
 

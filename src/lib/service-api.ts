@@ -1373,7 +1373,15 @@ export const serviceApi = {
     const siteId = String(data.siteId || "");
     if (siteId && navigator.onLine) await serviceApi.syncPendingLogistics(siteId);
     const requestId = crypto.randomUUID();
-    const payload = addClientRequestId(data, requestId);
+    const payload = addClientRequestId({
+      ...data,
+      agentName: `${String(data.prenom || "").trim()} ${String(data.nom || "").trim()}`.trim(),
+      matricule: String(data.matricule || data.chefMatricule || ""),
+      providerName: String(data.prestataire || "Non renseigné"),
+      siteName: String(data.site_de_travail || ""),
+      postName: String(data.posteNom || ""),
+      observations: String(data.notes || ""),
+    }, requestId);
     try {
       return await request<any>("/shifts", { method: "POST", body: JSON.stringify(payload) });
     } catch (error) {

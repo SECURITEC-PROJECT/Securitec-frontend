@@ -134,7 +134,7 @@ export default function LayoutPrincipal({ user, onLogout }: LayoutPrincipalProps
   };
 
   return (
-    <div className={`min-h-screen flex flex-col${isReportPage ? " report-mode" : ""}`}>
+    <div className={`workspace-shell min-h-screen flex flex-col${isReportPage ? " report-mode" : ""}`}>
       <Header
         open={open}
         setOpen={setOpen}
