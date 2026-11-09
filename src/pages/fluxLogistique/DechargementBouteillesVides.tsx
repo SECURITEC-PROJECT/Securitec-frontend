@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type EmptyBottleDelivery } from "@/lib/service-api";
-import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
+import { Pencil, Plus, Printer, Save, Search, Trash2, X, FileUp, FileDown, Download } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
@@ -20,6 +22,11 @@ const DESIGNATION_GROUPS = [
   { label: "Palettes", options: ["Palette neuve - 1310 x 1055", "Palette neuve - 1000 x 1200", "Palette neuve - 800 x 1200"] },
 ] as const;
 const DESIGNATIONS = DESIGNATION_GROUPS.flatMap((group) => group.options);
+const DELIVERY_HEADERS = [
+  "Date", "Heure d'arrivée", "Heure de sortie", "Immatriculation", "Nom du chauffeur",
+  "N° titre", "N° plomb", "Provenance", "Poids (kg)", "BRUT", "TARE", "NET",
+  "Client / Fournisseur", "Produit", "Remarque", ...DESIGNATIONS,
+];
 type BottleLine = { designation: string; quantite: string };
 type DeliveryForm = {
   date: string;
@@ -89,6 +96,7 @@ export default function DechargementBouteillesVides() {
   const [editingEntry, setEditingEntry] = useState<EmptyBottleDelivery | null>(null);
   const [time, setTime] = useState(currentTime);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [pontBasculePost, setPontBasculePost] = useState(false);
@@ -135,6 +143,27 @@ export default function DechargementBouteillesVides() {
       ...entry.detailsBouteilles.flatMap((line) => [line.designation, String(line.quantite)]),
     ].join(" ")).includes(normalizedSearch),
   );
+  const rowsForExport = (source: EmptyBottleDelivery[]) => source.map((entry) => {
+    const quantities = new Map(entry.detailsBouteilles.map((line) => [line.designation, line.quantite]));
+    return [
+      String(entry.date).slice(0, 10),
+      entry.heureArrivee || "",
+      entry.heureFin || "",
+      entry.immatriculationVehicule || "",
+      entry.nomChauffeur || "",
+      entry.numeroTitre || "",
+      entry.plomb || "",
+      entry.provenance || "",
+      entry.poids ?? "",
+      entry.brut ?? "",
+      entry.tare ?? "",
+      entry.net ?? "",
+      entry.clientFournisseur || "",
+      entry.produit || "",
+      entry.remarque || entry.observation || "",
+      ...DESIGNATIONS.map((designation) => quantities.get(designation) ?? ""),
+    ];
+  });
   const siteProps = {
     id: "empty-bottles-site",
     value: selectedSiteName,
@@ -295,6 +324,153 @@ export default function DechargementBouteillesVides() {
       document.title = originalTitle;
     }, { once: true });
     window.print();
+  };
+
+  const importDeliveries = async (file?: File) => {
+    if (!file) return;
+    if (!site?.id) {
+      toast.error("Sélectionnez un site avant l’importation.");
+      return;
+    }
+    if (saving || importing) {
+      toast.error("Attendez la fin de l’enregistrement ou de l’importation.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalizeHeader = (value: string) => normalizeSearch(value).replace(/[^a-z0-9]/g, "");
+      const headers = (sheet[0] || []).map((value) => normalizeHeader(String(value ?? "")));
+      const column = (...aliases: string[]) => headers.findIndex((header) =>
+        aliases.some((alias) => header === normalizeHeader(alias)),
+      );
+      const columns = {
+        date: column("date"),
+        arrival: column("heure d'arrivée", "heure arrivée", "he", "hd"),
+        end: column("heure de sortie", "heure sortie", "hs", "hf"),
+        registration: column("immatriculation", "immatriculation véhicule", "véhicule"),
+        driver: column("nom du chauffeur", "nom chauffeur", "chauffeur"),
+        title: column("n° titre", "numero titre", "titre"),
+        seal: column("n° plomb", "numero plomb", "plomb"),
+        origin: column("provenance"),
+        weight: column("poids", "poids kg"),
+        brut: column("brut"),
+        tare: column("tare"),
+        net: column("net"),
+        client: column("client fournisseur", "client / fournisseur"),
+        product: column("produit"),
+        remark: column("remarque", "observations"),
+        details: DESIGNATIONS.map((designation) => column(designation)),
+      };
+      if ([columns.date, columns.arrival, columns.registration, columns.driver, columns.title, columns.origin, columns.weight].some((index) => index < 0) ||
+          columns.details.every((index) => index < 0)) {
+        throw new Error("Colonnes requises manquantes : Date, Heure d’arrivée, Immatriculation, Nom du chauffeur, N° titre, Provenance, Poids et au moins un format d’article.");
+      }
+      const get = (cells: string[], index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+      const parseDate = (value: string) => {
+        const text = value.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+        const french = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+        if (french) return `${french[3]}-${french[2].padStart(2, "0")}-${french[1].padStart(2, "0")}`;
+        const serial = Number(text);
+        return Number.isFinite(serial) && serial > 20000 && serial < 80000
+          ? new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10)
+          : "";
+      };
+      const parseTime = (value: string) => {
+        const text = value.trim();
+        const serial = Number(text);
+        if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+          const minutes = Math.round(serial * 1440);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+        const match = /^(\d{1,2}):(\d{2})/.exec(text);
+        return match && Number(match[1]) < 24 && Number(match[2]) < 60
+          ? `${match[1].padStart(2, "0")}:${match[2]}`
+          : "";
+      };
+      const parseNumber = (value: string) => {
+        const text = value.trim().replace(/\s/g, "");
+        return Number(text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text);
+      };
+      const rows = sheet.slice(1).map((cells, index) => {
+        const detailsBouteilles = DESIGNATIONS.flatMap((designation, detailIndex) => {
+          const quantityText = get(cells, columns.details[detailIndex]);
+          return quantityText ? [{ designation, quantite: Number(quantityText) }] : [];
+        });
+        return {
+          line: index + 2,
+          date: parseDate(get(cells, columns.date)),
+          heureArrivee: parseTime(get(cells, columns.arrival)),
+          heureFin: parseTime(get(cells, columns.end)) || null,
+          immatriculationVehicule: get(cells, columns.registration),
+          nomChauffeur: get(cells, columns.driver),
+          numeroTitre: get(cells, columns.title),
+          plomb: get(cells, columns.seal),
+          provenance: get(cells, columns.origin),
+          poids: parseNumber(get(cells, columns.weight)),
+          brut: get(cells, columns.brut),
+          tare: get(cells, columns.tare),
+          net: get(cells, columns.net),
+          clientFournisseur: get(cells, columns.client),
+          produit: get(cells, columns.product),
+          remarque: get(cells, columns.remark),
+          detailsBouteilles,
+          hasData: cells.some((value) => String(value ?? "").trim()),
+        };
+      }).filter((row) => row.hasData);
+      if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+
+      let imported = 0;
+      const failures: string[] = [];
+      const created: EmptyBottleDelivery[] = [];
+      for (const row of rows) {
+        const hasPondBrut = Boolean(row.brut || row.tare || row.net);
+        const brut = parseNumber(row.brut);
+        const tare = parseNumber(row.tare);
+        const net = parseNumber(row.net);
+        if (!row.date || !row.heureArrivee || !row.immatriculationVehicule || !row.nomChauffeur ||
+            !/^\d+$/.test(row.numeroTitre) || !/^\d+$/.test(row.provenance) ||
+            (!hasPondBrut && (!Number.isFinite(row.poids) || row.poids <= 0)) ||
+            (hasPondBrut && (!Number.isFinite(brut) || !Number.isFinite(tare) || !Number.isFinite(net) || brut <= 0 || tare <= 0 || net <= 0)) ||
+            !row.detailsBouteilles.length || row.detailsBouteilles.some((line) => !Number.isInteger(line.quantite) || line.quantite < 1 || line.quantite > 1_000_000)) {
+          failures.push(`Ligne ${row.line} : vérifiez la date, les heures, le véhicule, le chauffeur, le titre, la provenance, le poids et les quantités.`);
+          continue;
+        }
+        try {
+          const result = await serviceApi.createEmptyBottleDelivery({
+            type: "BOUTEILLES_VIDES",
+            date: row.date,
+            heureArrivee: row.heureArrivee,
+            heureFin: row.heureFin,
+            immatriculationVehicule: row.immatriculationVehicule,
+            nomChauffeur: row.nomChauffeur,
+            numeroTitre: row.numeroTitre,
+            plomb: row.plomb,
+            provenance: row.provenance,
+            poids: hasPondBrut ? net : row.poids,
+            ...(hasPondBrut ? { pondBrut: { brut, tare, net, clientFournisseur: row.clientFournisseur, produit: row.produit, remarque: row.remarque } } : {}),
+            detailsBouteilles: row.detailsBouteilles,
+            siteId: site.id,
+            siteName: selectedSiteName,
+            siteType: site.type,
+            posteId: routeContext?.siteId === site.id ? routeContext.posteId : undefined,
+          });
+          created.push(result.entry);
+          imported += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+          if (error instanceof Error && "status" in error && error.status === 409) break;
+        }
+      }
+      if (created.length) setEntries((current) => [...created, ...current.filter((entry) => !created.some((item) => item.id === entry.id))]);
+      if (imported) toast.success(`${imported} réception(s) importée(s).`);
+      if (failures.length) toast.error(`${failures.length} ligne(s) non importée(s) : ${failures.slice(0, 2).join(" ")}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const printEntry = (entry: EmptyBottleDelivery) => {
@@ -484,19 +660,29 @@ export default function DechargementBouteillesVides() {
       </form>
 
       <section id="empty-bottles-print-area" className="empty-bottles-registry space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-3">
-          <div>
+        <div className="flex flex-col gap-3 border-b pb-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
             <h2 className="font-semibold text-primary">Registre des réceptions</h2>
             <p className="mt-1 text-sm text-muted-foreground">Historique des déchargements pour le site sélectionné.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 empty-bottles-screen">
-            <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">{filteredEntries.length} réception{filteredEntries.length === 1 ? "" : "s"}</span>
-            <Button type="button" variant="outline" className="empty-bottles-print-button print:hidden" disabled={!site?.id || !entries.length} onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
+          <div className="grid w-full grid-cols-1 gap-2 empty-bottles-screen sm:grid-cols-2 xl:max-w-[76%] xl:grid-cols-4">
+            <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!site?.id || importing || saving ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+              <FileUp className="mr-2 h-4 w-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || importing || saving} onChange={(event) => { void importDeliveries(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button className="w-full" type="button" variant="outline" onClick={() => exportXlsx("modele-receptions-bouteilles-vides.xlsx", "Réceptions bouteilles vides", DELIVERY_HEADERS, [])}>
+              <FileDown className="mr-2 h-4 w-4" />Modèle Excel
             </Button>
+            <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`receptions-bouteilles-vides-${today()}.xlsx`, "Réceptions bouteilles vides", DELIVERY_HEADERS, rowsForExport(filteredEntries))}>
+              <Download className="mr-2 h-4 w-4" />Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" className="empty-bottles-print-button w-full" disabled={!site?.id || !filteredEntries.length} onClick={handlePrint}>
+              <Printer className="mr-2 h-4 w-4" />Imprimer les lignes (Word)
+            </Button>
+            <span className="sr-only" aria-live="polite">{filteredEntries.length} réception{filteredEntries.length === 1 ? "" : "s"} affichée{filteredEntries.length === 1 ? "" : "s"}</span>
           </div>
         </div>
-        <div className="relative empty-bottles-screen">
+        <div className="relative w-full empty-bottles-screen">
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label="Rechercher une réception de bouteilles vides"
@@ -572,7 +758,7 @@ export default function DechargementBouteillesVides() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {filteredEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td>{displayDate(entry.date)}</td>
                   <td>{entry.heureArrivee || "—"}</td>
