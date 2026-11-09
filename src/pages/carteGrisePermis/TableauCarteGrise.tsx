@@ -16,6 +16,29 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 const clock = () => new Date().toTimeString().slice(0,5);
 const newDraft = (): Draft => ({ key: `${Date.now()}-${Math.random()}`, date: today(), time: clock(), name: "", cin: "", license: "", vehicle: "", plate: "", reason: "", notes: "", chauffeurId: "" });
 const norm = (s: string) => s.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g," ").toLocaleLowerCase("fr");
+const parseDateTime = (raw: string, fallbackDate = today(), fallbackTime = clock()) => {
+  const value = raw.trim().replace(/[\r\n]+/g, " ").replace(/\s+à\s+/i, " ");
+  if (!value) return { date: fallbackDate, time: fallbackTime };
+  if (/^\d+(\.\d+)?$/.test(value) && Number(value) > 20000) {
+    const serial = Number(value);
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000);
+    const minutes = Math.round((serial % 1) * 1440);
+    return { date: date.toISOString().slice(0, 10), time: `${String(Math.floor(minutes / 60) % 24).padStart(2,"0")}:${String(minutes % 60).padStart(2,"0")}` };
+  }
+  const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]+(\d{1,2}):(\d{2}))?/);
+  const local = value.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  const match = iso || local;
+  if (!match) return { date: fallbackDate, time: value.match(/\b\d{1,2}:\d{2}\b/)?.[0] || fallbackTime };
+  const [year, month, day] = iso ? [match[1], match[2], match[3]] : [match[3], match[2], match[1]];
+  const date = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  const time = match[4] ? `${String(match[4]).padStart(2,"0")}:${match[5]}` : fallbackTime;
+  return { date, time };
+};
+const detailsParts = (details: string) => ({
+  license: details.match(/Permis\s*:\s*([^,]*)/i)?.[1]?.trim() || "",
+  vehicle: details.match(/Véhicule\s*:\s*([^,]*)/i)?.[1]?.trim() || "",
+  notes: details.match(/Observations?\s*:\s*(.*)$/i)?.[1]?.trim() || details,
+});
 
 export default function TableauCarteGrise({ sites, canCreateSite, addSite, siteError, onSaved }: {
   sites: ReturnType<typeof useSites>["sites"];
@@ -84,24 +107,27 @@ export default function TableauCarteGrise({ sites, canCreateSite, addSite, siteE
       const headers = rows[0]?.map(normalized) || [];
       const findColumn = (...names: string[]) => headers.findIndex(header => names.includes(header));
       const col = {
-        date: findColumn("date"), time: findColumn("heure", "heure de pointage"), name: findColumn("nom et prenom", "nom", "chauffeur"),
+        entry: findColumn("entree"), exit: findColumn("sortie"), status: findColumn("statut"),
+        date: findColumn("date"), time: findColumn("heure", "heure de pointage"), name: findColumn("personne", "nom et prenom", "nom", "chauffeur"),
         cin: findColumn("cin"), license: findColumn("permis", "permis de conduire"), vehicle: findColumn("vehicule"),
-        plate: findColumn("immatriculation", "matricule"), reason: findColumn("motif"), notes: findColumn("observations", "observation"),
+        plate: findColumn("immatriculation", "matricule"), reason: findColumn("motif"), notes: findColumn("observations", "observation"), details: findColumn("details"),
       };
-      if (col.name < 0 || col.license < 0 || col.plate < 0) throw new Error("Colonnes requises manquantes : Nom et prénom, Permis et Immatriculation.");
+      if (col.name < 0 || col.plate < 0 || (col.license < 0 && col.details < 0)) throw new Error("Colonnes requises manquantes : Personne, Immatriculation et Détails (ou Permis).");
       const imported = rows.slice(1).filter(line => line.some(value => String(value ?? "").trim())).map(line => {
         const get = (index: number, fallback = "") => index < 0 ? fallback : String(line[index] ?? "").trim();
         const name = get(col.name);
         const driver = chauffeurs.find(item => norm(item.nomPrenom) === norm(name));
-        return { ...newDraft(), date:get(col.date,today()), time:get(col.time,clock()), name:driver?.nomPrenom || name,
-          cin:get(col.cin,driver?.cin||""), license:get(col.license,driver?.numeroPermis||""), vehicle:get(col.vehicle,driver?.vehicule||""),
-          plate:get(col.plate,driver?.matricule||"").toUpperCase(), reason:get(col.reason), notes:get(col.notes), chauffeurId:driver?.id||"" };
+        const entered = parseDateTime(get(col.entry) || get(col.date), today(), get(col.time,clock()));
+        const parts = detailsParts(get(col.details));
+        return { ...newDraft(), date:entered.date, time:entered.time, exitRaw:get(col.exit), status:get(col.status), name:driver?.nomPrenom || name,
+          cin:get(col.cin,driver?.cin||""), license:get(col.license,parts.license||driver?.numeroPermis||""), vehicle:get(col.vehicle,parts.vehicle||driver?.vehicule||""),
+          plate:get(col.plate,driver?.matricule||"").toUpperCase(), reason:get(col.reason), notes:get(col.notes,parts.notes), chauffeurId:driver?.id||"" };
       });
       if (!imported.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
       const failures: string[] = [];
       let saved = 0;
       for (const [index, row] of imported.entries()) {
-        if (!row.name.trim() || !row.license.trim() || !row.plate.trim()) { failures.push(`Ligne ${index + 2} : nom, permis ou immatriculation manquant.`); continue; }
+        if (!row.name.trim() || !row.plate.trim()) { failures.push(`Ligne ${index + 2} : personne ou immatriculation manquante.`); continue; }
         try {
           const record = await serviceApi.createVisitor({
             full_name: row.name.trim(), company: "", id_document: row.cin.trim().slice(-4), document_type: "CIN/Permis",
@@ -110,7 +136,13 @@ export default function TableauCarteGrise({ sites, canCreateSite, addSite, siteE
             equipment: `Permis: ${row.license.trim()}, Véhicule: ${row.vehicle.trim()}, Observations: ${row.notes.trim()}`,
             siteName, siteType, entry_date: row.date, entry_time: row.time,
           }) as VisitorRecord;
-          onSaved(record); saved += 1;
+          const shouldExit = Boolean(row.exitRaw?.trim()) || norm(row.status || "") === "sorti";
+          if (shouldExit) {
+            const exited = parseDateTime(row.exitRaw || "");
+            const result = await serviceApi.exitVisitor(record.id, { equipmentOut: true, extraEquipment: "", exitedAt: row.exitRaw ? `${exited.date}T${exited.time}:00` : undefined }, record.site_id || selectedSite.id);
+            onSaved({ ...record, ...result });
+          } else onSaved(record);
+          saved += 1;
         } catch (error) {
           failures.push(`Ligne ${index + 2} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
         }
@@ -125,7 +157,7 @@ export default function TableauCarteGrise({ sites, canCreateSite, addSite, siteE
   const fields: Array<[keyof Draft,string,string]> = [["date","Date","date"],["time","Heure","time"],["cin","CIN","text"],["license","Permis *","text"],["vehicle","Véhicule","text"],["plate","Immatriculation *","text"],["reason","Motif","text"],["notes","Observations","text"]];
   return <section className="carte-grise-entry-panel rounded-lg border bg-card p-4 shadow-sm">
     <div className="carte-grise-entry-toolbar">
-      <div><h2 className="carte-grise-panel-title font-semibold">Nouvelle vérification carte grise / permis</h2><p className="mt-1 text-xs text-muted-foreground">Saisissez les contrôles directement dans le tableau et enregistrez chaque ligne.</p><div className="mt-3 flex flex-wrap gap-2"><label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"><FileUp className="mr-2 h-4 w-4"/>{importing?"Importation…":"Importer dans le registre (Excel / CSV)"}<input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={importing} onChange={event=>{void importFile(event.target.files?.[0]);event.currentTarget.value="";}} /></label><Button type="button" variant="outline" size="sm" onClick={()=>exportXlsx("modele-carte-grise-permis.xlsx","Modèle contrôle",["Date","Heure","Nom et prénom","CIN","Permis","Véhicule","Immatriculation","Motif","Observations"],[])}><FileDown className="mr-2 h-4 w-4"/>Télécharger le modèle</Button></div></div>
+      <div><h2 className="carte-grise-panel-title font-semibold">Nouvelle vérification carte grise / permis</h2><p className="mt-1 text-xs text-muted-foreground">Saisissez les contrôles directement dans le tableau et enregistrez chaque ligne.</p><div className="mt-3 flex flex-wrap gap-2"><label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"><FileUp className="mr-2 h-4 w-4"/>{importing?"Importation…":"Importer dans le registre (Excel / CSV)"}<input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={importing} onChange={event=>{void importFile(event.target.files?.[0]);event.currentTarget.value="";}} /></label><Button type="button" variant="outline" size="sm" onClick={()=>exportXlsx("modele-carte-grise-permis.xlsx","Modèle contrôle",["Entrée","Sortie","Statut","Personne","CIN","Immatriculation","Motif","Détails","Action"],[])}><FileDown className="mr-2 h-4 w-4"/>Télécharger le modèle</Button></div></div>
       <div className="carte-grise-entry-site"><SitePicker id="carte-site" value={siteName} type={siteType} sites={sites} canCreate={canCreateSite} onAdd={addSite} onChange={(name,type)=>{setSiteName(name);setSiteType(type);setRows(current=>current.map(row=>({...row,name:"",cin:"",license:"",vehicle:"",plate:"",chauffeurId:""})));setActiveKey("");}} /></div>
     </div>
     {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}

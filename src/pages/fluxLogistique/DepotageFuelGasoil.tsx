@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
 import { printRecord } from "@/lib/printRecord";
-import { Pencil, Printer, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Download, FileDown, FileUp, Pencil, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { readXlsxRows } from "@/lib/read-xlsx";
+import { exportXlsx } from "@/lib/export-xlsx";
 
 interface DepotageEntry {
   id: string;
@@ -26,6 +28,20 @@ interface DepotageEntry {
   siteName?: string | null;
   pendingSync?: boolean;
 }
+interface FuelDraft {
+  key: string;
+  id?: string;
+  date: string;
+  heurePointe: string;
+  immatriculationVehicule: string;
+  titre: string;
+  plomb: string;
+  designation: string;
+  quantite: string;
+  cree: string;
+  chauffeur: string;
+  magasinier: string;
+}
 
 const today = () => {
   const date = new Date();
@@ -33,23 +49,34 @@ const today = () => {
 };
 const nowTime = () => new Date().toTimeString().slice(0, 5);
 const fuelDesignations = ["Fuel oil", "Gasoil"];
+const fuelHeaders = ["Date", "Heure de pointe", "Immatriculation camion", "Titre", "Plomb", "Designation", "Quantite", "Cree par", "Chauffeur", "Magasinier"];
+const newFuelDraft = (): FuelDraft => ({ key: `${Date.now()}-${Math.random()}`, date: today(), heurePointe: nowTime(), immatriculationVehicule: "", titre: "", plomb: "", designation: "", quantite: "", cree: "", chauffeur: "", magasinier: "" });
+const normalizeHeader = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").replace(/\s+/g, " ");
+const excelDate = (raw: string) => {
+  const value = raw.trim();
+  if (/^\d+(\.\d+)?$/.test(value) && Number(value) > 20000) return new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(value)) * 86400000).toISOString().slice(0, 10);
+  const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const fr = value.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2,"0")}-${iso[3].padStart(2,"0")}`;
+  if (fr) return `${fr[3]}-${fr[2].padStart(2,"0")}-${fr[1].padStart(2,"0")}`;
+  return "";
+};
+const excelTime = (raw: string) => {
+  const value = raw.trim();
+  if (/^\d+(\.\d+)?$/.test(value) && Number(value) >= 0 && Number(value) < 1) {
+    const minutes = Math.round(Number(value) * 1440) % 1440;
+    return `${String(Math.floor(minutes / 60)).padStart(2,"0")}:${String(minutes % 60).padStart(2,"0")}`;
+  }
+  const match = value.match(/^(\d{1,2}):(\d{2})/);
+  return match ? `${match[1].padStart(2,"0")}:${match[2]}` : value;
+};
 
 export default function DepotageFuelGasoil() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
-  const [date, setDate] = useState(today);
-  const [heurePointe, setHeurePointe] = useState(nowTime);
-  const [immatriculationVehicule, setImmatriculationVehicule] = useState("");
-  const [titre, setTitre] = useState("");
-  const [plomb, setPlomb] = useState("");
-  const [designation, setDesignation] = useState("");
-  const [quantite, setQuantite] = useState("");
-  const [cree, setCree] = useState("");
-  const [chauffeur, setChauffeur] = useState("");
-  const [magasinier, setMagasinier] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<FuelDraft[]>([newFuelDraft()]);
+  const [savingKey, setSavingKey] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [registry, setRegistry] = useState<{
     siteId: string;
@@ -58,6 +85,7 @@ export default function DepotageFuelGasoil() {
   }>({ siteId: "", entries: [], error: "" });
   const [search, setSearch] = useState("");
   const [searchDate, setSearchDate] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const selectedSiteName = siteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === selectedSiteName), [sites, selectedSiteName]);
@@ -107,77 +135,55 @@ export default function DepotageFuelGasoil() {
     return matchesDate && matchesText;
   });
 
-  const clearForm = () => {
-    setDate(today());
-    setHeurePointe(nowTime());
-    setImmatriculationVehicule("");
-    setTitre("");
-    setPlomb("");
-    setDesignation("");
-    setQuantite("");
-    setCree("");
-    setChauffeur("");
-    setMagasinier("");
-    setEditingId(null);
-  };
+  const clearDraft = (key: string) => setDrafts((current) => {
+    const remaining = current.filter((row) => row.key !== key);
+    return remaining.length ? remaining : [newFuelDraft()];
+  });
+  const updateDraft = (key: string, field: keyof FuelDraft, value: string) => setDrafts((current) => current.map((row) => row.key === key ? { ...row, [field]: value } : row));
 
   const startEditing = (entry: DepotageEntry) => {
-    setEditingId(entry.id);
-    setDate(entry.date.slice(0, 10));
-    setHeurePointe(entry.heurePointe || "");
-    setImmatriculationVehicule(entry.immatriculationVehicule || "");
-    setTitre(entry.titre || "");
-    setPlomb(entry.plomb || "");
-    setDesignation(entry.designation || "");
-    setQuantite(entry.quantite == null ? "" : String(entry.quantite));
-    setCree(entry.cree || "");
-    setChauffeur(entry.chauffeur || "");
-    setMagasinier(entry.magasinier || "");
+    const draft: FuelDraft = {
+      key: `edit-${entry.id}`, id: entry.id, date: entry.date.slice(0, 10), heurePointe: entry.heurePointe || "",
+      immatriculationVehicule: entry.immatriculationVehicule || "", titre: entry.titre || "", plomb: entry.plomb || "",
+      designation: entry.designation || "", quantite: entry.quantite == null ? "" : String(entry.quantite),
+      cree: entry.cree || "", chauffeur: entry.chauffeur || "", magasinier: entry.magasinier || "",
+    };
+    setDrafts((current) => [draft, ...current.filter((row) => row.id !== entry.id)]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
+  const saveDraft = async (row: FuelDraft) => {
+    if (!selectedSiteId) { toast.error("Selectionnez un site de travail."); return; }
+    const quantity = Number(row.quantite);
+    if (!row.date || !row.heurePointe || !row.immatriculationVehicule.trim() || !row.titre.trim() || !row.plomb.trim() || !fuelDesignations.includes(row.designation) || !Number.isFinite(quantity) || quantity <= 0 || !row.cree.trim() || !row.chauffeur.trim() || !row.magasinier.trim()) {
+      toast.error("Completez toutes les cellules obligatoires de cette ligne.");
+      return;
+    }
+    setSavingKey(row.key);
     try {
       const payload = {
-        type: "DEPOTAGE_FUEL",
-        date,
-        heurePointe,
-        immatriculationVehicule: immatriculationVehicule.trim(),
-        titre: titre.trim(),
-        plomb: plomb.trim(),
-        designation: designation.trim(),
-        quantite: Number(quantite),
-        cree: cree.trim(),
-        chauffeur: chauffeur.trim(),
-        magasinier: magasinier.trim(),
-        siteId: site?.id,
-        siteName: selectedSiteName,
-        siteType: selectedSiteType,
+        type: "DEPOTAGE_FUEL", date: row.date, heurePointe: row.heurePointe,
+        immatriculationVehicule: row.immatriculationVehicule.trim(), titre: row.titre.trim(), plomb: row.plomb.trim(),
+        designation: row.designation, quantite: quantity, cree: row.cree.trim(), chauffeur: row.chauffeur.trim(),
+        magasinier: row.magasinier.trim(), siteId: selectedSiteId, siteName: selectedSiteName, siteType: selectedSiteType,
       };
-      if (editingId) {
-        const { entry } = await serviceApi.updateDepotageFuelLogistics(editingId, payload);
-        setRegistry((current) => ({
-          ...current,
-          entries: current.entries.map((item) => item.id === editingId ? { ...item, ...entry } : item),
-        }));
-        toast[entry.pendingSync ? "info" : "success"](entry.pendingSync
-          ? "Modification enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
-          : "Dépotage fuel/gasoil modifié.");
+      if (row.id) {
+        const { entry } = await serviceApi.updateDepotageFuelLogistics(row.id, payload);
+        setRegistry((current) => ({ ...current, entries: current.entries.map((item) => item.id === row.id ? { ...item, ...entry } : item) }));
+        toast[entry.pendingSync ? "info" : "success"](entry.pendingSync ? "Modification enregistree hors connexion." : "Depotage fuel/gasoil modifie.");
       } else {
         const result = await serviceApi.createLogistics(payload);
-        if (!result.entry) throw new Error("La réponse du serveur ne contient pas l’enregistrement.");
+        if (!result.entry) throw new Error("La reponse du serveur ne contient pas l'enregistrement.");
         setRegistry((current) => current.siteId === selectedSiteId
           ? { ...current, entries: [result.entry, ...current.entries] }
           : { siteId: selectedSiteId, entries: [result.entry], error: "" });
-        toast.success("Dépotage fuel/gasoil enregistré.");
+        toast.success("Depotage fuel/gasoil enregistre.");
       }
-      clearForm();
+      clearDraft(row.key);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
-      setSaving(false);
+      setSavingKey("");
     }
   };
 
@@ -188,7 +194,7 @@ export default function DepotageFuelGasoil() {
     try {
       const result = await serviceApi.deleteDepotageFuelLogistics(entry.id, selectedSiteId);
       setRegistry((current) => ({ ...current, entries: current.entries.filter((item) => item.id !== entry.id) }));
-      if (editingId === entry.id) clearForm();
+      setDrafts((current) => current.filter((row) => row.id !== entry.id));
       toast[result.pendingSync ? "info" : "success"](result.pendingSync
         ? "Suppression enregistrée hors connexion. Elle sera synchronisée au retour du réseau."
         : "Dépotage supprimé du registre.");
@@ -196,6 +202,67 @@ export default function DepotageFuelGasoil() {
       toast.error(error instanceof Error ? error.message : "Suppression impossible.");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const exportRegistry = () => {
+    const rows = filteredEntries.map((entry) => [
+      entry.date?.slice(0, 10) || "", entry.heurePointe || "", entry.immatriculationVehicule || "", entry.titre || "",
+      entry.plomb || "", entry.designation || "", entry.quantite ?? "", entry.cree || "", entry.chauffeur || "", entry.magasinier || "",
+    ]);
+    const stamp = new Date().toISOString().slice(0, 10);
+    exportXlsx(`registre-depotage-fuel-gasoil-${stamp}.xlsx`, "Registre dépotages", fuelHeaders, rows);
+  };
+
+  const importRegistry = async (file?: File) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      if (!selectedSiteId) throw new Error("Sélectionnez le site de travail avant l’importation.");
+      const data = await readXlsxRows(file);
+      const headers = data[0]?.map(normalizeHeader) || [];
+      const find = (...names: string[]) => headers.findIndex((header) => names.includes(header));
+      const col = {
+        date: find("date"), time: find("heure de pointe", "heure"), plate: find("immatriculation camion", "immatriculation", "plaque"),
+        title: find("titre"), seal: find("plomb", "plombs"), designation: find("designation", "type de carburant", "carburant"),
+        quantity: find("quantite", "volume", "litres"), createdBy: find("cree par", "cree"), driver: find("chauffeur", "conducteur"), storekeeper: find("magasinier"),
+      };
+      const required = [col.date, col.time, col.plate, col.title, col.seal, col.designation, col.quantity, col.createdBy, col.driver, col.storekeeper];
+      if (required.some((index) => index < 0)) throw new Error("Colonnes requises manquantes. Utilisez le modèle Excel du module.");
+      const get = (line: string[], index: number) => String(line[index] ?? "").trim();
+      const imported = data.slice(1).filter((line) => line.some((value) => String(value ?? "").trim()));
+      if (!imported.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let saved = 0;
+      const failures: string[] = [];
+      for (const [index, line] of imported.entries()) {
+        const entryDate = excelDate(get(line, col.date));
+        const time = excelTime(get(line, col.time));
+        const quantity = Number(get(line, col.quantity).replace(/\s/g, "").replace(",", "."));
+        const itemDesignation = get(line, col.designation);
+        if (!entryDate || !/^\d{2}:\d{2}$/.test(time) || !get(line, col.plate) || !get(line, col.title) || !get(line, col.seal) || !fuelDesignations.some((value) => normalizeHeader(value) === normalizeHeader(itemDesignation)) || !Number.isFinite(quantity) || quantity <= 0 || !get(line, col.createdBy) || !get(line, col.driver) || !get(line, col.storekeeper)) {
+          failures.push(`Ligne ${index + 2} : données manquantes ou invalides.`);
+          continue;
+        }
+        try {
+          const result = await serviceApi.createLogistics({
+            type: "DEPOTAGE_FUEL", date: entryDate, heurePointe: time, immatriculationVehicule: get(line, col.plate),
+            titre: get(line, col.title), plomb: get(line, col.seal), designation: itemDesignation, quantite: quantity,
+            cree: get(line, col.createdBy), chauffeur: get(line, col.driver), magasinier: get(line, col.storekeeper),
+            siteId: selectedSiteId, siteName: selectedSiteName, siteType: selectedSiteType,
+          });
+          if (!result.entry) throw new Error("Enregistrement non confirmé par le serveur.");
+          setRegistry((current) => current.siteId === selectedSiteId ? { ...current, entries: [result.entry, ...current.entries] } : current);
+          saved += 1;
+        } catch (error) {
+          failures.push(`Ligne ${index + 2} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (saved) toast.success(`${saved} dépotage(s) importé(s) dans le registre.`);
+      if (failures.length) toast.error(failures.slice(0, 4).join(" "));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -228,96 +295,45 @@ export default function DepotageFuelGasoil() {
     <div className="fuel-module space-y-5">
       <PageHeader title="Dépotage fuel et gasoil" subtitle="Enregistrement des réceptions de fuel et de gasoil" />
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      <Panel title={editingId ? "Modifier un dépotage" : "Nouveau dépotage fuel / gasoil"}>
-          <form className="fuel-form w-full space-y-5 rounded-lg border bg-card p-4 shadow-sm" onSubmit={(event) => void submit(event)}>
-            <SitePicker
-              id="fuel-site"
-              value={selectedSiteName}
-              type={selectedSiteType}
-              sites={sites}
-              canCreate={canCreateSite}
-              onAdd={addSite}
-              onChange={(name, type) => {
-                setSiteName(name);
-                setSiteType(type);
-              }}
-            />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="fuel-date">Date</Label>
-                <Input id="fuel-date" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-time">Heure de pointe</Label>
-                <Input id="fuel-time" type="time" required value={heurePointe} onChange={(event) => setHeurePointe(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-immatriculation">Immatriculation du camion</Label>
-                <Input id="fuel-immatriculation" required maxLength={100} value={immatriculationVehicule} onChange={(event) => setImmatriculationVehicule(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-titre">Titre</Label>
-                <Input id="fuel-titre" required maxLength={160} value={titre} onChange={(event) => setTitre(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-plomb">Plomb</Label>
-                <textarea
-                  id="fuel-plomb"
-                  required
-                  rows={4}
-                  maxLength={100}
-                  placeholder="Saisissez une valeur par ligne"
-                  className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  value={plomb}
-                  onChange={(event) => setPlomb(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-designation">Désignation</Label>
-                <select
-                  id="fuel-designation"
-                  required
-                  value={fuelDesignations.includes(designation) ? designation : ""}
-                  onChange={(event) => setDesignation(event.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Sélectionner une désignation</option>
-                  {fuelDesignations.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-quantite">Quantité</Label>
-                <Input id="fuel-quantite" type="number" min="1" step="1" required value={quantite} onChange={(event) => setQuantite(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-cree">Créé par</Label>
-                <textarea
-                  id="fuel-cree"
-                  required
-                  rows={4}
-                  maxLength={160}
-                  placeholder="Saisissez une valeur par ligne"
-                  className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  value={cree}
-                  onChange={(event) => setCree(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-chauffeur">Chauffeur</Label>
-                <Input id="fuel-chauffeur" required maxLength={160} autoComplete="off" placeholder="Saisir le nom du chauffeur" value={chauffeur} onChange={(event) => setChauffeur(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fuel-magasinier">Magasinier</Label>
-                <Input id="fuel-magasinier" required maxLength={160} value={magasinier} onChange={(event) => setMagasinier(event.target.value)} />
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={saving || !selectedSiteName.trim()}>
-                {saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer le dépotage"}
-              </Button>
-              {editingId && <Button type="button" variant="outline" disabled={saving} onClick={clearForm}>Annuler</Button>}
-            </div>
-          </form>
+      <Panel title="Saisie des depotages - tableau type Excel">
+        <div className="space-y-4">
+          <SitePicker
+            id="fuel-site"
+            value={selectedSiteName}
+            type={selectedSiteType}
+            sites={sites}
+            canCreate={canCreateSite}
+            onAdd={addSite}
+            onChange={(name, type) => { setSiteName(name); setSiteType(type); }}
+          />
+          <p className="text-xs text-muted-foreground">Saisissez ou collez les informations directement dans les cellules, puis enregistrez chaque ligne.</p>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="fuel-table fuel-entry-table w-full min-w-[1700px] text-left text-sm">
+              <thead className="fuel-table-head bg-muted/60 text-xs uppercase text-muted-foreground"><tr>
+                <th>#</th><th>Date *</th><th>Heure *</th><th>Immatriculation camion *</th><th>Titre *</th><th>Plomb *</th><th>Designation *</th><th>Quantite *</th><th>Cree par *</th><th>Chauffeur *</th><th>Magasinier *</th><th>Action</th>
+              </tr></thead>
+              <tbody>{drafts.map((row, index) => <tr key={row.key}>
+                <td>{index + 1}</td>
+                <td><Input aria-label="Date" type="date" value={row.date} onChange={(event) => updateDraft(row.key, "date", event.target.value)} /></td>
+                <td><Input aria-label="Heure de pointe" type="time" value={row.heurePointe} onChange={(event) => updateDraft(row.key, "heurePointe", event.target.value)} /></td>
+                <td><Input aria-label="Immatriculation camion" value={row.immatriculationVehicule} onChange={(event) => updateDraft(row.key, "immatriculationVehicule", event.target.value)} /></td>
+                <td><Input aria-label="Titre" value={row.titre} onChange={(event) => updateDraft(row.key, "titre", event.target.value)} /></td>
+                <td><Input aria-label="Plomb" value={row.plomb} onChange={(event) => updateDraft(row.key, "plomb", event.target.value)} /></td>
+                <td><select aria-label="Designation" value={row.designation} onChange={(event) => updateDraft(row.key, "designation", event.target.value)} className="h-9 w-full min-w-28 rounded-md border bg-background px-2 text-sm"><option value="">Choisir...</option>{fuelDesignations.map((value) => <option key={value} value={value}>{value}</option>)}</select></td>
+                <td><Input aria-label="Quantite" type="number" min="0.01" step="any" value={row.quantite} onChange={(event) => updateDraft(row.key, "quantite", event.target.value)} /></td>
+                <td><Input aria-label="Cree par" value={row.cree} onChange={(event) => updateDraft(row.key, "cree", event.target.value)} /></td>
+                <td><Input aria-label="Chauffeur" value={row.chauffeur} onChange={(event) => updateDraft(row.key, "chauffeur", event.target.value)} /></td>
+                <td><Input aria-label="Magasinier" value={row.magasinier} onChange={(event) => updateDraft(row.key, "magasinier", event.target.value)} /></td>
+                <td><div className="flex items-center gap-1">
+                  <Button type="button" size="sm" disabled={Boolean(savingKey)} onClick={() => void saveDraft(row)}><Save className="mr-1 h-4 w-4" />{savingKey === row.key ? "..." : row.id ? "Modifier" : "Enregistrer"}</Button>
+                  <Button type="button" size="icon" variant="ghost" aria-label="Supprimer la ligne de saisie" disabled={drafts.length === 1 || Boolean(savingKey)} onClick={() => clearDraft(row.key)}><Trash2 className="h-4 w-4" /></Button>
+                </div></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+          <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newFuelDraft()])}><Plus className="mr-2 h-4 w-4" />Nouvelle ligne</Button></div>
+          {siteError && <p className="text-sm text-destructive">{siteError}</p>}
+        </div>
       </Panel>
 
       <section id="fuel-registry-print-area" className="fuel-registry">
@@ -347,6 +363,14 @@ export default function DepotageFuelGasoil() {
           <Button type="button" variant="outline" className="fuel-print-button print:hidden" disabled={!selectedSiteId || !entries.length} onClick={handlePrintRegistry}>
             <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
           </Button>
+          <div className="flex flex-wrap gap-2 fuel-registry-screen">
+            <label className={`inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted ${importing || !selectedSiteId ? "pointer-events-none opacity-50" : ""}`}>
+              <FileUp className="mr-2 h-4 w-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={importing || !selectedSiteId} onChange={(event) => { void importRegistry(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportRegistry}><FileDown className="mr-2 h-4 w-4" />Exporter Excel</Button>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-depotage-fuel-gasoil.xlsx", "Modèle dépotage", fuelHeaders, [])}><Download className="mr-2 h-4 w-4" />Modèle Excel</Button>
+          </div>
         </div>
         {entriesError ? (
           <p className="fuel-registry-screen text-sm text-destructive">{entriesError}</p>

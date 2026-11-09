@@ -610,6 +610,11 @@ main table tbody tr:last-child { border-bottom: 0; }
 .fuel-print-button:hover { border-color: #803bbd; background: #f5effb; color: #7131a9; }
 .fuel-table { border: 1px solid #e1e5ec; }
 .fuel-table th, .fuel-table td { border: 1px solid #e7eaf0; padding: 7px 9px; }
+.fuel-entry-table th { padding: 9px 7px; }
+.fuel-entry-table td { padding: 4px; }
+.fuel-entry-table input, .fuel-entry-table select { min-width: 92px; border-color: transparent; background: #fff; font-size: 12px; }
+.fuel-entry-table input:hover, .fuel-entry-table select:hover { border-color: #dfe4eb; }
+.fuel-entry-table input:focus, .fuel-entry-table select:focus { border-color: #a876d3; box-shadow: 0 0 0 2px #803bbd1c; }
 .fuel-table-head { background: #f5f7fa !important; }
 .fuel-table-head th { color: #37465a; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .fuel-table-row:nth-child(even) { background: #fbfcfe; }
@@ -771,10 +776,11 @@ main table tbody tr:last-child { border-bottom: 0; }
 .vehicle-module > .page-heading { margin-bottom: 0; }
 .vehicle-module .panel-card { min-width: 0; border-color: #e2e6ed; border-radius: 9px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
 .vehicle-module .panel-card > h2 { color: #26354a; font-size: 14px; }
-.vehicle-entry-form { border-top: 3px solid #803bbd; }
-.vehicle-entry-form label { color: #5f6b7d; font-size: 11px; font-weight: 600; }
-.vehicle-entry-form input, .vehicle-entry-form select { min-width: 0; border-color: #dfe4eb; background: #fff; font-size: 12px; }
-.vehicle-entry-form input:focus, .vehicle-entry-form select:focus { border-color: #a876d3; box-shadow: 0 0 0 2px #803bbd1c; }
+.vehicle-entry-sheet th { background: #f5f7fa; border: 1px solid #e7eaf0; color: #37465a; font-size: 10px; font-weight: 700; padding: 9px 7px; white-space: nowrap; }
+.vehicle-entry-sheet td { border: 1px solid #e7eaf0; padding: 4px; }
+.vehicle-entry-sheet input, .vehicle-entry-sheet select { min-width: 92px; border-color: transparent; background: #fff; font-size: 12px; }
+.vehicle-entry-sheet input:hover, .vehicle-entry-sheet select:hover { border-color: #dfe4eb; }
+.vehicle-entry-sheet input:focus, .vehicle-entry-sheet select:focus { border-color: #a876d3; box-shadow: 0 0 0 2px #803bbd1c; }
 .vehicle-present-list { margin: 0; padding: 0; }
 .vehicle-present-card { border-color: #e7eaf0; background: #fff; box-shadow: 0 2px 8px #202c4109; }
 .vehicle-present-card > div:first-child { min-width: 0; }
