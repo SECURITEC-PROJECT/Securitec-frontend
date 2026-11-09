@@ -2,9 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { printRegistryTable } from "@/lib/registry-table";
+import { exportXlsx } from "@/lib/export-xlsx";
 import { printRecord } from "@/lib/printRecord";
+import { readXlsxRows } from "@/lib/read-xlsx";
 import { serviceApi, type ApsMovementEvent } from "@/lib/service-api";
-import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, FileUp, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -30,7 +33,11 @@ const blankForm = () => ({
 const normalizeSearch = (value: string) => value
   .normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\s+/g, " ")
+  .trim()
   .toLocaleLowerCase("fr");
+const normalizeHeader = (value: string) => normalizeSearch(value).replace(/[^a-z0-9]/g, "");
+const eventHeaders = ["Date", "Heure d’entrée", "Mouvement et événement", "Observation", "Heure de sortie"];
 
 export default function MouvementApsEvenements({
   activeSiteId,
@@ -42,6 +49,7 @@ export default function MouvementApsEvenements({
   const [date, setDate] = useState(today);
   const [entriesByKey, setEntriesByKey] = useState<Record<string, ApsMovementEvent[]>>({});
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState<ApsMovementEvent | null>(null);
   const [form, setForm] = useState(blankForm);
   const [search, setSearch] = useState("");
@@ -73,6 +81,8 @@ export default function MouvementApsEvenements({
     () => orderedEntries.filter((entry) => !normalizedSearch || [
       entry.mouvement,
       entry.observation,
+      entry.heureEntree,
+      entry.heureSortie || "",
     ].some((value) => normalizeSearch(value).includes(normalizedSearch))),
     [normalizedSearch, orderedEntries],
   );
@@ -149,81 +159,189 @@ export default function MouvementApsEvenements({
   };
 
   const printHistory = () => {
-    const printWindow = window.open("", "_blank", "width=1000,height=800");
-    if (!printWindow) {
-      toast.error("Autorisez les fenêtres contextuelles pour imprimer l’historique.");
+    printRegistryTable(
+      "Registre des mouvements APS",
+      activeSiteName,
+      eventHeaders,
+      filteredEntries.map((entry) => [entry.date, entry.heureEntree, entry.mouvement, entry.observation || "", entry.heureSortie || ""]),
+    );
+  };
+
+  const exportHistory = () => {
+    const rows = filteredEntries.map((entry) => [
+      entry.date, entry.heureEntree, entry.mouvement, entry.observation || "", entry.heureSortie || "",
+    ]);
+    exportXlsx(`registre-mouvements-aps-${date}.xlsx`, "Mouvements APS", eventHeaders, rows);
+  };
+
+  const importHistory = async (file?: File) => {
+    if (!file) return;
+    if (!activeSiteId) {
+      toast.error("Sélectionnez un site avant l’importation.");
       return;
     }
-    const headers = ["Heure d’entrée", "Mouvement et événement", "Observation", "Heure de sortie"];
-    const rows = orderedEntries.map((entry) => [
-      entry.heureEntree,
-      entry.mouvement,
-      entry.observation || "—",
-      entry.heureSortie || "—",
-    ]);
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Mouvements APS</title>
-      <style>@page{size:landscape;margin:12mm}body{font:12px Arial,sans-serif;color:#172033}h1{text-align:center}p{text-align:center}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #9ca3af;padding:8px;text-align:left;white-space:pre-wrap}th{background:#e5e7eb}</style>
-      </head><body><h1>Registre des mouvements APS</h1><p>${escapeHtml(activeSiteName)} · ${escapeHtml(date)}</p>
-      <table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>
-      <script>window.onload=()=>window.print();</script></body></html>`);
-    printWindow.document.close();
+    if (loading || saving) {
+      toast.error("Attendez la fin du chargement ou de l’enregistrement avant l’importation.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const headers = (sheet[0] || []).map((value) => normalizeHeader(String(value ?? "")));
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.some((alias) => header === normalizeHeader(alias)));
+      const col = {
+        date: column("date", "date mouvement"),
+        entryTime: column("heure entree", "heure d entree", "heure entree movement"),
+        movement: column("mouvement et evenement", "mouvement evenement", "mouvement", "evenement"),
+        observation: column("observation", "remarque"),
+        exitTime: column("heure sortie", "heure de sortie"),
+      };
+      if (col.entryTime < 0 || col.movement < 0) {
+        throw new Error("Colonnes requises manquantes : Heure d’entrée et Mouvement/événement.");
+      }
+      const get = (cells: string[], index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+      const parseDate = (value: string) => {
+        if (!value) return date;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+        const frenchDate = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(value);
+        if (frenchDate) {
+          const parsed = `${frenchDate[3]}-${frenchDate[2].padStart(2, "0")}-${frenchDate[1].padStart(2, "0")}`;
+          const check = new Date(`${parsed}T00:00:00.000Z`);
+          return Number.isFinite(check.getTime()) && check.toISOString().slice(0, 10) === parsed ? parsed : "";
+        }
+        const serial = Number(value);
+        return Number.isFinite(serial) && serial > 20000 && serial < 80000
+          ? new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10)
+          : "";
+      };
+      const parseTime = (value: string) => {
+        const serial = Number(value);
+        if (value && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+          const minutes = Math.round(serial * 24 * 60);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+        const match = /^(\d{1,2}):(\d{2})/.exec(value);
+        return match && Number(match[1]) < 24 && Number(match[2]) < 60
+          ? `${match[1].padStart(2, "0")}:${match[2]}`
+          : "";
+      };
+      const rows = sheet.slice(1).map((cells, index) => ({
+        line: index + 2,
+        date: parseDate(get(cells, col.date)),
+        heureEntree: parseTime(get(cells, col.entryTime)),
+        mouvement: get(cells, col.movement),
+        observation: get(cells, col.observation),
+        heureSortie: get(cells, col.exitTime) ? parseTime(get(cells, col.exitTime)) : "",
+      })).filter((_, index) => sheet[index + 1]?.some((value) => String(value ?? "").trim()));
+      if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+
+      let saved = 0;
+      let queued = 0;
+      const failures: string[] = [];
+      const importedEntries: ApsMovementEvent[] = [];
+      for (const row of rows) {
+        if (!row.date || row.date !== date) {
+          failures.push(`Ligne ${row.line} : sélectionnez la même date que celle du fichier (${row.date || "date invalide"}).`);
+          continue;
+        }
+        if (!row.heureEntree || !row.mouvement || (get(sheet[row.line - 1], col.exitTime) && !row.heureSortie)) {
+          failures.push(`Ligne ${row.line} : heure d’entrée, événement ou heure de sortie invalide.`);
+          continue;
+        }
+        try {
+          const entry = await serviceApi.createApsMovementEvent({
+            date: row.date,
+            heureEntree: row.heureEntree,
+            mouvement: row.mouvement,
+            observation: row.observation,
+            heureSortie: row.heureSortie || null,
+            siteId: activeSiteId,
+          });
+          importedEntries.push(entry);
+          saved += 1;
+          if (entry.pendingSync) queued += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (importedEntries.length) {
+        setEntriesByKey((current) => ({
+          ...current,
+          [registryKey]: [...importedEntries, ...(current[registryKey] ?? [])],
+        }));
+      }
+      if (saved) toast.success(`${saved} mouvement(s) importé(s)${queued ? ` (${queued} en attente de synchronisation)` : ""}.`);
+      if (failures.length) toast.error(`${failures.length} ligne(s) non importée(s) : ${failures.slice(0, 2).join(" ")}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lecture du fichier impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
     <div className="space-y-5">
       <section className="rounded-xl border bg-card p-4 shadow-sm">
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
-          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-12">
-            <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
+          <div className="overflow-x-auto pb-2">
+            <div className="grid min-w-[1160px] grid-cols-[150px_150px_minmax(250px,2fr)_minmax(200px,1.5fr)_150px_auto] items-end gap-3">
+              <div className="space-y-1.5">
               <Label htmlFor="aps-event-date">Date</Label>
               <Input id="aps-event-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
             </div>
-          </div>
-          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 lg:grid-cols-12">
-            <div className="space-y-1.5 lg:col-span-3">
+              <div className="space-y-1.5">
               <Label htmlFor="aps-event-entry">Heure d’entrée</Label>
               <Input id="aps-event-entry" type="time" required value={form.heureEntree} onChange={(event) => setForm({ ...form, heureEntree: event.target.value })} />
             </div>
-            <div className="space-y-1.5 lg:col-span-6">
+              <div className="space-y-1.5">
               <Label htmlFor="aps-event-description">Mouvement et événement</Label>
               <Input id="aps-event-description" required maxLength={500} value={form.mouvement} onChange={(event) => setForm({ ...form, mouvement: event.target.value })} placeholder="Décrire le mouvement ou l’événement" />
             </div>
-            <div className="space-y-1.5 lg:col-span-3">
+              <div className="space-y-1.5">
+              <Label htmlFor="aps-event-observation">Observation</Label>
+              <Input id="aps-event-observation" maxLength={1000} value={form.observation} onChange={(event) => setForm({ ...form, observation: event.target.value })} placeholder="Facultatif" />
+            </div>
+              <div className="space-y-1.5">
               <Label htmlFor="aps-event-exit">Heure de sortie</Label>
               <Input id="aps-event-exit" type="time" value={form.heureSortie} onChange={(event) => setForm({ ...form, heureSortie: event.target.value })} />
             </div>
-            <div className="space-y-1.5 sm:col-span-2 lg:col-span-12">
-              <Label htmlFor="aps-event-observation">Observation</Label>
-              <Input id="aps-event-observation" maxLength={1000} value={form.observation} onChange={(event) => setForm({ ...form, observation: event.target.value })} placeholder="Observation (facultatif)" />
+              <div className="flex gap-2">
+                <Button type="submit" disabled={saving || !activeSiteId}>
+                  {editing ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
+                  {saving ? "Enregistrement…" : editing ? "Modifier" : "Enregistrer"}
+                </Button>
+                {editing && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 size-4" />Annuler</Button>}
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button type="submit" disabled={saving || !activeSiteId}>
-              {editing ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
-              {saving ? "Enregistrement…" : editing ? "Enregistrer les modifications" : "Ajouter le mouvement"}
-            </Button>
-            {editing && <Button type="button" variant="outline" onClick={resetForm}><X className="mr-2 size-4" />Annuler</Button>}
           </div>
         </form>
       </section>
 
-      <div className="flex justify-end print:hidden">
-        <Button type="button" variant="outline" onClick={printHistory} disabled={!orderedEntries.length}>
-          <Printer className="mr-2 size-4" />Imprimer tout le registre
+      <div className="grid w-full grid-cols-1 items-stretch gap-2 print:hidden sm:grid-cols-2 xl:grid-cols-5">
+        <label className={`inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 text-center text-sm font-medium ${!activeSiteId || importing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+          <FileUp className="mr-2 size-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
+          <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!activeSiteId || importing || loading || saving} onChange={(event) => { void importHistory(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+        </label>
+        <Button className="w-full" type="button" variant="outline" onClick={() => exportXlsx("modele-mouvements-aps.xlsx", "Mouvements APS", eventHeaders, [])}>
+          <FileDown className="mr-2 size-4" />Modèle Excel
         </Button>
-      </div>
-      <div className="relative w-full max-w-sm print:hidden">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input
-          type="search"
-          aria-label="Rechercher dans les mouvements APS"
-          placeholder="Rechercher un mouvement ou une observation..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="pl-9"
-        />
+        <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportHistory}>
+          <Download className="mr-2 size-4" />Exporter Excel
+        </Button>
+        <Button className="w-full" type="button" variant="outline" disabled={!filteredEntries.length} onClick={printHistory}>
+          <Printer className="mr-2 size-4" />Imprimer les lignes (Word)
+        </Button>
+        <div className="relative w-full min-w-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            type="search"
+            aria-label="Rechercher dans les mouvements APS"
+            placeholder="Rechercher un mouvement ou une observation..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-10 w-full pl-9"
+          />
+        </div>
       </div>
       <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full min-w-[850px] border-collapse text-left text-sm">
@@ -259,14 +377,4 @@ export default function MouvementApsEvenements({
       </section>
     </div>
   );
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;",
-  })[character] || character);
 }

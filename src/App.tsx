@@ -141,7 +141,7 @@ export default function App() {
           <Route path="mouvements-cles" element={<ControleAcces />} />
           <Route path="carte-grise-permis" element={<CarteGrisePermis />} />
           <Route path="dechets-levee" element={<DechetsLevee />} />
-          <Route path="mouvements-aps" element={<MouvementsAPS canManagePassations={user?.role === 2} />} />
+          <Route path="mouvements-aps" element={<MouvementsAPS />} />
           <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
           <Route path="pond-brut" element={<PondBrut />} />
           <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
