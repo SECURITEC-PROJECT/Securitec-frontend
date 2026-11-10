@@ -15,9 +15,11 @@ import {
   type MotorcycleMovement,
   type RegisterEmployeeOption,
 } from "@/lib/service-api";
-import { LogOut, Pencil, Plus, Printer, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, FileUp, LogOut, Pencil, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 type MovementKind = "velo" | "moto";
 type MovementEntry = BicycleMovement | MotorcycleMovement;
@@ -84,6 +86,8 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   }>({ key: "", entries: [], error: "" });
   const [editingEntry, setEditingEntry] = useState<MovementEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -173,6 +177,12 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
       { label: "Moto", value: (row) => (row as MotorcycleMovement).moto }, { label: "Observation", value: (row) => (row as MotorcycleMovement).observation },
       { label: "Heure sortie", value: (row) => (row as MotorcycleMovement).heureSortie }, { label: "Annulé le", value: (row) => (row as MotorcycleMovement).annuleLe },
     ];
+  const spreadsheetHeaders = isBicycle
+    ? ["Date", "Heure entrée", "Matricule", "Marque vélo"]
+    : ["Date", "Heure entrée", "Moto", "Observation"];
+  const spreadsheetRows = filteredEntries.map((entry) => isBicycle
+    ? [entry.date, entry.heureEntree, (entry as BicycleMovement).matricule, (entry as BicycleMovement).marqueVelo]
+    : [entry.date, entry.heureEntree, (entry as MotorcycleMovement).moto, (entry as MotorcycleMovement).observation || ""]);
 
   const resetForm = () => {
     setForm(blankForm());
@@ -180,6 +190,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     setEmployeeQuery("");
     setEditingEntry(null);
     setShowEmployeeOptions(false);
+    setFormOpen(false);
   };
 
   const selectEmployee = (selected: RegisterEmployeeOption) => {
@@ -252,6 +263,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
 
   const editEntry = (entry: MovementEntry) => {
     setEditingEntry(entry);
+    setFormOpen(true);
     if (isBicycle) {
       const bicycle = entry as BicycleMovement;
       setForm({
@@ -280,6 +292,70 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
       });
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const importMovements = async (file?: File) => {
+    if (!file) return;
+    if (!siteId) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalizeHeader = (value: unknown) => normalize(String(value ?? "").trim()).replace(/[^a-z0-9]/g, "");
+      const headers = (sheet[0] || []).map(normalizeHeader);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.some((alias) => header === normalizeHeader(alias)));
+      const cols = isBicycle
+        ? { date: column("Date"), time: column("Heure entrée", "Heure d’entrée", "Heure"), matricule: column("Matricule", "Employé"), vehicle: column("Marque vélo", "Vélo", "Marque"), observation: -1 }
+        : { date: column("Date"), time: column("Heure entrée", "Heure d’entrée", "Heure"), matricule: -1, vehicle: column("Moto"), observation: column("Observation", "Remarque") };
+      const required = isBicycle ? [cols.date, cols.time, cols.matricule, cols.vehicle] : [cols.date, cols.time, cols.vehicle];
+      if (required.some((index) => index < 0)) throw new Error("Colonnes requises manquantes. Téléchargez le modèle Excel de ce registre.");
+      const get = (cells: string[], index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+      const parseDate = (value: string) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+        const french = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(value);
+        if (french) return `${french[3]}-${french[2].padStart(2, "0")}-${french[1].padStart(2, "0")}`;
+        const serial = Number(value);
+        return Number.isFinite(serial) && serial > 20000 && serial < 80000 ? new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10) : "";
+      };
+      const parseTime = (value: string) => {
+        const time = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value);
+        if (time) return `${time[1].padStart(2, "0")}:${time[2]}`;
+        const fraction = Number(value);
+        if (Number.isFinite(fraction) && fraction >= 0 && fraction < 1) {
+          const minutes = Math.round(fraction * 24 * 60);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+        return "";
+      };
+      const rows = sheet.slice(1).map((cells, index) => ({
+        line: index + 2, date: parseDate(get(cells, cols.date)), time: parseTime(get(cells, cols.time)),
+        matricule: get(cells, cols.matricule), vehicle: get(cells, cols.vehicle), observation: get(cells, cols.observation),
+      })).filter((row) => row.date || row.matricule || row.vehicle || row.observation);
+      if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      const created: MovementEntry[] = [];
+      const failures: string[] = [];
+      for (const row of rows) {
+        const matchedEmployee = isBicycle ? employees.find((item) => item.matricule.toLocaleUpperCase() === row.matricule.toLocaleUpperCase()) : null;
+        if (!row.date || !row.time || !row.vehicle || (isBicycle && !matchedEmployee)) {
+          failures.push(`Ligne ${row.line} : date, heure, ${isBicycle ? "matricule connu" : "moto"} et informations requises.`);
+          continue;
+        }
+        try {
+          const entry = isBicycle
+            ? await serviceApi.createBicycleMovement({ date: row.date, heureEntree: row.time, matricule: matchedEmployee!.matricule, marqueVelo: row.vehicle, prenom: matchedEmployee!.firstName, section: matchedEmployee!.section, siteId })
+            : await serviceApi.createMotorcycleMovement({ date: row.date, heureEntree: row.time, moto: row.vehicle, observation: row.observation, siteId });
+          created.push(entry);
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (created.length) setRegistry((current) => ({ key: currentKey, error: "", entries: [...created.reverse(), ...(current.key === currentKey ? current.entries : [])] }));
+      if (failures.length) toast.warning(`${created.length} ligne(s) importée(s), ${failures.length} ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${created.length} mouvement(s) importé(s).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const deleteEntry = async (entry: MovementEntry) => {
@@ -432,7 +508,8 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     <div className="two-wheel-module space-y-5">
       <PageHeader title={title} subtitle={isBicycle
         ? "Enregistrement des entrées de vélos par employé."
-        : "Enregistrement des entrées et sorties de motos."} />
+        : "Enregistrement des entrées et sorties de motos."}
+        action={<Button type="button" disabled={!siteId} onClick={() => { resetForm(); setFormOpen(true); }}><Plus className="mr-2 size-4" />Nouvelle entrée</Button>} />
       <div className="max-w-xl">
         <SitePicker
           id={`${kind}-movement-site`}
@@ -449,6 +526,8 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
         {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
       </div>
 
+      <div className={`two-wheel-entry-shell ${formOpen ? "is-open" : ""}`} aria-hidden={!formOpen} role={formOpen ? "dialog" : undefined} aria-modal={formOpen ? true : undefined} aria-label={editingEntry ? "Modifier un mouvement" : `Nouvelle entrée ${isBicycle ? "vélo" : "moto"}`}>
+      <button type="button" className="two-wheel-modal-close" aria-label="Fermer le formulaire" onClick={() => setFormOpen(false)}>×</button>
       <Panel title={editingEntry ? "Modifier un mouvement" : `Nouvelle entrée ${isBicycle ? "vélo" : "moto"}`}>
         <form className="two-wheel-form space-y-5" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -526,13 +605,26 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           </div>
         </form>
       </Panel>
+      </div>
 
       <div className="two-wheel-registry">
       <Panel title={`Historique ${isBicycle ? "des vélos" : "des motos"} (${filteredEntries.length})`}>
-        <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="two-wheel-toolbar mb-4 flex flex-wrap items-end gap-3">
           <div className="relative min-w-[260px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input aria-label={`Rechercher dans ${title}`} placeholder="Rechercher dans le registre…" className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
+          </div>
+          <div className="two-wheel-actions">
+            <label className={`two-wheel-import ${!siteId || loading || importing ? "is-disabled" : ""}`}>
+              <FileUp className="size-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || loading || importing} onChange={(event) => { void importMovements(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button type="button" variant="outline" onClick={() => exportXlsx(`modele-${isBicycle ? "mouvements-velos" : "mouvements-motos"}.xlsx`, title, spreadsheetHeaders, [])}>
+              <FileDown className="mr-2 size-4" />Modèle Excel
+            </Button>
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`${isBicycle ? "mouvements-velos" : "mouvements-motos"}-${today()}.xlsx`, title, spreadsheetHeaders, spreadsheetRows)}>
+              <Download className="mr-2 size-4" />Exporter Excel
+            </Button>
           </div>
           <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} columns={exportColumns} filename={isBicycle ? "mouvements-velos" : "mouvements-motos"} />
           <Button type="button" variant="outline" disabled={loading || !entries.length} onClick={printHistory}>

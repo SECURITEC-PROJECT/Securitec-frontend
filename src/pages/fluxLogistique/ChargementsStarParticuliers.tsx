@@ -5,13 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi, type StarParticulierLoading } from "@/lib/service-api";
-import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, FileUp, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 const designationGroups = [
   { label: "Palette", options: ["1055 x 1310", "1000 x 1200", "800 x 1200"] },
@@ -61,6 +64,26 @@ const emptyForm = (): LoadingForm => ({
 });
 
 const numberField = (value: string, maxLength: number) => value === "" || new RegExp(`^\\d{1,${maxLength}}$`).test(value);
+const loadingHeaders = ["Type de chargement", "Date", "Heure d'entrée (HE)", "Heure de sortie (HS)", "Véhicule (matricule)", "Immatriculation du camion", "Propriétaire", "Nom chauffeur", "Désignation", "Quantité", "Poids", "Destination", "Provenance", "LP", "Titre", "Plomb"];
+const excelDate = (value: string) => {
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const fr = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+  if (fr) return `${fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
+  const serial = Number(text);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) return new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10);
+  return "";
+};
+const excelTime = (value: string) => {
+  const text = value.trim();
+  const serial = Number(text);
+  if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+    const minutes = Math.round(serial * 1440);
+    return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})/.exec(text);
+  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "";
+};
 export default function ChargementsStarParticuliers() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
@@ -70,6 +93,8 @@ export default function ChargementsStarParticuliers() {
   const [loadError, setLoadError] = useState("");
   const [form, setForm] = useState<LoadingForm>(emptyForm);
   const [editing, setEditing] = useState<StarParticulierLoading | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -137,8 +162,9 @@ export default function ChargementsStarParticuliers() {
   }, [siteId]);
 
   const resetForm = () => {
-    setForm(emptyForm());
+    setForm({ ...emptyForm(), typeChargement: form.typeChargement });
     setEditing(null);
+    setFormOpen(false);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -213,6 +239,7 @@ export default function ChargementsStarParticuliers() {
       titre: entry.titre,
       plomb: entry.plomb,
     });
+    setFormOpen(true);
   };
 
   const deleteEntry = async (entry: StarParticulierLoading) => {
@@ -264,6 +291,83 @@ export default function ChargementsStarParticuliers() {
     ]);
   };
 
+  const exportRows = filteredEntries.map((entry) => [
+    entry.typeChargement, entry.date?.slice(0, 10) || "", entry.heureDebut || "", entry.heureSortie, entry.camion,
+    entry.immatriculationVehicule || "", entry.proprietaire, entry.nomChauffeur, entry.designation,
+    entry.quantiteTexte, entry.poids, entry.destinataire, entry.provenance || "", entry.lp, entry.titre, entry.plomb,
+  ]);
+
+  const handleExport = () => {
+    if (!filteredEntries.length) { toast.error("Aucun chargement à exporter."); return; }
+    exportXlsx(`registre-chargements-${form.typeChargement.toLocaleLowerCase()}-${today()}.xlsx`, "Chargements", loadingHeaders, exportRows);
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!siteId) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalize = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      const headers = (sheet[0] || []).map(normalize);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.includes(header));
+      const cols = {
+        type: column("type de chargement", "type"), date: column("date"), start: column("heure d'entree (he)", "heure entree", "he"), end: column("heure de sortie (hs)", "heure sortie", "hs"),
+        truck: column("vehicule (matricule)", "vehicule", "camion"), registration: column("immatriculation du camion", "immatriculation camion", "immatriculation"),
+        owner: column("proprietaire"), driver: column("nom chauffeur", "chauffeur"), designation: column("designation", "produit"), quantity: column("quantite", "comptage"),
+        weight: column("poids"), destination: column("destination", "destinataire"), origin: column("provenance", "origine"), lp: column("lp"), title: column("titre"), seal: column("plomb"),
+      };
+      if ([cols.date, cols.start, cols.end, cols.truck, cols.registration, cols.owner, cols.driver, cols.designation, cols.quantity, cols.weight, cols.destination, cols.origin, cols.lp, cols.title, cols.seal].some((index) => index < 0)) {
+        throw new Error("Colonnes requises manquantes. Téléchargez le modèle Excel du registre.");
+      }
+      const data = sheet.slice(1).map((cells, index) => {
+        const get = (columnIndex: number) => columnIndex < 0 ? "" : String(cells[columnIndex] ?? "").trim();
+        const normalizedType = normalize(get(cols.type));
+        const typeChargement: LoadingType = normalizedType === "star" ? "STAR" : normalizedType === "palette" ? "PALETTE" : normalizedType === "particulier" ? "PARTICULIER" : form.typeChargement;
+        const weightText = get(cols.weight).replace(",", ".");
+        return {
+          line: index + 2, invalidType: Boolean(normalizedType && !["star", "palette", "particulier"].includes(normalizedType)), typeChargement, date: excelDate(get(cols.date)), heureDebut: excelTime(get(cols.start)), heureSortie: excelTime(get(cols.end)),
+          camion: get(cols.truck), immatriculationVehicule: get(cols.registration), proprietaire: get(cols.owner), nomChauffeur: get(cols.driver), designation: get(cols.designation),
+          quantiteTexte: get(cols.quantity), weightText, poids: Number(weightText), destinataire: get(cols.destination), provenance: get(cols.origin), lp: get(cols.lp), titre: get(cols.title), plomb: get(cols.seal),
+        };
+      }).filter((row) => row.camion || row.designation || row.nomChauffeur);
+      if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let saved = 0;
+      let pendingSync = 0;
+      const created: StarParticulierLoading[] = [];
+      const failures: string[] = [];
+      for (const row of data) {
+        const validDesignation = row.typeChargement === "PALETTE"
+          ? paletteDesignations.some((value) => normalize(value) === normalize(row.designation))
+          : designationValues.some((value) => normalize(value) === normalize(row.designation)) && !paletteDesignations.some((value) => normalize(value) === normalize(row.designation));
+        const quantity = Number(row.quantiteTexte);
+        const validWeight = Number.isFinite(row.poids) && row.poids >= 0 && row.poids <= 9999999999.99 && /^\d+(?:\.\d{1,2})?$/.test(row.weightText);
+        if (row.invalidType || !row.date || !row.heureDebut || !row.heureSortie || !row.camion || !row.immatriculationVehicule || !row.proprietaire || !row.nomChauffeur || !validDesignation || !Number.isInteger(quantity) || quantity < 0 || !validWeight || !row.destinataire || !row.provenance || !numberField(row.lp, 6) || !row.lp || !numberField(row.titre, 8) || !row.titre || !numberField(row.plomb, 8) || !row.plomb) {
+          failures.push(`Ligne ${row.line} : données obligatoires invalides ou désignation non valide pour le type sélectionné.`);
+          continue;
+        }
+        try {
+          const entry = await serviceApi.createStarParticulierLoading({ date: row.date, typeChargement: row.typeChargement, heureDebut: row.heureDebut, heureSortie: row.heureSortie, camion: row.camion, immatriculationVehicule: row.immatriculationVehicule, proprietaire: row.proprietaire, nomChauffeur: row.nomChauffeur, designation: row.designation, quantiteTexte: row.quantiteTexte, poids: row.poids, destinataire: row.destinataire, provenance: row.provenance, lp: row.lp, titre: row.titre, plomb: row.plomb, siteId });
+          created.push(entry);
+          saved += 1;
+          if (entry.pendingSync) pendingSync += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (created.length) {
+        setEntries((current) => [...created.reverse(), ...current.filter((row) => !created.some((entry) => entry.id === row.id))]);
+        setEntriesSiteId(siteId);
+      }
+      if (failures.length) toast.warning(`${saved} chargement(s) importé(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${saved} chargement(s) importé(s).${pendingSync ? ` ${pendingSync} en attente de synchronisation.` : ""}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="star-loading-module space-y-5">
       <PageHeader title="Chargements STAR, particuliers et palettes" subtitle="Enregistrement et suivi des chargements sortants." />
@@ -288,25 +392,26 @@ export default function ChargementsStarParticuliers() {
         </Panel>
       )}
 
-      <Panel title={editing ? "Modifier un chargement" : "Enregistrer un chargement"}>
-        <form className="star-loading-form space-y-5" onSubmit={(event) => void submit(event)}>
-          <Tabs
-            className="star-loading-tabs"
-            value={form.typeChargement}
-            onValueChange={(value) => setForm((current) => ({
-              ...current,
-              typeChargement: value as LoadingType,
-              designation: value === "PALETTE"
-                ? (paletteDesignations.includes(current.designation) ? current.designation : "")
-                : (paletteDesignations.includes(current.designation) ? "" : current.designation),
-            }))}
-          >
-            <TabsList className="star-loading-tab-list" aria-label="Type de chargement">
-              <TabsTrigger value="STAR">STAR</TabsTrigger>
-              <TabsTrigger value="PARTICULIER">Particulier</TabsTrigger>
-              <TabsTrigger value="PALETTE">Palette</TabsTrigger>
-            </TabsList>
-          </Tabs>
+      <Tabs
+        className="star-loading-tabs"
+        value={form.typeChargement}
+        onValueChange={(value) => {
+          if (value !== "STAR" && value !== "PARTICULIER" && value !== "PALETTE") return;
+          setEditing(null);
+          setForm({ ...emptyForm(), typeChargement: value });
+        }}
+      >
+        <TabsList className="star-loading-tab-list" aria-label="Type de chargement">
+          <TabsTrigger value="STAR">STAR</TabsTrigger>
+          <TabsTrigger value="PARTICULIER">Particulier</TabsTrigger>
+          <TabsTrigger value="PALETTE">Palette</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <div className="flex justify-end"><Button type="button" onClick={() => { setEditing(null); setForm({ ...emptyForm(), typeChargement: form.typeChargement }); setFormOpen(true); }} disabled={!siteId}><Plus className="mr-2 size-4" />Nouveau chargement</Button></div>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="star-loading-entry-modal">
+      <section className="star-loading-form-card">
+        <DialogHeader className="star-loading-modal-header"><span className="star-loading-modal-icon"><Plus className="size-5" /></span><div><DialogTitle>{editing ? "Modifier un chargement" : `Nouveau chargement ${form.typeChargement === "STAR" ? "STAR" : form.typeChargement === "PALETTE" ? "palette" : "particulier"}`}</DialogTitle><DialogDescription>Renseignez les informations du chargement sortant.</DialogDescription></div></DialogHeader>
+        <form className="star-loading-form space-y-5 p-4 sm:p-6" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
               <Label htmlFor="loading-date">Date</Label>
@@ -424,7 +529,7 @@ export default function ChargementsStarParticuliers() {
             </Button>
           </div>
         </form>
-      </Panel>
+      </section><DialogFooter className="star-loading-modal-footer"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></DialogFooter></DialogContent></Dialog>
 
       <section id="star-loading-print-area" className="star-loading-registry">
       <Panel title={`Registre des chargements ${form.typeChargement === "STAR" ? "STAR" : form.typeChargement === "PALETTE" ? "Palette" : "Particuliers"}`}>
@@ -439,9 +544,15 @@ export default function ChargementsStarParticuliers() {
               className="min-h-11 pl-9"
             />
           </div>
-          <Button type="button" variant="outline" className="star-loading-print-button print:hidden" disabled={loading || !visibleEntries.length} onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" /> Imprimer le registre
-          </Button>
+          <div className="star-loading-actions print:hidden">
+            <label className={`star-loading-import ${!siteId || importing ? "pointer-events-none opacity-50" : ""}`}>
+              <FileUp aria-hidden="true" className="size-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button type="button" variant="outline" disabled={loading || !filteredEntries.length} onClick={handleExport}><Download className="mr-2 size-4" />Exporter Excel</Button>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-chargements.xlsx", "Chargements", loadingHeaders, [])}><FileDown className="mr-2 size-4" />Modèle Excel</Button>
+            <Button type="button" variant="outline" className="star-loading-print-button" disabled={loading || !visibleEntries.length} onClick={handlePrint}><Printer className="mr-2 h-4 w-4" /> Imprimer le registre</Button>
+          </div>
         </div>
         {filteredEntries.length ? (
           <div className="overflow-hidden rounded-lg border star-loading-screen">

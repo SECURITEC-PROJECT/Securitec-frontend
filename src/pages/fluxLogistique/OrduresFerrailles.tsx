@@ -11,7 +11,10 @@ import {
   type RegisterEmployeeOption,
   type WasteScrapRegisterEntry,
 } from "@/lib/service-api";
-import { Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, FileUp, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -49,6 +52,26 @@ const formatDate = (value: string) => {
   return `${day}/${month}/${year}`;
 };
 
+const excelDate = (value: string) => {
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const fr = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+  if (fr) return `${fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
+  const serial = Number(text);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) return new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10);
+  return "";
+};
+const excelTime = (value: string) => {
+  const text = value.trim();
+  const serial = Number(text);
+  if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+    const minutes = Math.round(serial * 1440);
+    return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})/.exec(text);
+  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "";
+};
+
 const normalize = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
 
@@ -76,6 +99,8 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
   const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [employeeError, setEmployeeError] = useState("");
@@ -146,6 +171,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     setEmployeeQuery("");
     setEditingId(null);
     setShowEmployeeOptions(false);
+    setFormOpen(false);
   };
 
   const handleEmployeeQueryChange = (value: string) => {
@@ -221,7 +247,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       matricule: entry.matricule,
       section: entry.section,
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const deleteEntry = async (entry: WasteScrapRegisterEntry) => {
@@ -312,6 +338,74 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     printWindow.document.close();
   };
 
+  const spreadsheetHeaders = isScrap
+    ? ["Date", "Heure", "Prénom", "Matricule", "Section", "Désignation", "Nombre", "Motif"]
+    : ["Date", "Heure", "Prénom", "Matricule", "Section", "Observation"];
+  const exportRows = filteredEntries.map((entry) => isScrap
+    ? [entry.date, entry.heure, entry.prenom, entry.matricule, entry.section, entry.designation || "", entry.nombre ?? "", entry.motif || ""]
+    : [entry.date, entry.heure, entry.prenom, entry.matricule, entry.section, entry.observation || ""]);
+  const handleExport = () => {
+    if (!filteredEntries.length) { toast.error("Aucun enregistrement à exporter."); return; }
+    exportXlsx(`registre-${kind}-${today()}.xlsx`, title, spreadsheetHeaders, exportRows);
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!site?.id) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalizeHeader = (value: unknown) => normalize(String(value ?? "").trim()).replace(/[^a-z0-9]/g, "");
+      const headers = (sheet[0] || []).map(normalizeHeader);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.some((alias) => header === normalizeHeader(alias)));
+      const cols = {
+        date: column("Date"), time: column("Heure"), matricule: column("Matricule", "Employé", "Employe"),
+        observation: column("Observation", "Remarque"), designation: column("Désignation", "Designation", "Matériel", "Materiel"),
+        count: column("Nombre", "Quantité", "Quantite"), reason: column("Motif"),
+      };
+      const required = isScrap ? [cols.date, cols.time, cols.matricule, cols.designation, cols.count, cols.reason] : [cols.date, cols.time, cols.matricule, cols.observation];
+      if (required.some((index) => index < 0)) throw new Error("Colonnes requises manquantes. Téléchargez le modèle Excel du registre.");
+      const data = sheet.slice(1).map((cells, index) => {
+        const get = (columnIndex: number) => columnIndex < 0 ? "" : String(cells[columnIndex] ?? "").trim();
+        const matricule = get(cols.matricule);
+        const matches = employees.filter((item) => item.matricule.toLocaleUpperCase() === matricule.toLocaleUpperCase());
+        return {
+          line: index + 2, date: excelDate(get(cols.date)), heure: excelTime(get(cols.time)), matricule,
+          observation: get(cols.observation), designation: get(cols.designation), nombre: Number(get(cols.count)), motif: get(cols.reason),
+          employee: matches.length === 1 ? matches[0] : null,
+        };
+      }).filter((row) => row.date || row.matricule || (isScrap ? row.designation : row.observation));
+      if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      const created: WasteScrapRegisterEntry[] = [];
+      const failures: string[] = [];
+      for (const row of data) {
+        const invalidFields = !row.date || !row.heure || !row.employee || (isScrap
+          ? !row.designation || row.designation.length > 5000 || !Number.isSafeInteger(row.nombre) || row.nombre < 1 || row.nombre > 1000000 || !row.motif || row.motif.length > 5000
+          : !row.observation || row.observation.length > 5000);
+        if (invalidFields) {
+          failures.push(`Ligne ${row.line} : date, heure, matricule d’employé et champs du registre requis.`);
+          continue;
+        }
+        try {
+          const entry = await serviceApi.createWasteScrapEntry(kind, {
+            date: row.date, heure: row.heure, matricule: row.employee!.matricule, siteId: site.id,
+            ...(isScrap ? { designation: row.designation, nombre: row.nombre, motif: row.motif } : { observation: row.observation }),
+          });
+          created.push(entry);
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (created.length) setEntries((current) => [...created.reverse(), ...current]);
+      if (failures.length) toast.warning(`${created.length} ligne(s) importée(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${created.length} enregistrement(s) importé(s).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return <div className={isScrap ? "scrap-module space-y-5" : "space-y-6"}>
     <PageHeader title={title} subtitle={`Saisie et consultation des ${isScrap ? "sorties de ferrailles" : "sorties d’ordures"} par employé.`} />
     <div className="max-w-xl">
@@ -330,8 +424,11 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
     </div>
 
-    <Panel title={editingId ? `Modifier un enregistrement ${isScrap ? "ferraille" : "ordure"}` : `Nouvel enregistrement ${isScrap ? "ferraille" : "ordure"}`}>
-      <form className={isScrap ? "scrap-form space-y-5" : "space-y-5"} onSubmit={(event) => void submit(event)}>
+    <div className="flex justify-end"><Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setEmployee(null); setEmployeeQuery(""); setEmployeeError(""); setShowEmployeeOptions(false); setFormOpen(true); }} disabled={!site?.id}><Plus className="mr-2 size-4" />Nouvel enregistrement</Button></div>
+    <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="waste-scrap-entry-modal">
+    <section className="waste-scrap-form-card">
+      <DialogHeader className="waste-scrap-modal-header"><span className="waste-scrap-modal-icon"><Plus className="size-5" /></span><div><DialogTitle>{editingId ? `Modifier un enregistrement ${isScrap ? "ferraille" : "ordure"}` : `Nouvel enregistrement ${isScrap ? "ferraille" : "ordure"}`}</DialogTitle><DialogDescription>Saisissez la date, l’employé et les informations de l’enregistrement.</DialogDescription></div></DialogHeader>
+      <form className={`${isScrap ? "scrap-form" : ""} space-y-5 p-4 sm:p-6`} onSubmit={(event) => void submit(event)}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor={`${kind}-date`}>Date</Label>
@@ -407,13 +504,21 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
           </Button>
         </div>
       </form>
-    </Panel>
+    </section><DialogFooter className="waste-scrap-modal-footer"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></DialogFooter></DialogContent></Dialog>
 
     <div className={isScrap ? "scrap-registry" : ""}><Panel title={`Historique ${isScrap ? "ferrailles" : "ordures"} (${filteredEntries.length})`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-[260px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input aria-label={`Rechercher dans le registre ${kind}`} placeholder={`Rechercher date, matricule, nom, section ou ${isScrap ? "désignation" : "observation"}…`} className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </div>
+        <div className="waste-scrap-actions">
+          <label className={`waste-scrap-import ${!site?.id || importing || loading ? "pointer-events-none opacity-50" : ""}`}>
+            <FileUp aria-hidden="true" className="size-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+            <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || importing || loading} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          </label>
+          <Button type="button" variant="outline" disabled={loading || !filteredEntries.length} onClick={handleExport}><Download className="mr-2 size-4" />Exporter Excel</Button>
+          <Button type="button" variant="outline" onClick={() => exportXlsx(`modele-${kind}.xlsx`, title, spreadsheetHeaders, [])}><FileDown className="mr-2 size-4" />Modèle Excel</Button>
         </div>
         <Button type="button" variant="outline" className={isScrap ? "scrap-print-button" : ""} disabled={loading || !entries.length} onClick={printHistory}>
           <Printer className="mr-2 size-4" />
@@ -425,7 +530,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         : currentLoadError ? <p className="py-6 text-center text-sm text-destructive">{currentLoadError}</p>
         : !entries.length ? <Empty text="Aucun enregistrement pour ce site." />
           : <div className={`${isScrap ? "scrap-table-wrap" : ""} overflow-x-auto rounded-lg border`}>
-            <table className={`${isScrap ? "scrap-table" : ""} w-full min-w-[850px] text-left text-sm`}>
+            <table className={`waste-scrap-table ${isScrap ? "scrap-table" : ""} w-full min-w-[850px] text-left text-sm`}>
               <thead className={`${isScrap ? "scrap-table-head" : ""} bg-muted/70 text-xs uppercase text-muted-foreground`}>
                 <tr>{["Date", "Heure", "Prénom", "Matricule", "Section", isScrap ? "Désignation" : "Observation", ...(isScrap ? ["Nombre", "Motif"] : []), "Actions"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
               </thead>

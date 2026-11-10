@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { LogOut, Package, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, FileUp, LogOut, Package, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { Empty, PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,9 @@ import { confirmDeletion } from "@/lib/deletion-toast";
 import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
 import { RegistryAttachments } from "@/components/RegistryAttachments";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 type FormData = { date: string; heureEntree: string; materiels: string; nombre: string; prestataireId: string };
 const today = () => {
@@ -28,6 +31,26 @@ const displayDate = (date: string) => {
   const [year, month, day] = date.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
 };
+const materialHeaders = ["Date", "Heure d'entrée", "Matériels", "Nombre", "Prestataire"];
+const excelDate = (value: string) => {
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const fr = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+  if (fr) return `${fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
+  const serial = Number(text);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) return new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10);
+  return "";
+};
+const excelTime = (value: string) => {
+  const text = value.trim();
+  const serial = Number(text);
+  if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+    const minutes = Math.round(serial * 1440);
+    return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})/.exec(text);
+  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "";
+};
 
 export default function MaterielsSousTraitant() {
   const { sites, canCreateSite, siteError, addSite } = useSites();
@@ -40,6 +63,8 @@ export default function MaterielsSousTraitant() {
   const [saving, setSaving] = useState(false);
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [periodStart, setPeriodStart] = useState("");
@@ -60,6 +85,7 @@ export default function MaterielsSousTraitant() {
   const resetForm = () => {
     setForm(blankForm());
     setEditingId(null);
+    setFormOpen(false);
   };
 
   useEffect(() => {
@@ -125,7 +151,7 @@ export default function MaterielsSousTraitant() {
       nombre: String(entry.nombre),
       prestataireId: entry.providerId,
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const deleteEntry = async (entry: SubcontractorMaterialMovement) => {
@@ -178,11 +204,65 @@ export default function MaterielsSousTraitant() {
     ]);
   };
 
+  const exportRows = filteredEntries.map((entry) => [entry.date, entry.heureEntree, entry.materiels, entry.nombre, entry.provider]);
+  const handleExport = () => {
+    if (!filteredEntries.length) { toast.error("Aucun mouvement à exporter."); return; }
+    exportXlsx(`registre-materiels-sous-traitant-${today()}.xlsx`, "Materiels sous-traitant", materialHeaders, exportRows);
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!site?.id) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalize = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      const headers = (sheet[0] || []).map(normalize);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.includes(header));
+      const cols = { date: column("date"), time: column("heure d'entree", "heure entree", "heure d'entree du materiel"), materials: column("materiels", "materiel", "designation"), count: column("nombre", "nombre de materiels", "quantite"), provider: column("prestataire", "entreprise") };
+      if ([cols.date, cols.time, cols.materials, cols.count, cols.provider].some((index) => index < 0)) {
+        throw new Error("Colonnes requises manquantes. Téléchargez le modèle Excel du registre.");
+      }
+      const data = sheet.slice(1).map((cells, index) => {
+        const get = (columnIndex: number) => columnIndex < 0 ? "" : String(cells[columnIndex] ?? "").trim();
+        const providerName = get(cols.provider);
+        const matches = providers.filter((item) => item.active && normalize(item.name) === normalize(providerName));
+        return { line: index + 2, date: excelDate(get(cols.date)), heureEntree: excelTime(get(cols.time)), materiels: get(cols.materials), nombre: Number(get(cols.count)), providerName, provider: matches.length === 1 ? matches[0] : null };
+      }).filter((row) => row.date || row.materiels || row.providerName);
+      if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let saved = 0;
+      let pendingSync = 0;
+      const created: SubcontractorMaterialMovement[] = [];
+      const failures: string[] = [];
+      for (const row of data) {
+        if (!row.date || !row.heureEntree || !row.materiels || row.materiels.length > 20000 || !Number.isSafeInteger(row.nombre) || row.nombre < 1 || row.nombre > 1000000 || !row.provider) {
+          failures.push(`Ligne ${row.line} : date, heure, matériel, quantité ou prestataire invalide.`);
+          continue;
+        }
+        try {
+          const entry = await serviceApi.createSubcontractorMaterial({ date: row.date, heureEntree: row.heureEntree, materiels: row.materiels, nombre: row.nombre, prestataireId: row.provider.id, providerName: row.provider.name, siteId: site.id });
+          created.push(entry);
+          saved += 1;
+          if (entry.pendingSync) pendingSync += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (created.length) setEntries((current) => [...created.reverse(), ...current]);
+      if (failures.length) toast.warning(`${saved} mouvement(s) importé(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${saved} mouvement(s) importé(s).${pendingSync ? ` ${pendingSync} en attente de synchronisation.` : ""}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return <div className="subcontractor-materials-module space-y-5">
     <PageHeader title="Matériels sous-traitant" subtitle="Enregistrer les entrées de matériel et leur heure de sortie." />
     <div className="max-w-xl">
       <SitePicker id="materiel-sous-traitant-site" value={selectedSiteName} type={site?.type || siteType} sites={sites} canCreate={canCreateSite} onAdd={addSite}
-        onChange={(name, type) => { setSiteName(name); setSiteType(type); if (editingId) resetForm(); }} />
+        onChange={(name, type) => { setSiteName(name); setSiteType(type); resetForm(); }} />
       {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
     </div>
     {entries.some((entry) => entry.pendingSync) && <Panel title="Synchronisation hors ligne">
@@ -193,8 +273,11 @@ export default function MaterielsSousTraitant() {
       </ul>
     </Panel>}
 
-    <Panel title={editingId ? "Modifier le mouvement" : "Nouvelle entrée de matériel"}>
-      <form onSubmit={(event) => void submit(event)} className="subcontractor-materials-form space-y-5">
+    <div className="flex justify-end"><Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setFormOpen(true); }} disabled={!site?.id}><Plus className="mr-2 size-4" />Nouvelle entrée</Button></div>
+    <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="subcontractor-materials-entry-modal">
+    <section className="subcontractor-materials-form-card">
+      <DialogHeader className="subcontractor-materials-modal-header"><span className="subcontractor-materials-modal-icon"><Package className="size-5" /></span><div><DialogTitle>{editingId ? "Modifier le mouvement" : "Nouvelle entrée de matériel"}</DialogTitle><DialogDescription>Renseignez le matériel, la quantité et le prestataire concerné.</DialogDescription></div></DialogHeader>
+      <form onSubmit={(event) => void submit(event)} className="subcontractor-materials-form space-y-5 p-4 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5"><Label htmlFor="materiel-date">Date</Label><Input id="materiel-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></div>
           <div className="space-y-1.5"><Label htmlFor="materiel-heure-entree">Heure d’entrée</Label><Input id="materiel-heure-entree" type="time" required value={form.heureEntree} onChange={(event) => setForm({ ...form, heureEntree: event.target.value })} /></div>
@@ -207,7 +290,7 @@ export default function MaterielsSousTraitant() {
           <Button type="submit" disabled={saving || !site?.id || !providers.some((provider) => provider.active || provider.id === form.prestataireId)}>{editingId ? <Save className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}{saving ? "Enregistrement…" : editingId ? "Enregistrer les modifications" : "Enregistrer l’entrée"}</Button>
         </div>
       </form>
-    </Panel>
+    </section><DialogFooter className="subcontractor-materials-modal-footer"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></DialogFooter></DialogContent></Dialog>
 
     <section id="subcontractor-materials-print-area" className="subcontractor-materials-registry">
     <Panel title="Registre des matériels sous-traitant">
@@ -221,6 +304,14 @@ export default function MaterielsSousTraitant() {
             onChange={(event) => setSearch(event.target.value)}
             className="min-h-11 pl-9"
           />
+        </div>
+        <div className="subcontractor-materials-actions print:hidden">
+          <label className={`subcontractor-materials-import ${!site?.id || importing ? "pointer-events-none opacity-50" : ""}`}>
+            <FileUp aria-hidden="true" className="size-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+            <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          </label>
+          <Button type="button" variant="outline" disabled={loading || !filteredEntries.length} onClick={handleExport}><Download className="mr-2 size-4" />Exporter Excel</Button>
+          <Button type="button" variant="outline" onClick={() => exportXlsx("modele-materiels-sous-traitant.xlsx", "Materiels sous-traitant", materialHeaders, [])}><FileDown className="mr-2 size-4" />Modèle Excel</Button>
         </div>
         <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} filename="materiels-sous-traitants" columns={[
           { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
