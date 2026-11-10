@@ -1381,6 +1381,7 @@ main table tbody tr:last-child { border-bottom: 0; }
 
 .two-wheel-module { width: 100%; min-width: 0; }
 .two-wheel-module > .page-heading { margin-bottom: 0; }
+.two-wheel-module > .page-heading > button { flex: 0 0 auto; }
 .two-wheel-module .panel-card { min-width: 0; border-color: #e2e6ed; border-radius: 9px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
 .two-wheel-module .panel-card > h2 { color: #26354a; font-size: 14px; }
 .two-wheel-form { border-top: 3px solid #803bbd; }
@@ -1391,9 +1392,15 @@ main table tbody tr:last-child { border-bottom: 0; }
 .two-wheel-form button[type="submit"] { background: #803bbd; color: #fff; }
 .two-wheel-form button[type="submit"]:hover { background: #6e2fa8; }
 .two-wheel-registry .panel-card { gap: 12px; }
-.two-wheel-registry .panel-card > div:first-of-type { flex-wrap: wrap; }
+.two-wheel-toolbar { min-width: 0; align-items: flex-end; }
+.two-wheel-toolbar > .relative { min-width: min(260px, 100%); }
+.two-wheel-actions { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.two-wheel-actions > button { min-height: 36px; }
+.two-wheel-import { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid #d5deeb; border-radius: 6px; background: #fff; color: #263b5c; font-size: 12px; font-weight: 600; cursor: pointer; }
+.two-wheel-import:hover { border-color: #9eb7de; background: #f3f7fd; }
+.two-wheel-import.is-disabled { pointer-events: none; opacity: .5; }
 .two-wheel-table-wrap { border-color: #e1e5ec; }
-.two-wheel-table { border: 1px solid #e1e5ec; }
+.two-wheel-table { border: 1px solid #e1e5ec; border-collapse: separate; border-spacing: 0; background: #fff; }
 .two-wheel-table th, .two-wheel-table td { border: 1px solid #e7eaf0; padding: 7px 9px; }
 .two-wheel-table-head { background: #f5f7fa !important; }
 .two-wheel-table-head th { color: #37465a; font-size: 10px; font-weight: 700; white-space: nowrap; }
@@ -1402,9 +1409,24 @@ main table tbody tr:last-child { border-bottom: 0; }
 .two-wheel-registry .two-wheel-table td button[aria-label^="Imprimer"], .two-wheel-registry .two-wheel-table td button[aria-label^="Modifier"] { color: #7131a9; }
 .two-wheel-registry .two-wheel-table td button[aria-label^="Imprimer"]:hover, .two-wheel-registry .two-wheel-table td button[aria-label^="Modifier"]:hover { background: #f0e8fa; color: #7131a9; }
 .two-wheel-registry .two-wheel-table td button[aria-label^="Annuler"] { color: #dc2626; }
+.two-wheel-entry-shell:not(.is-open) { display: none; }
+.two-wheel-entry-shell.is-open { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 24px; }
+.two-wheel-entry-shell.is-open::before { position: fixed; inset: 0; z-index: -1; background: rgb(9 22 45 / 58%); content: ""; }
+.two-wheel-entry-shell.is-open > .panel-card { position: relative; width: min(900px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; border-color: #e4d8f0; border-radius: 14px; box-shadow: 0 24px 80px #20102e44; }
+.two-wheel-modal-close { position: absolute; top: 30px; right: max(calc((100vw - 900px) / 2 + 16px), 36px); z-index: 2; display: grid; width: 34px; height: 34px; place-items: center; border-radius: 8px; background: #f1f5fb; color: #243b69; font-size: 24px; line-height: 1; }
+.two-wheel-modal-close:hover { background: #e2ebf8; }
 @media (max-width: 640px) {
   .two-wheel-module .panel-card { padding: 12px; }
-  .two-wheel-registry .panel-card > div:first-of-type > div { min-width: 100%; }
+  .two-wheel-module > .page-heading { align-items: flex-start; }
+  .two-wheel-module > .page-heading > button { width: 100%; }
+  .two-wheel-entry-shell.is-open { align-items: flex-end; padding: 8px; }
+  .two-wheel-entry-shell.is-open > .panel-card { max-height: calc(100vh - 16px); border-radius: 14px 14px 8px 8px; }
+  .two-wheel-modal-close { top: 14px; right: 22px; }
+  .two-wheel-toolbar { align-items: stretch; flex-direction: column; }
+  .two-wheel-toolbar > *, .two-wheel-toolbar > .relative { width: 100%; min-width: 0; }
+  .two-wheel-actions { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two-wheel-actions > button, .two-wheel-actions > label { width: 100%; min-width: 0; min-height: 40px; padding-right: 8px; padding-left: 8px; font-size: 11px; }
+  .two-wheel-table { min-width: 760px; }
 }
 
 .star-materials-module { width: 100%; min-width: 0; }
