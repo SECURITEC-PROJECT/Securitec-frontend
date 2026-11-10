@@ -1037,6 +1037,12 @@ main table tbody tr:last-child { border-bottom: 0; }
 }
 .waste-flow-module { min-width: 0; width: 100%; }
 .waste-flow-module > .page-heading { margin-bottom: 0; }
+.waste-flow-module .waste-flow-panel.panel-card { display: grid; gap: 12px; padding: 16px; border-color: #e2e6ed; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
+.waste-flow-module .waste-flow-panel > .courrier-history-toolbar { margin-bottom: 0; }
+.waste-flow-module .waste-flow-panel > .courrier-filter-grid { margin-bottom: 0; }
+.waste-flow-module .waste-flow-shift { display: grid; grid-template-columns: max-content minmax(0, 480px); align-items: center; gap: 10px; }
+.waste-flow-module .waste-flow-shift label { color: #53637b; font-size: 11px; font-weight: 650; }
+.waste-flow-module .waste-flow-shift select { height: 40px; background: #fff; font-size: 12px; }
 .waste-flow-module > .panel-card, .waste-flow-registry .panel-card { min-width: 0; border-color: #e2e6ed; border-radius: 9px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
 .waste-flow-module > .panel-card > h2, .waste-flow-registry .panel-card > h2 { color: #26354a; font-size: 14px; }
 .waste-flow-form { border: 1px solid #e7eaf0; border-top: 3px solid #803bbd; border-radius: 8px; background: #fff; padding: 16px; }
@@ -1046,17 +1052,23 @@ main table tbody tr:last-child { border-bottom: 0; }
 .waste-flow-form input[type="file"] { padding: 7px; }
 .waste-flow-form button[type="submit"] { background: #803bbd; color: #fff; }
 .waste-flow-form button[type="submit"]:hover { background: #6e2fa8; }
+.waste-flow-entry-panel .waste-flow-form input:not([type="file"]), .waste-flow-entry-panel .waste-flow-form select { height: 40px; font-size: 12px !important; }
+.waste-flow-entry-panel .waste-flow-form { gap: 14px; padding: 14px; }
+.waste-flow-entry-panel > h2 { margin-bottom: 12px; color: #37465a; font-size: 14px; }
 .waste-flow-outline { border-color: #d9c4ef; color: #7131a9; }
 .waste-flow-outline:hover { border-color: #803bbd; background: #f5effb; color: #7131a9; }
 .waste-flow-primary { background: #803bbd; color: #fff; }
 .waste-flow-primary:hover { background: #6e2fa8; }
 .waste-flow-registry .panel-card { gap: 12px; }
-.waste-flow-filters { align-items: flex-end; }
+.waste-flow-filters { display: grid; gap: 8px; }
+.waste-flow-filter-actions { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; }
 .waste-flow-date-filters { display: flex; flex-wrap: wrap; gap: 8px; }
 .waste-flow-date-filters input { min-width: 0; width: 160px; }
-.waste-flow-actions { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
-.waste-flow-actions > button, .waste-flow-actions > label { min-width: 0; }
+.waste-flow-actions { display: flex; width: 100%; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.waste-flow-actions > button, .waste-flow-actions > label { min-width: 0; min-height: 38px; padding-right: 10px; padding-left: 10px; font-size: 11px; }
 .waste-flow-actions > span { margin-right: auto; }
+.waste-flow-results { padding: 2px 0; }
+.waste-flow-pagination { padding-top: 2px; }
 .waste-flow-table { border: 1px solid #e1e5ec; border-collapse: separate; border-spacing: 0; background: #fff; }
 .waste-flow-table th, .waste-flow-table td { border: 1px solid #e7eaf0; padding: 7px 9px; }
 .waste-flow-table-head { background: #eef3fb !important; }
@@ -1066,21 +1078,30 @@ main table tbody tr:last-child { border-bottom: 0; }
 .waste-flow-table-row--pending { background: #fff8e9; }
 .waste-flow-table td button[aria-label^="Imprimer"], .waste-flow-table td button[aria-label^="Modifier"] { color: #7131a9; }
 .waste-flow-table td button[aria-label^="Imprimer"]:hover, .waste-flow-table td button[aria-label^="Modifier"]:hover { background: #f0e8fa; color: #7131a9; }
+.waste-flow-module .waste-flow-entry-shell.is-open > .waste-flow-entry-panel { width: min(900px, 100%); max-height: calc(100vh - 48px); padding: 16px; }
+.waste-flow-modal-close { top: 28px; right: max(calc((100vw - 900px) / 2 + 14px), 20px); }
 @media (max-width: 640px) {
   .waste-flow-module > .panel-card, .waste-flow-registry .panel-card { padding: 12px; }
+  .waste-flow-module .waste-flow-panel.panel-card { padding: 12px; }
   .waste-flow-form { padding: 12px; }
+  .waste-flow-entry-panel .waste-flow-form { padding: 12px; }
   .waste-flow-module > .page-heading { align-items: flex-start; gap: 12px; }
   .waste-flow-module > .page-heading > button { width: 100%; }
-  .waste-flow-filters { align-items: stretch; flex-direction: column; }
-  .waste-flow-filters > *, .waste-flow-date-filters { width: 100%; max-width: none; }
+  .waste-flow-filters { align-items: stretch; }
+  .waste-flow-filters > *, .waste-flow-filter-actions, .waste-flow-date-filters { width: 100%; max-width: none; }
+  .waste-flow-filter-actions { align-items: stretch; flex-direction: column; }
   .waste-flow-date-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .waste-flow-date-filters input { width: 100%; }
   .waste-flow-actions { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .waste-flow-actions > button, .waste-flow-actions > label { width: 100%; min-height: 40px; padding-right: 8px; padding-left: 8px; font-size: 11px; }
   .waste-flow-actions > span { grid-column: 1 / -1; margin: 0; }
+  .waste-flow-module .waste-flow-shift { grid-template-columns: minmax(0, 1fr); gap: 5px; }
   .waste-flow-registry .panel-card > .overflow-hidden { max-width: 100%; }
   .waste-flow-table { min-width: 1100px; }
   .waste-flow-module .document-flow-modal-close { top: 14px; right: 22px; }
+  .waste-flow-module .waste-flow-entry-shell.is-open { align-items: center; padding: 12px; }
+  .waste-flow-module .waste-flow-entry-shell.is-open > .waste-flow-entry-panel { max-height: calc(100vh - 24px); padding: 12px; border-radius: 14px; }
+  .waste-flow-modal-close { top: 16px; right: 20px; }
 }
 .courrier-module { min-width: 0; width: 100%; }
 .courrier-module .panel-card { min-width: 0; border-color: #e2e6ed; border-radius: 9px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
@@ -1974,6 +1995,15 @@ main table tbody tr:last-child { border-bottom: 0; }
   .waste-flow-module .document-flow-entry-shell.is-open { align-items: flex-end; padding: 8px; }
   .waste-flow-module .document-flow-entry-shell.is-open > .panel-card { max-height: calc(100vh - 16px); border-radius: 14px 14px 8px 8px; }
   .document-flow-modal-close { top: 14px; right: 22px; }
+}
+.document-flow-entry-shell .document-flow-entry-panel, .document-flow-entry-shell .waste-flow-entry-panel { position: relative; }
+.document-flow-entry-shell .document-flow-entry-panel > .document-flow-modal-close { top: 12px; right: 12px; }
+.document-flow-entry-shell .waste-flow-entry-panel > .document-flow-modal-close { top: 12px; right: 12px; }
+.waste-flow-module .document-flow-entry-shell.is-open > .waste-flow-entry-panel { width: min(900px, 100%); }
+@media (max-width: 640px) {
+  .waste-flow-module .document-flow-entry-shell.is-open { align-items: center; padding: 12px; }
+  .waste-flow-module .document-flow-entry-shell.is-open > .waste-flow-entry-panel { max-height: calc(100vh - 24px); padding: 12px; border-radius: 14px; }
+  .document-flow-entry-shell .waste-flow-entry-panel > .document-flow-modal-close { top: 8px; right: 8px; }
 }
 .document-flow-module .document-flow-table { border-color: #d8e1ef; }
 .document-flow-module .document-flow-table th, .document-flow-module .document-flow-table td { border-color: #e2e8f2; }

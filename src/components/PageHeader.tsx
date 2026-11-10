@@ -12,9 +12,9 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
-export function Panel({ title, children }: { title?: string; children: ReactNode }) {
+export function Panel({ title, children, className }: { title?: string; children: ReactNode; className?: string }) {
   return (
-    <section className="panel-card min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+    <section className={`panel-card min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-5 ${className || ""}`}>
       {title && <h2 className="mb-4 text-sm font-semibold">{title}</h2>}
       {children}
     </section>

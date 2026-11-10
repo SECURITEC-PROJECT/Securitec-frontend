@@ -7,7 +7,7 @@ import { printRecord } from "@/lib/printRecord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarDays, Clock3, Download, FileDown, FilePlus2, FileUp, Pencil, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Download, FileDown, FilePlus2, FileUp, MapPin, Pencil, Printer, RefreshCw, Search, Trash2, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { exportXlsx } from "@/lib/export-xlsx";
@@ -178,6 +178,10 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [carrierFilter, setCarrierFilter] = useState("");
+  const [syncStatusFilter, setSyncStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncing, setSyncing] = useState(false);
@@ -191,6 +195,9 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       const date = String(entry.date || "").slice(0, 10);
       if (fromDate && date < fromDate) return false;
       if (toDate && date > toDate) return false;
+      if (carrierFilter && entry.transporteur !== carrierFilter) return false;
+      if (syncStatusFilter === "pending" && !entry.pendingSync) return false;
+      if (syncStatusFilter === "synced" && entry.pendingSync) return false;
       if (!query) return true;
       return [
       entry.date,
@@ -210,7 +217,14 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       entry.createdBy,
     ].some((value) => String(value || "").toLocaleLowerCase().includes(query));
     });
-  }, [entries, search, isWasteRegister, fromDate, toDate]);
+  }, [entries, search, isWasteRegister, fromDate, toDate, carrierFilter, syncStatusFilter]);
+  const carrierOptions = useMemo(() =>
+    Array.from(new Set(entries.map((entry) => String(entry.transporteur ?? "").trim()).filter(Boolean)))
+      .sort((left, right) => left.localeCompare(right, "fr")),
+  [entries]);
+  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const reloadEntries = useCallback(async () => {
     if (!site?.id) return;
@@ -337,6 +351,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       setEditingTruck(null);
       setAttachmentFiles([]);
       setFormOpen(false);
+      setPage(1);
       if (attachmentErrors.length) toast.warning(`Enregistrement sauvegardé, mais ${attachmentErrors.length} pièce(s) jointe(s) n’ont pas été ajoutées.`);
       if (savedEntry?.pendingSync) toast.info("Saisie enregistrée hors connexion. Elle sera synchronisée au retour du réseau.");
       else toast.success(editingTruck
@@ -379,6 +394,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
     try {
       const result = await serviceApi.deleteTruckLogistics(entry.id, entryType, site.id);
       setEntries((current) => current.filter((row) => row.id !== entry.id));
+      setPage(1);
       if (editingTruck?.id === entry.id) {
         setEditingTruck(null);
         setTruckForm(emptyTruck());
@@ -583,6 +599,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       }
       if (created.length) {
         setEntries((current) => [...created, ...current.filter((entry) => !created.some((item) => item.id === entry.id))]);
+        setPage(1);
         const queued = created.filter((entry) => entry.pendingSync).length;
         toast.success(`${created.length} enregistrement(s) importé(s)${queued ? ` (${queued} en attente de synchronisation)` : ""}.`);
       }
@@ -649,6 +666,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       }
       if (created.length) {
         setEntries((current) => [...created, ...current.filter((entry) => !created.some((item) => item.id === entry.id))]);
+        setPage(1);
         const queued = created.filter((entry) => entry.pendingSync).length;
         toast.success(`${created.length} enregistrement(s) importé(s)${queued ? ` (${queued} en attente de synchronisation)` : ""}.`);
         if (created.some((entry) => !entry.pendingSync)) void reloadEntries();
@@ -753,13 +771,19 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
   };
 
   return (
-    <div className={isWasteRegister ? "waste-flow-module space-y-5" : "document-flow-module space-y-5"}>
-      <PageHeader
+    <div className={isWasteRegister ? "waste-flow-module courrier-module space-y-4" : "document-flow-module space-y-5"}>
+      {isWasteRegister ? <header className="courrier-hero">
+        <div className="courrier-hero-icon"><Trash2 aria-hidden="true" /></div>
+        <div className="courrier-hero-copy">
+          <h1>{pageTitle}</h1>
+          <p>Saisie et suivi des sorties d’ordures par véhicule.</p>
+        </div>
+      </header> : <PageHeader
         title={pageTitle}
-        subtitle={isWasteRegister ? "Saisie et suivi des sorties d’ordures par véhicule." : "Saisie et suivi des transports, bons, factures et destinations."}
-        action={<Button className={isWasteRegister ? "waste-flow-primary" : "document-flow-primary"} type="button" disabled={!site?.id} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); setAttachmentFiles([]); setFormOpen(true); }}><FilePlus2 className="mr-2 h-4 w-4" />Nouvel enregistrement</Button>}
-      />
-      <div className="max-w-xl">
+        subtitle="Saisie et suivi des transports, bons, factures et destinations."
+        action={<Button className="document-flow-primary" type="button" disabled={!site?.id} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); setAttachmentFiles([]); setFormOpen(true); }}><FilePlus2 className="mr-2 h-4 w-4" />Nouvel enregistrement</Button>}
+      />}
+      {!isWasteRegister && <div className="max-w-xl">
         <SitePicker
           id="logistics-site"
           value={selectedSiteName}
@@ -773,14 +797,15 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               setEditingTruck(null);
               setTruckForm(emptyTruck());
               setFormOpen(false);
+              setPage(1);
             }
             setSiteName(name);
             setSiteType(type);
           }}
         />
-      </div>
+      </div>}
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
-      {site?.id && openShifts.length > 0 && <div className="max-w-xl space-y-1.5">
+      {site?.id && openShifts.length > 0 && <div className={`max-w-xl space-y-1.5 ${isWasteRegister ? "waste-flow-shift" : ""}`}>
         <Label htmlFor="logistics-shift">Poste et service de saisie</Label>
         <select id="logistics-shift" value={openShiftId || ""} onChange={(event) => {
           const id = event.target.value || null;
@@ -800,9 +825,9 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
       </div>}
       {site?.id && !openShiftId && <p className="text-sm text-amber-700">{openShifts.length ? "Sélectionnez le poste actif qui effectue cette saisie." : "Aucune prise de poste ouverte sur ce site. Ouvrez le service avant d’enregistrer un flux."}</p>}
 
-          <div className={`document-flow-entry-shell ${formOpen ? "is-open" : ""}`} aria-hidden={!formOpen} role={formOpen ? "dialog" : undefined} aria-modal={formOpen ? true : undefined} aria-label={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : " bon ou facture"}` : `Nouvel enregistrement${isWasteRegister ? " d’ordures" : " bon ou facture"}`}>
-          <button type="button" className="document-flow-modal-close" aria-label="Fermer le formulaire" onClick={() => setFormOpen(false)}>×</button>
-          <Panel title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Nouvel enregistrement Bon / facture / Bon de sortie"}>
+          <div className={`document-flow-entry-shell ${isWasteRegister ? "waste-flow-entry-shell" : ""} ${formOpen ? "is-open" : ""}`} aria-hidden={!formOpen} role={formOpen ? "dialog" : undefined} aria-modal={formOpen ? true : undefined} aria-label={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : " bon ou facture"}` : `Nouvel enregistrement${isWasteRegister ? " d’ordures" : " bon ou facture"}`}>
+          <Panel className={isWasteRegister ? "waste-flow-entry-panel" : "document-flow-entry-panel"} title={editingTruck ? `Modifier un enregistrement${isWasteRegister ? " d’ordures" : ""}` : isWasteRegister ? "Nouvel enregistrement d’ordures" : "Nouvel enregistrement Bon / facture / Bon de sortie"}>
+          <button type="button" className={`document-flow-modal-close ${isWasteRegister ? "waste-flow-modal-close" : ""}`} aria-label="Fermer le formulaire" onClick={() => setFormOpen(false)}><X aria-hidden="true" size={18} /></button>
         <form className={`${isWasteRegister ? "waste-flow-form" : "document-flow-form"} space-y-5`} onSubmit={(event) => void saveTruck(event)}>
           {isWasteRegister && <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
@@ -1078,7 +1103,31 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
           </Panel>
           </div>
 
-      <div className={isWasteRegister ? "waste-flow-registry" : "document-flow-registry"}><Panel title={isWasteRegister ? pageTitle : undefined}>
+      <div className={isWasteRegister ? "waste-flow-registry" : "document-flow-registry"}><Panel className={isWasteRegister ? "courrier-history waste-flow-panel" : undefined}>
+        {isWasteRegister && <div className="courrier-history-toolbar">
+          <h2 className="courrier-panel-heading">{pageTitle}</h2>
+          <div className="courrier-history-actions courrier-registry-screen">
+            <Button type="button" disabled={!site?.id} onClick={() => { setEditingTruck(null); setTruckForm(emptyTruck()); setAttachmentFiles([]); setFormOpen(true); }}>
+              <FilePlus2 aria-hidden="true" />Nouvel enregistrement
+            </Button>
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
+              <Download aria-hidden="true" />Exporter Excel
+            </Button>
+            <Button type="button" variant="outline" onClick={() => exportXlsx("modele-registre-dechets.xlsx", pageTitle, wasteHeaders, [])}>
+              <FileDown aria-hidden="true" />Télécharger modèle
+            </Button>
+            <label className={`courrier-import-button ${!site?.id || !openShiftId || importing || saving || syncing ? "pointer-events-none opacity-50" : ""}`}>
+              <FileUp aria-hidden="true" />{importing ? "Importation…" : "Importer"}
+              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || !openShiftId || importing || saving || syncing} onChange={(event) => { void importWasteRegister(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+            </label>
+            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => printEntries(filteredEntries, pageTitle)}>
+              <Printer aria-hidden="true" />Imprimer les lignes
+            </Button>
+            {entries.some((entry) => entry.pendingSync) && <Button type="button" variant="outline" disabled={!isOnline || syncing} onClick={() => void synchronize()}>
+              <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
+            </Button>}
+          </div>
+        </div>}
         {!isWasteRegister && <div className="mb-4 flex flex-col gap-3 border-b pb-3 print:hidden xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0 xl:flex-[0_1_25%]">
             <h2 className="text-sm font-semibold text-foreground">{pageTitle}</h2>
@@ -1105,24 +1154,77 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
             </Button>
           </div>
         </div>}
-        <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 ${isWasteRegister ? "waste-flow-filters" : "print:hidden"}`}>
+        {isWasteRegister ? <div className="courrier-filter-grid waste-register-filter-grid courrier-registry-screen">
+          <label className="courrier-filter-field">
+            <span><CalendarDays aria-hidden="true" />Période</span>
+            <div className="courrier-date-range">
+              <Input aria-label="Date de début" type="date" max={toDate || undefined} value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} />
+              <span aria-hidden="true">–</span>
+              <Input aria-label="Date de fin" type="date" min={fromDate || undefined} value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} />
+            </div>
+          </label>
+          <label className="courrier-filter-field">
+            <span><Truck aria-hidden="true" />Transporteur</span>
+            <select value={carrierFilter} onChange={(event) => { setCarrierFilter(event.target.value); setPage(1); }}>
+              <option value="">Tous les transporteurs</option>
+              {carrierOptions.map((carrier) => <option key={carrier} value={carrier}>{carrier}</option>)}
+            </select>
+          </label>
+          <div className="courrier-filter-field courrier-filter-site">
+            <span><MapPin aria-hidden="true" />Site</span>
+            <SitePicker
+              id="logistics-site"
+              value={selectedSiteName}
+              type={site?.type || siteType}
+              sites={sites}
+              canCreate={canCreateSite}
+              onAdd={addSite}
+              onChange={(name, type) => {
+                if (name !== selectedSiteName) {
+                  setEntries([]);
+                  setEditingTruck(null);
+                  setTruckForm(emptyTruck());
+                  setFormOpen(false);
+                  setPage(1);
+                  setCarrierFilter("");
+                  setSyncStatusFilter("all");
+                }
+                setSiteName(name);
+                setSiteType(type);
+              }}
+            />
+          </div>
+          <label className="courrier-filter-field">
+            <span><CheckCircle2 aria-hidden="true" />Statut</span>
+            <select value={syncStatusFilter} onChange={(event) => { setSyncStatusFilter(event.target.value); setPage(1); }}>
+              <option value="all">Tous</option>
+              <option value="synced">Synchronisé</option>
+              <option value="pending">En attente de synchronisation</option>
+            </select>
+          </label>
+          <label className="courrier-filter-field courrier-filter-search">
+            <span><Search aria-hidden="true" />Recherche</span>
+            <Input aria-label="Rechercher dans le registre des ordures" placeholder="Véhicule, désignation, facture, destination…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+          </label>
+        </div> : <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
           <div className={`relative w-full ${isWasteRegister ? "max-w-none" : "max-w-md"}`}>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               aria-label="Rechercher dans le registre"
-              placeholder={`Rechercher date, véhicule, désignation, facture, destination…`}
+              placeholder="Rechercher date, véhicule, désignation, facture, destination…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="pl-9"
             />
           </div>
-          <div className={isWasteRegister ? "waste-flow-date-filters" : "flex flex-wrap items-center gap-2"}>
-            <Label className="sr-only" htmlFor="flux-from-date">Du</Label>
-            <Input id="flux-from-date" type="date" aria-label="Filtrer depuis le" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="w-auto" />
-            <Label className="sr-only" htmlFor="flux-to-date">Au</Label>
-            <Input id="flux-to-date" type="date" aria-label="Filtrer jusqu’au" value={toDate} onChange={(event) => setToDate(event.target.value)} className="w-auto" />
-          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Label className="sr-only" htmlFor="flux-from-date">Du</Label>
+              <Input id="flux-from-date" type="date" aria-label="Filtrer depuis le" max={toDate || undefined} value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} className="w-auto" />
+              <Label className="sr-only" htmlFor="flux-to-date">Au</Label>
+              <Input id="flux-to-date" type="date" aria-label="Filtrer jusqu’au" min={fromDate || undefined} value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} className="w-auto" />
+            </div>
           {!isWasteRegister && <div className="flex flex-wrap items-center gap-2">
             {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
             {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
@@ -1130,43 +1232,34 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
               <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
             </Button>
           </div>}
-          {isWasteRegister && <>
-            <div className="waste-flow-actions">
-            <label className={`inline-flex h-10 cursor-pointer items-center justify-center whitespace-nowrap rounded-md border px-3 text-sm font-medium ${!site?.id || !openShiftId || importing || saving || syncing ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
-              <FileUp className="mr-2 h-4 w-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
-              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || !openShiftId || importing || saving || syncing} onChange={(event) => { void importWasteRegister(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-            </label>
-            <Button type="button" variant="outline" className="waste-flow-outline" onClick={() => exportXlsx("modele-registre-dechets.xlsx", pageTitle, wasteHeaders, [])}>
-              <FileDown className="h-4 w-4" />Modèle Excel
-            </Button>
-            {!isOnline && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Hors connexion · les nouvelles saisies seront mises en attente</span>}
-            {isOnline && entries.some((entry) => entry.pendingSync) && <span className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">Des saisies attendent la synchronisation</span>}
-            <Button type="button" variant="outline" className="waste-flow-outline" disabled={!isOnline || syncing || !entries.some((entry) => entry.pendingSync)} onClick={() => void synchronize()}>
-              <RefreshCw className={syncing ? "animate-spin" : ""} />Synchroniser
-            </Button>
-            <Button type="button" variant="outline" className="waste-flow-outline" disabled={!filteredEntries.length} onClick={exportSpreadsheet}>
-              <Download className="h-4 w-4" />Exporter Excel
-            </Button>
-            <Button type="button" variant="outline" className="waste-flow-outline" disabled={!filteredEntries.length} onClick={() => printEntries(filteredEntries, pageTitle)}>
-              <Printer className="h-4 w-4" />Exporter PDF / imprimer
-            </Button>
-            </div>
-          </>}
-        </div>
+          </div>
+        </div>}
+        {isWasteRegister && <div className="courrier-results-summary waste-flow-results">
+          <p><CheckCircle2 aria-hidden="true" />{filteredEntries.length} enregistrement(s) trouvé(s)</p>
+          <label>Afficher
+            <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+              <option value={10}>10 lignes</option>
+              <option value={25}>25 lignes</option>
+              <option value={50}>50 lignes</option>
+              <option value={100}>100 lignes</option>
+            </select>
+          </label>
+        </div>}
         <div className="overflow-hidden rounded-lg border">
           <div className="max-h-[560px] overflow-auto">
-            <table className={`${isWasteRegister ? "waste-flow-table" : "document-flow-table"} w-full min-w-[1450px] text-left text-sm`}>
+            <table className={`${isWasteRegister ? "waste-flow-table courrier-history-table" : "document-flow-table"} w-full min-w-[1450px] text-left text-sm`}>
               <thead className={`${isWasteRegister ? "waste-flow-table-head" : "document-flow-table-head"} sticky top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur`}>
                 <tr>
-                  {["Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(isWasteRegister ? ["Transporteur"] : []), ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(isWasteRegister ? ["Plomb"] : []), ...(!isWasteRegister ? ["Type document", "Émetteur", "Vérification", "Visa agent"] : []), "Saisie par / le", "Pièces jointes", "Historique", "Actions"].map((label) => (
+                  {[...(isWasteRegister ? ["N°"] : []), "Date", isWasteRegister ? "Véhicule" : "Transport (matricule)", ...(isWasteRegister ? ["Transporteur"] : []), ...(!isWasteRegister ? ["Heure de sortie"] : []), "Désignation", "Nombre", isWasteRegister ? "Facture" : "Numéro Bon / Facture", "Destination", ...(isWasteRegister ? ["Plomb", "Statut"] : []), ...(!isWasteRegister ? ["Type document", "Émetteur", "Vérification", "Visa agent"] : []), "Saisie par / le", "Pièces jointes", "Historique", "Actions"].map((label) => (
                     <th key={label} className="whitespace-nowrap border-b px-3 py-3 font-medium">{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/70">
-                {filteredEntries.map((entry) => (
-                  <tr key={entry.id} className={`${isWasteRegister ? "waste-flow-table-row" : "document-flow-table-row"} align-top ${entry.pendingSync ? (isWasteRegister ? "waste-flow-table-row--pending" : "document-flow-table-row--pending") : ""}`}>
-                    <td className="whitespace-nowrap px-3 py-3">{String(entry.date).slice(0, 10)}</td>
+                {(isWasteRegister ? pageEntries : filteredEntries).map((entry, index) => (
+                  <tr key={entry.id} className={`${isWasteRegister ? "waste-flow-table-row courrier-table-row" : "document-flow-table-row"} align-top ${entry.pendingSync ? (isWasteRegister ? "waste-flow-table-row--pending courrier-table-row--pending" : "document-flow-table-row--pending") : ""}`}>
+                    {isWasteRegister && <td>{(currentPage - 1) * pageSize + index + 1}</td>}
+                    <td className="whitespace-nowrap px-3 py-3">{isWasteRegister && /^\d{4}-\d{2}-\d{2}$/.test(String(entry.date).slice(0, 10)) ? String(entry.date).slice(0, 10).split("-").reverse().join("/") : String(entry.date).slice(0, 10)}</td>
                     <td className="whitespace-nowrap px-3 py-3 font-medium">{entry.immatriculationVehicule || "—"}</td>
                     {isWasteRegister && <td className="px-3 py-3">{entry.transporteur || "—"}</td>}
                     {!isWasteRegister && <td className="whitespace-nowrap px-3 py-3">{entry.heureSortie || "—"}</td>}
@@ -1175,6 +1268,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                     <td className="px-3 py-3">{entry.facture || "—"}</td>
                     <td className="px-3 py-3">{entry.destinataire || "—"}</td>
                     {isWasteRegister && <td className="px-3 py-3">{entry.plomb || "—"}</td>}
+                    {isWasteRegister && <td><span className={`courrier-status ${entry.pendingSync ? "courrier-status--pending" : "courrier-status--exited"}`}>{entry.pendingSync ? entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau" : "Synchronisé"}</span></td>}
                     {!isWasteRegister && <>
                       <td className="px-3 py-3"><span className={`document-type-badge document-type-badge--${entry.typeDocument?.toLocaleLowerCase() || "default"}`}>{entry.typeDocument || "—"}</span></td>
                       <td className="px-3 py-3">{entry.emetteur || "—"}</td>
@@ -1200,7 +1294,7 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
                   </tr>
                 ))}
                 {!filteredEntries.length && (
-                  <tr><td colSpan={isWasteRegister ? 12 : 15} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  <tr><td colSpan={isWasteRegister ? 14 : 15} className="px-3 py-8 text-center text-sm text-muted-foreground">
                     {entries.length ? "Aucun résultat pour cette recherche." : `Aucun enregistrement ${isWasteRegister ? "d’ordures" : "bon/facture"} pour ce site.`}
                   </td></tr>
                 )}
@@ -1208,6 +1302,18 @@ export default function FluxLogistique({ kind = "bon-facture" }: { kind?: "bon-f
             </table>
           </div>
         </div>
+        {isWasteRegister && <div className="courrier-pagination waste-flow-pagination">
+          <span>{filteredEntries.length ? `Affichage de ${(currentPage - 1) * pageSize + 1} à ${Math.min(currentPage * pageSize, filteredEntries.length)} sur ${filteredEntries.length}` : "Aucun enregistrement"}</span>
+          <div>
+            <Button type="button" variant="outline" size="icon" aria-label="Page précédente" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
+              <ChevronLeft aria-hidden="true" />
+            </Button>
+            <span className="courrier-page-number">{currentPage} / {pageCount}</span>
+            <Button type="button" variant="outline" size="icon" aria-label="Page suivante" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
+        </div>}
       </Panel></div>
     </div>
   );
