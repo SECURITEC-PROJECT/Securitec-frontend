@@ -1118,6 +1118,34 @@ main table tbody tr:last-child { border-bottom: 0; }
 .anomaly-table th, .anomaly-table td { border: 1px solid #e7eaf0; padding: 7px 9px; }
 .anomaly-table-head { background: #f5f7fa !important; }
 .anomaly-table-head th { color: #37465a; font-size: 10px; font-weight: 700; }
+.anomaly-table { border-collapse: separate; border-spacing: 0; background: #fff; }
+.anomaly-table thead th { position: sticky; top: 0; z-index: 1; background: #eaf0f8; white-space: nowrap; }
+.anomaly-table tbody td { min-height: 38px; }
+.anomaly-table tbody tr:nth-child(even) { filter: brightness(.985); }
+.anomaly-entry-modal { display: grid !important; grid-template-rows: minmax(0, 1fr) auto; gap: 0 !important; width: min(1050px, 96vw) !important; max-width: none !important; max-height: 92vh; overflow: hidden; padding: 0 !important; border: 1px solid #d5e0f1; border-radius: 14px !important; background: #fff; box-shadow: 0 24px 80px #10245335; }
+.anomaly-entry-modal-header { display: flex; align-items: center; gap: 13px; padding: 18px 22px; border-bottom: 1px solid #e1e9f5; background: linear-gradient(110deg, #eff5ff, #fff); }
+.anomaly-entry-modal-header h2 { margin: 0; color: #102453; font-size: 17px; font-weight: 700; }
+.anomaly-entry-modal-header p { margin: 5px 0 0; color: #66758d; font-size: 12px; }
+.anomaly-entry-modal .anomaly-form-card { min-height: 0; overflow: auto; border: 0; border-radius: 0; box-shadow: none; }
+.anomaly-entry-modal-footer { padding: 12px 20px; border-top: 1px solid #e1e9f5; background: #f8faff; }
+.anomaly-registry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.anomaly-import-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid #d5deeb; border-radius: 6px; background: #fff; color: #263b5c; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.anomaly-import-button:hover { border-color: #9eb7de; background: #f3f7fd; }
+.consigne-table { border: 1px solid #dbe3ee; border-collapse: separate; border-spacing: 0; background: #fff; }
+.consigne-table th, .consigne-table td { border: 1px solid #e2e8f0; }
+.consigne-table thead th { position: sticky; top: 0; z-index: 1; background: #eaf0f8; color: #37465a; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.consigne-table-row--unread { background: #fff9e8; }
+.consigne-table-row--read { background: #fff; }
+.consigne-table tbody tr:nth-child(even) { filter: brightness(.985); }
+.consigne-entry-modal { display: grid !important; grid-template-rows: minmax(0, 1fr) auto; gap: 0 !important; width: min(900px, 96vw) !important; max-width: none !important; max-height: 92vh; overflow: hidden; padding: 0 !important; border: 1px solid #d5e0f1; border-radius: 14px !important; background: #fff; box-shadow: 0 24px 80px #10245335; }
+.consigne-entry-modal-header { display: flex; align-items: center; gap: 13px; padding: 18px 22px; border-bottom: 1px solid #e1e9f5; background: linear-gradient(110deg, #eff5ff, #fff); }
+.consigne-entry-modal-header h2 { margin: 0; color: #102453; font-size: 17px; font-weight: 700; }
+.consigne-entry-modal-header p { margin: 5px 0 0; color: #66758d; font-size: 12px; }
+.consigne-entry-modal .consigne-form-card { min-height: 0; overflow: auto; border: 0; border-radius: 0; box-shadow: none; }
+.consigne-entry-modal-footer { padding: 12px 20px; border-top: 1px solid #e1e9f5; background: #f8faff; }
+.consigne-registry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.consigne-import-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid #d5deeb; border-radius: 6px; background: #fff; color: #263b5c; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.consigne-import-button:hover { border-color: #9eb7de; background: #f3f7fd; }
 .anomaly-table-row--anomalie { background: #fffbed; }
 .anomaly-table-row--divers { background: #f2f8fc; }
 .anomaly-table-row--violation_procedure { background: #fff1f1; }

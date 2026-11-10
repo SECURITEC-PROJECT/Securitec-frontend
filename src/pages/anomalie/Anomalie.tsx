@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { AlertTriangle, ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ClipboardList, Download, FileDown, FileUp, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 type AnomalieForm = {
   date: string;
@@ -64,6 +67,33 @@ const blankForm = (): AnomalieForm => ({
   posteIds: [],
 });
 
+const spreadsheetHeaders = (type: AnomalieType) => type === "ANOMALIE"
+  ? ["Date", "Heure", "N° camion", "Transporteur", "Titre", "Casse", "Manquant", "Vides", "PHN", "Description des faits"]
+  : type === "DIVERS"
+    ? ["Date", "Heure", "Faits", "Mesures prises"]
+    : ["Date", "Heure", "Nom & prénom", "Observations", "Mesures prises"];
+
+const excelDate = (value: string) => {
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const fr = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+  if (fr) return `${fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
+  const serial = Number(text);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) return new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10);
+  return "";
+};
+
+const excelTime = (value: string) => {
+  const text = value.trim();
+  const serial = Number(text);
+  if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+    const minutes = Math.round(serial * 1440);
+    return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})/.exec(text);
+  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "";
+};
+
 export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: AnomalieType }) {
   const { sites, siteError } = useSites();
   const [siteId, setSiteId] = useState("");
@@ -75,6 +105,8 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [posts, setPosts] = useState<{ id: string; nom: string }[]>([]);
   const sectionName = activeType === "ANOMALIE" ? "Anomalie" : activeType === "DIVERS" ? "Divers" : "Violation de procédure";
@@ -208,6 +240,7 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
         toast.success(`${sectionName} enregistré${activeType === "ANOMALIE" ? "e" : ""}.`);
       }
       setForm(blankForm());
+      setFormOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de l'anomalie impossible.");
     } finally { setSaving(false); }
@@ -230,12 +263,13 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
       mesures: entry.measures || "",
       posteIds: [],
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setForm(blankForm());
+    setFormOpen(false);
   };
 
   const deleteEntry = async (entry: AnomalieEntry) => {
@@ -257,6 +291,67 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
       window.document.title = originalTitle;
     }, { once: true });
     window.print();
+  };
+
+  const exportRows = filteredEntries.map((entry) => activeType === "ANOMALIE"
+    ? [entry.date, entry.time, entry.camion || "", entry.transporteur || "", entry.document || "", entry.broken || "", entry.missing || "", entry.empty || "", entry.phn || "", entry.facts || ""]
+    : activeType === "DIVERS"
+      ? [entry.date, entry.time, entry.facts || "", entry.measures || ""]
+      : [entry.date, entry.time, entry.person || "", entry.facts || "", entry.measures || ""]);
+
+  const handleExport = () => {
+    if (!visibleEntries.length) { toast.error("Aucun signalement à exporter."); return; }
+    exportXlsx(`registre-${activeType.toLocaleLowerCase("fr")}-${today()}.xlsx`, sectionName, spreadsheetHeaders(activeType), exportRows);
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!siteId) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalize = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      const headers = (sheet[0] || []).map(normalize);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.includes(header));
+      const cols = activeType === "ANOMALIE"
+        ? { date: column("date"), time: column("heure", "heure sortie"), camion: column("n° camion", "n camion", "no camion", "numero camion", "camion"), transporteur: column("transporteur"), document: column("titre", "document"), broken: column("casse"), missing: column("manquant"), empty: column("vides"), phn: column("phn"), facts: column("description des faits", "faits", "observations"), measures: -1, person: -1 }
+        : activeType === "DIVERS"
+          ? { date: column("date"), time: column("heure"), camion: -1, transporteur: -1, document: -1, broken: -1, missing: -1, empty: -1, phn: -1, facts: column("faits", "observations", "description"), measures: column("mesures prises", "mesures"), person: -1 }
+          : { date: column("date"), time: column("heure"), camion: -1, transporteur: -1, document: -1, broken: -1, missing: -1, empty: -1, phn: -1, facts: column("observations", "faits", "description"), measures: column("mesures prises", "mesures"), person: column("nom prenom", "nom et prenom", "personne") };
+      if (cols.facts < 0 || (activeType === "VIOLATION_PROCEDURE" && (cols.person < 0 || cols.measures < 0))) {
+        throw new Error(`Colonnes requises manquantes dans le modèle ${sectionName.toLocaleLowerCase("fr")}.`);
+      }
+      const data = sheet.slice(1).map((cells, index) => {
+        const get = (index: number) => index < 0 ? "" : String(cells[index] ?? "").trim();
+        return { line: index + 2, date: excelDate(get(cols.date)) || today(), time: excelTime(get(cols.time)) || currentTime(), camion: get(cols.camion), transporteur: get(cols.transporteur), document: get(cols.document), broken: get(cols.broken), missing: get(cols.missing), empty: get(cols.empty), phn: get(cols.phn), facts: get(cols.facts), measures: get(cols.measures), person: get(cols.person) };
+      }).filter((row) => row.facts || row.person || row.camion || row.transporteur);
+      if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let saved = 0;
+      const failures: string[] = [];
+      for (const row of data) {
+        if (!row.facts || (activeType === "VIOLATION_PROCEDURE" && (!row.person || !row.measures))) {
+          failures.push(`Ligne ${row.line} : des champs obligatoires sont manquants.`);
+          continue;
+        }
+        try {
+          if (activeType === "VIOLATION_PROCEDURE") {
+            await serviceApi.createMainCourante({ typeEntree: "VIOLATION", siteId, category: "Violation de procédure", severity: "grave", people: row.person, statutAuteur: "Non précisé", natureViolation: "Violation de procédure", description: row.facts, mesuresPrises: row.measures, heure: row.time });
+          } else {
+            await serviceApi.createLogisticsEvent({ type: activeType, siteId, date: row.date, time: row.time, camion: row.camion, transporteur: row.transporteur, document: row.document, broken: row.broken, missing: row.missing, empty: row.empty, phn: row.phn, facts: row.facts, measures: row.measures, posteIds: [] });
+          }
+          saved += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (saved) setReloadKey((current) => current + 1);
+      if (failures.length) toast.warning(`${saved} ligne(s) importée(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${saved} signalement(s) importé(s).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   return <div className="anomaly-module space-y-5">
@@ -292,11 +387,10 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
       </TabsList>
     </Tabs>
 
+    <div className="flex justify-end"><Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setFormOpen(true); }} disabled={!siteId}><Plus className="mr-2 size-4" />Nouveau signalement</Button></div>
+    <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="anomaly-entry-modal">
     <section className="anomaly-form-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="anomaly-form-heading flex items-center gap-3 border-b px-5 py-4">
-        <span className="anomaly-form-icon flex size-10 items-center justify-center rounded-lg"><ClipboardList className="size-5" /></span>
-        <div><h2 className="font-semibold">{editingId ? `Modifier ${sectionName.toLocaleLowerCase("fr")}` : `Nouveau signalement : ${sectionName.toLocaleLowerCase("fr")}`}</h2><p className="text-sm text-muted-foreground">Renseignez les informations du signalement.</p></div>
-      </div>
+      <DialogHeader className="anomaly-entry-modal-header"><span className="anomaly-form-icon flex size-10 items-center justify-center rounded-lg"><ClipboardList className="size-5" /></span><div><DialogTitle>{editingId ? `Modifier ${sectionName.toLocaleLowerCase("fr")}` : `Nouveau signalement : ${sectionName.toLocaleLowerCase("fr")}`}</DialogTitle><DialogDescription>Renseignez les informations du signalement.</DialogDescription></div></DialogHeader>
       <form onSubmit={(event) => void submit(event)} className="anomaly-form space-y-4 p-4 sm:p-6">
         <div className={`grid gap-4 ${activeType === "VIOLATION_PROCEDURE" ? "" : "sm:grid-cols-2"}`}>
           {activeType !== "VIOLATION_PROCEDURE" && <div className="space-y-1.5"><label htmlFor="anomalie-date" className="text-sm font-medium">Date</label><input id="anomalie-date" type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>}
@@ -338,12 +432,18 @@ export default function Anomalie({ initialType = "ANOMALIE" }: { initialType?: A
           <Button type="submit" disabled={saving || !siteId} className="h-11 w-full gap-2 sm:w-auto sm:min-w-40">{editingId ? <Pencil className="size-4" /> : <Plus className="size-4" />}{saving ? "Enregistrement..." : editingId ? "Enregistrer les modifications" : "Enregistrer"}</Button>
         </div>
       </form>
-    </section>
+    </section><DialogFooter className="anomaly-entry-modal-footer"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></DialogFooter></DialogContent></Dialog>
 
     <section id="anomalies-print-area" className="anomaly-registry space-y-3">
-      <div className="flex items-center justify-between print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div><h2 className="text-lg font-semibold">{activeType === "ANOMALIE" ? "Anomalies enregistrées" : "Divers enregistrés"}</h2><p className="text-sm text-muted-foreground">{visibleEntries.length} signalement(s)</p></div>
-        <div className="flex gap-2 print:hidden">
+        <div className="anomaly-registry-actions print:hidden">
+          <label className={`anomaly-import-button ${!siteId || importing ? "pointer-events-none opacity-50" : ""}`}>
+            <FileUp aria-hidden="true" className="size-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+            <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          </label>
+          <Button type="button" variant="outline" size="sm" disabled={loading || !filteredEntries.length} onClick={handleExport}><Download className="mr-2 size-4" />Exporter Excel</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => exportXlsx(`modele-${activeType.toLocaleLowerCase("fr")}.xlsx`, sectionName, spreadsheetHeaders(activeType), [])}><FileDown className="mr-2 size-4" />Modèle Excel</Button>
           <Button variant="outline" size="sm" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
           <Button variant="outline" size="sm" disabled={loading || !visibleEntries.length} onClick={handlePrint}><Printer className="mr-2 size-4" />Imprimer le registre</Button>
         </div>

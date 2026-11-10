@@ -3,11 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSites } from "@/hooks/useSites";
 import { serviceApi } from "@/lib/service-api";
-import { ClipboardList, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { ClipboardList, Download, FileDown, FileUp, Pencil, Plus, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 type ConsigneForm = { date: string; heure: string; consigne: string; emetteur: string; destinataire: string; dateFin: string; jusquauNouvelOrdre: boolean; posteIds: string[] };
 type ReadStatus = { posteId: string; posteNom: string; readAt: string | null; reader: string | null; readers?: { name: string; readAt: string }[] };
@@ -19,6 +22,26 @@ const today = () => {
 };
 const currentTime = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const blankForm = (): ConsigneForm => ({ date: today(), heure: currentTime(), consigne: "", emetteur: "", destinataire: "", dateFin: today(), jusquauNouvelOrdre: false, posteIds: [] });
+const consigneHeaders = ["Date d'effet", "Heure", "Émetteur", "Destinataire", "Postes visés", "Consigne", "Valable jusqu'au", "Jusqu'au nouvel ordre"];
+const excelDate = (value: string) => {
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const fr = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/.exec(text);
+  if (fr) return `${fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
+  const serial = Number(text);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) return new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10);
+  return "";
+};
+const excelTime = (value: string) => {
+  const text = value.trim();
+  const serial = Number(text);
+  if (text && Number.isFinite(serial) && serial >= 0 && serial < 1) {
+    const minutes = Math.round(serial * 1440);
+    return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})/.exec(text);
+  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "";
+};
 
 export default function Consignes() {
   const { sites, siteError } = useSites();
@@ -29,6 +52,8 @@ export default function Consignes() {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [posts, setPosts] = useState<{ id: string; nom: string }[]>([]);
 
@@ -84,6 +109,7 @@ export default function Consignes() {
         toast.success("Consigne enregistrée.");
       }
       setForm(blankForm());
+      setFormOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement de la consigne impossible.");
     } finally { setSaving(false); }
@@ -101,12 +127,13 @@ export default function Consignes() {
       jusquauNouvelOrdre: entry.jusquauNouvelOrdre === true,
       posteIds: entry.tousPostes ? [] : entry.posteIds || (entry.posteId ? [entry.posteId] : []),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setForm(blankForm());
+    setFormOpen(false);
   };
 
   const deleteEntry = async (entry: ConsigneEntry) => {
@@ -130,6 +157,73 @@ export default function Consignes() {
     window.print();
   };
 
+  const exportRows = filteredEntries.map((entry) => [
+    entry.date, entry.heure, entry.emetteur, entry.destinataire,
+    entry.tousPostes ? "Tous les postes" : (entry.posteIds || []).map((id) => posts.find((post) => post.id === id)?.nom || id).join(", "),
+    entry.consigne, entry.jusquauNouvelOrdre ? "" : entry.dateFin || entry.date, entry.jusquauNouvelOrdre ? "Oui" : "Non",
+  ]);
+
+  const handleExport = () => {
+    if (!filteredEntries.length) { toast.error("Aucune consigne à exporter."); return; }
+    exportXlsx(`registre-consignes-${today()}.xlsx`, "Consignes", consigneHeaders, exportRows);
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    if (!siteId) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalize = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      const headers = (sheet[0] || []).map(normalize);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.includes(header));
+      const cols = {
+        date: column("date d'effet", "date effet", "date"), time: column("heure"), sender: column("emetteur"), recipient: column("destinataire"),
+        posts: column("postes vises", "postes", "poste"), message: column("consigne", "instruction"),
+        endDate: column("valable jusqu'au", "valable jusqu au", "date fin", "date de fin"), untilOrder: column("jusqu'au nouvel ordre", "jusqu au nouvel ordre", "jusqu'a nouvel ordre"),
+      };
+      if ([cols.date, cols.sender, cols.recipient, cols.message].some((index) => index < 0)) {
+        throw new Error("Colonnes requises manquantes : Date d’effet, Émetteur, Destinataire et Consigne.");
+      }
+      const data = sheet.slice(1).map((cells, index) => {
+        const get = (columnIndex: number) => columnIndex < 0 ? "" : String(cells[columnIndex] ?? "").trim();
+        const untilValue = normalize(get(cols.untilOrder));
+        const untilOrder = ["oui", "yes", "true", "1", "x"].includes(untilValue);
+        const rawPosts = get(cols.posts);
+        const postNames = rawPosts.split(/[;,|]/).map((name) => name.trim()).filter(Boolean);
+        const posteIds = postNames.flatMap((name) => {
+          if (normalize(name) === "tous les postes" || normalize(name) === "tous") return [];
+          const match = posts.find((post) => normalize(post.nom) === normalize(name));
+          return match ? [match.id] : ["?" + name];
+        });
+        return { line: index + 2, date: excelDate(get(cols.date)) || today(), heure: excelTime(get(cols.time)) || currentTime(), emetteur: get(cols.sender), destinataire: get(cols.recipient), consigne: get(cols.message), dateFin: untilOrder ? "" : excelDate(get(cols.endDate)) || excelDate(get(cols.date)) || today(), jusquauNouvelOrdre: untilOrder, posteIds };
+      }).filter((row) => row.emetteur || row.destinataire || row.consigne);
+      if (!data.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      let saved = 0;
+      const failures: string[] = [];
+      for (const row of data) {
+        if (!row.emetteur || !row.destinataire || !row.consigne || (!row.jusquauNouvelOrdre && row.dateFin < row.date) || row.posteIds.some((id) => id.startsWith("?"))) {
+          const unknownPost = row.posteIds.find((id) => id.startsWith("?"));
+          failures.push(`Ligne ${row.line} : ${unknownPost ? `poste « ${unknownPost.slice(1)} » inconnu` : "champs obligatoires ou dates invalides"}.`);
+          continue;
+        }
+        try {
+          await serviceApi.createJournalConsigne({ date: row.date, heure: row.heure, emetteur: row.emetteur, destinataire: row.destinataire, consigne: row.consigne, dateFin: row.dateFin || row.date, jusquauNouvelOrdre: row.jusquauNouvelOrdre, posteIds: row.posteIds, tousPostes: row.posteIds.length === 0, siteId });
+          saved += 1;
+        } catch (error) {
+          failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
+        }
+      }
+      if (saved) setReloadKey((current) => current + 1);
+      if (failures.length) toast.warning(`${saved} consigne(s) importée(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${saved} consigne(s) importée(s).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return <div className="consigne-module space-y-5">
     <PageHeader title="Consignes" subtitle="Saisir et consulter les consignes du site." />
     <div className="max-w-sm space-y-1.5">
@@ -141,11 +235,10 @@ export default function Consignes() {
       {siteError && <p className="text-sm text-destructive">{siteError}</p>}
     </div>
 
+    <div className="flex justify-end"><Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setFormOpen(true); }} disabled={!siteId}><Plus className="mr-2 size-4" />Nouvelle consigne</Button></div>
+    <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="consigne-entry-modal">
     <section className="consigne-form-card w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="consigne-form-heading flex items-center gap-3 border-b px-5 py-4">
-        <span className="consigne-form-icon flex size-10 items-center justify-center rounded-lg"><ClipboardList className="size-5" /></span>
-        <div><h2 className="font-semibold">{editingId ? "Modifier la consigne" : "Nouvelle consigne"}</h2><p className="text-sm text-muted-foreground">Indiquez quand, par qui et à qui la consigne est transmise.</p></div>
-      </div>
+      <DialogHeader className="consigne-entry-modal-header"><span className="consigne-form-icon flex size-10 items-center justify-center rounded-lg"><ClipboardList className="size-5" /></span><div><DialogTitle>{editingId ? "Modifier la consigne" : "Nouvelle consigne"}</DialogTitle><DialogDescription>Indiquez quand, par qui et à qui la consigne est transmise.</DialogDescription></div></DialogHeader>
       <form onSubmit={(event) => void submit(event)} className="consigne-form space-y-4 p-4 sm:p-6">
         <div className="space-y-1.5"><label htmlFor="consigne-date" className="text-sm font-medium">Date d’effet</label><input id="consigne-date" type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value, dateFin: current.dateFin === current.date ? event.target.value : current.dateFin }))} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
         <div className="space-y-1.5"><label htmlFor="consigne-heure" className="text-sm font-medium">Heure</label><input id="consigne-heure" type="time" required value={form.heure} onChange={(event) => setForm({ ...form, heure: event.target.value })} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></div>
@@ -164,12 +257,18 @@ export default function Consignes() {
           <Button type="submit" disabled={saving || !siteId} className="h-11 w-full gap-2 sm:w-auto sm:min-w-40">{editingId ? <Pencil className="size-4" /> : <Plus className="size-4" />}{saving ? "Enregistrement..." : editingId ? "Enregistrer les modifications" : "Enregistrer"}</Button>
         </div>
       </form>
-    </section>
+    </section><DialogFooter className="consigne-entry-modal-footer"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></DialogFooter></DialogContent></Dialog>
 
     <section id="consignes-print-area" className="consigne-registry space-y-3">
-      <div className="flex items-center justify-between print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div><h2 className="text-lg font-semibold">Consignes enregistrées</h2><p className="text-sm text-muted-foreground">{entries.length} consigne(s)</p></div>
-        <div className="flex gap-2">
+        <div className="consigne-registry-actions">
+          <label className={`consigne-import-button ${!siteId || importing ? "pointer-events-none opacity-50" : ""}`}>
+            <FileUp aria-hidden="true" className="size-4 shrink-0" />{importing ? "Importation…" : "Importer Excel / CSV"}
+            <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || importing} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          </label>
+          <Button type="button" variant="outline" size="sm" className="consigne-toolbar-button" disabled={loading || !filteredEntries.length} onClick={handleExport}><Download className="mr-2 size-4" />Exporter Excel</Button>
+          <Button type="button" variant="outline" size="sm" className="consigne-toolbar-button" onClick={() => exportXlsx("modele-consignes.xlsx", "Consignes", consigneHeaders, [])}><FileDown className="mr-2 size-4" />Modèle Excel</Button>
           <Button type="button" variant="outline" size="sm" className="consigne-toolbar-button" disabled={loading || !siteId} onClick={() => setReloadKey((current) => current + 1)}><RefreshCw className="mr-2 size-4" />Actualiser</Button>
           <Button type="button" variant="outline" size="sm" className="consigne-toolbar-button" disabled={loading || !entries.length} onClick={handlePrint}><Printer className="mr-2 size-4" />Imprimer le registre</Button>
         </div>
