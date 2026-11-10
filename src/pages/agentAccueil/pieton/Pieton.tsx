@@ -1,11 +1,13 @@
-import { PageHeader, Panel } from "@/components/PageHeader";
+import { Panel } from "@/components/PageHeader";
 import { useSites } from "@/hooks/useSites";
 import SitePicker from "@/components/SitePicker";
 import { serviceApi } from "@/lib/service-api";
 import type { VisitorRecord } from "@/types/visitor";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { confirmDeletion } from "@/lib/deletion-toast";
+import { Users } from "lucide-react";
 import FormPieton from "./FormPieton";
 import ListPieton from "./ListPieton";
 import PresentsSurSite from "./PresentsSurSite";
@@ -17,6 +19,7 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
     error: "",
   });
   const [editingVisitor, setEditingVisitor] = useState<VisitorRecord | null>(null);
+  const [entryFormOpen, setEntryFormOpen] = useState(false);
   const { sites, canCreateSite, siteError, addSite } = useSites();
   const [siteName, setSiteName] = useState("");
   const [siteType, setSiteType] = useState<"USINE" | "AGENCE">("USINE");
@@ -95,24 +98,31 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
     }
   };
 
+  const sitePicker: ReactNode = (
+    <SitePicker
+      id="visitor-site"
+      value={selectedSiteName}
+      type={site?.type || siteType}
+      sites={sites}
+      canCreate={canCreateSite}
+      onAdd={addSite}
+      onChange={(name, type) => {
+        setSiteName(name);
+        setSiteType(type);
+        setEditingVisitor(null);
+      }}
+    />
+  );
+
   return (
-    <div className="visitor-access-module space-y-5">
-      <PageHeader title="Contrôle des passages" subtitle="Registre des entrées et sorties visiteurs, relié au site et au journal des mouvements." />
-      <div className="max-w-xl">
-        <SitePicker
-          id="visitor-site"
-          value={selectedSiteName}
-          type={site?.type || siteType}
-          sites={sites}
-          canCreate={canCreateSite}
-          onAdd={addSite}
-          onChange={(name, type) => {
-            setSiteName(name);
-            setSiteType(type);
-            setEditingVisitor(null);
-          }}
-        />
-      </div>
+    <div className="courrier-module visitor-access-module space-y-4">
+      <header className="courrier-hero">
+        <div className="courrier-hero-icon"><Users aria-hidden="true" /></div>
+        <div className="courrier-hero-copy">
+          <h1>Visiteurs et accès</h1>
+          <p>Enregistrez et suivez les entrées et sorties des visiteurs</p>
+        </div>
+      </header>
       {(error || siteError) && (
         <Panel title="Connexion backend">
           <p className="text-sm text-destructive">{error || siteError}</p>
@@ -142,29 +152,62 @@ export default function Pieton({ canManageSiteBans = false }: { canManageSiteBan
         </Panel>
       ) : (
         <>
-          <FormPieton
-            key={editingVisitor?.id || "new-visitor"}
+          <Dialog open={entryFormOpen || Boolean(editingVisitor)} onOpenChange={(open) => {
+            setEntryFormOpen(open);
+            if (!open) setEditingVisitor(null);
+          }}>
+            <DialogContent className="visitor-access-dialog">
+              <DialogHeader>
+                <DialogTitle>{editingVisitor ? "Modifier un passage visiteur" : "Enregistrer une entrée"}</DialogTitle>
+                <DialogDescription>Renseignez les informations du visiteur et validez l’entrée sur le site sélectionné.</DialogDescription>
+              </DialogHeader>
+              <FormPieton
+                key={editingVisitor?.id || "new-visitor"}
+                siteId={selectedSiteId}
+                siteName={selectedSiteName}
+                siteType={site?.type || siteType}
+                knownVisitors={visitors}
+                onCreated={(visitor) => {
+                  setRegistry((current) => ({
+                    siteId: site?.id || current.siteId,
+                    visitors: [visitor, ...current.visitors],
+                    error: "",
+                  }));
+                  setEntryFormOpen(false);
+                }}
+                onUpdated={(visitor) => {
+                  setRegistry((current) => ({
+                    ...current,
+                    visitors: current.visitors.map((entry) => entry.id === visitor.id ? { ...entry, ...visitor } : entry),
+                  }));
+                  setEditingVisitor(null);
+                  setEntryFormOpen(false);
+                }}
+                editingVisitor={editingVisitor}
+                onCancelEditing={() => setEditingVisitor(null)}
+              />
+            </DialogContent>
+          </Dialog>
+          <ListPieton
+            visitors={visitors}
+            onEdit={(visitor) => {
+              setEditingVisitor(visitor);
+              setEntryFormOpen(true);
+            }}
+            onDelete={deleteVisitor}
+            canManageSiteBans={canManageSiteBans}
+            onToggleSiteBan={setSiteBan}
             siteId={selectedSiteId}
             siteName={selectedSiteName}
             siteType={site?.type || siteType}
-            knownVisitors={visitors}
-            onCreated={(visitor) => setRegistry((current) => ({
-              siteId: site?.id || current.siteId,
-              visitors: [visitor, ...current.visitors],
-              error: "",
-            }))}
-            onUpdated={(visitor) => {
-              setRegistry((current) => ({
-                ...current,
-                visitors: current.visitors.map((entry) => entry.id === visitor.id ? { ...entry, ...visitor } : entry),
-              }));
+            sitePicker={sitePicker}
+            onNewEntry={() => {
               setEditingVisitor(null);
+              setEntryFormOpen(true);
             }}
-            editingVisitor={editingVisitor}
-            onCancelEditing={() => setEditingVisitor(null)}
+            onCreated={(visitor) => setRegistry((current) => ({ ...current, visitors: [visitor, ...current.visitors], error: "" }))}
           />
           <PresentsSurSite visitors={visitors} onExit={exit} />
-          <ListPieton visitors={visitors} onEdit={setEditingVisitor} onDelete={deleteVisitor} canManageSiteBans={canManageSiteBans} onToggleSiteBan={setSiteBan} />
         </>
       )}
     </div>

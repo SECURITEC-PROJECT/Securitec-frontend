@@ -59,7 +59,7 @@ export default function Sidebar({ open, setOpen, user, role, signOut }: SidebarP
   const registerItems = SIDEBAR_GROUPS
     .filter((group) => ["CAHIERS", "FICHES"].includes(group.title))
     .flatMap((group) => group.items)
-    .filter((item) => item.to !== "/dashboard/main-courante");
+    .filter((item) => !["/dashboard/main-courante", "/dashboard/visiteurs"].includes(item.to));
   const providerItems = [
     { to: "/dashboard/prestataires", label: "Fiches prestataires", icon: ContactRound },
     { to: "/dashboard/visiteurs", label: "Visiteurs et accès", icon: ShieldCheck },
