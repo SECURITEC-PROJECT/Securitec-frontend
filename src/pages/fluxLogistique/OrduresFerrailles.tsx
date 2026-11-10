@@ -11,7 +11,7 @@ import {
   type RegisterEmployeeOption,
   type WasteScrapRegisterEntry,
 } from "@/lib/service-api";
-import { Download, FileDown, FileUp, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, FileDown, FileUp, MapPin, Pencil, Plus, Printer, Save, Search, Trash2, Truck, UserRound, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { exportXlsx } from "@/lib/export-xlsx";
 import { readXlsxRows } from "@/lib/read-xlsx";
@@ -104,6 +104,12 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [employeeError, setEmployeeError] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [personFilter, setPersonFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const siteName = selectedSiteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === siteName), [sites, siteName]);
   const currentKey = site?.id ? `${kind}:${site.id}` : "";
@@ -149,9 +155,15 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
 
   const filteredEntries = useMemo(() => {
     const query = normalize(search.trim());
-    if (!query) return entries;
-    return entries.filter((entry) =>
-      normalize([
+    return entries.filter((entry) => {
+      const entryDate = entry.date.slice(0, 10);
+      if (dateFrom && entryDate < dateFrom) return false;
+      if (dateTo && entryDate > dateTo) return false;
+      if (personFilter && `${entry.prenom} · ${entry.matricule}` !== personFilter) return false;
+      if (statusFilter === "with-reason" && !entry.motif?.trim()) return false;
+      if (statusFilter === "without-reason" && entry.motif?.trim()) return false;
+      if (!query) return true;
+      return normalize([
         entry.date,
         formatDate(entry.date),
         entry.heure,
@@ -161,9 +173,14 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         isScrap ? entry.designation : entry.observation,
         String(entry.nombre ?? ""),
         entry.motif ?? "",
-      ].join(" ")).includes(query),
-    );
-  }, [entries, search, isScrap]);
+      ].join(" ")).includes(query);
+    });
+  }, [entries, search, isScrap, dateFrom, dateTo, personFilter, statusFilter]);
+  const personOptions = useMemo(() => Array.from(new Set(entries.map((entry) => `${entry.prenom} · ${entry.matricule}`.trim()).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right, "fr")), [entries]);
+  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const resetForm = () => {
     setForm(blankForm());
@@ -220,6 +237,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       setEntries((current) => editingId
         ? current.map((item) => item.id === entry.id ? entry : item)
         : [entry, ...current]);
+      setPage(1);
       resetForm();
       toast.success(editingId ? "Enregistrement modifié." : "Enregistrement ajouté.");
     } catch (reason) {
@@ -293,7 +311,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     }
 
     const headings = ["Date", "Heure", "Prénom", "Matricule", "Section", isScrap ? "Désignation" : "Observation", ...(isScrap ? ["Nombre", "Motif"] : [])];
-    const tableRows = entries.map((entry) => {
+    const tableRows = filteredEntries.map((entry) => {
       const values = [
         formatDate(entry.date),
         entry.heure || "—",
@@ -327,7 +345,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         </head>
         <body>
           <h1>${escapeHtml(title)}</h1>
-          <p class="site">Site : ${escapeHtml(siteName || "—")}</p>
+          <p class="site">Site : ${escapeHtml(siteName || "—")} · Impression du ${escapeHtml(new Date().toLocaleDateString("fr-FR"))} · ${filteredEntries.length} enregistrement(s)</p>
           <table>
             <thead><tr>${headings.map((heading) => `<th>${escapeHtml(heading)}</th>`).join("")}</tr></thead>
             <tbody>${tableRows}</tbody>
@@ -399,6 +417,7 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       if (created.length) setEntries((current) => [...created.reverse(), ...current]);
       if (failures.length) toast.warning(`${created.length} ligne(s) importée(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
       else toast.success(`${created.length} enregistrement(s) importé(s).`);
+      if (created.length) setPage(1);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Importation impossible.");
     } finally {
@@ -406,9 +425,17 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
     }
   };
 
-  return <div className={isScrap ? "scrap-module space-y-5" : "space-y-6"}>
-    <PageHeader title={title} subtitle={`Saisie et consultation des ${isScrap ? "sorties de ferrailles" : "sorties d’ordures"} par employé.`} />
-    <div className="max-w-xl">
+  return <div className={isScrap ? "scrap-module courrier-module space-y-4" : "space-y-6"}>
+    {isScrap ? (
+      <header className="courrier-hero">
+        <div className="courrier-hero-icon"><Truck aria-hidden="true" /></div>
+        <div className="courrier-hero-copy">
+          <h1>Mouvements de ferrailles</h1>
+          <p>Enregistrez et suivez les sorties de ferrailles par employé</p>
+        </div>
+      </header>
+    ) : <PageHeader title={title} subtitle="Saisie et consultation des sorties d’ordures par employé." />}
+    {!isScrap && <div className="max-w-xl">
       <SitePicker
         id={`${kind}-site`}
         value={siteName}
@@ -422,9 +449,9 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
         }}
       />
       {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
-    </div>
+    </div>}
 
-    <div className="flex justify-end"><Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setEmployee(null); setEmployeeQuery(""); setEmployeeError(""); setShowEmployeeOptions(false); setFormOpen(true); }} disabled={!site?.id}><Plus className="mr-2 size-4" />Nouvel enregistrement</Button></div>
+    {!isScrap && <div className="flex justify-end"><Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setEmployee(null); setEmployeeQuery(""); setEmployeeError(""); setShowEmployeeOptions(false); setFormOpen(true); }} disabled={!site?.id}><Plus className="mr-2 size-4" />Nouvel enregistrement</Button></div>}
     <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="waste-scrap-entry-modal">
     <section className="waste-scrap-form-card">
       <DialogHeader className="waste-scrap-modal-header"><span className="waste-scrap-modal-icon"><Plus className="size-5" /></span><div><DialogTitle>{editingId ? `Modifier un enregistrement ${isScrap ? "ferraille" : "ordure"}` : `Nouvel enregistrement ${isScrap ? "ferraille" : "ordure"}`}</DialogTitle><DialogDescription>Saisissez la date, l’employé et les informations de l’enregistrement.</DialogDescription></div></DialogHeader>
@@ -506,7 +533,120 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
       </form>
     </section><DialogFooter className="waste-scrap-modal-footer"><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Fermer</Button></DialogFooter></DialogContent></Dialog>
 
-    <div className={isScrap ? "scrap-registry" : ""}><Panel title={`Historique ${isScrap ? "ferrailles" : "ordures"} (${filteredEntries.length})`}>
+    {isScrap ? <section className="courrier-history scrap-registry">
+      <div className="courrier-history-toolbar">
+        <h2 className="courrier-panel-heading">Historique des ferrailles</h2>
+        <div className="courrier-history-actions courrier-registry-screen">
+          <Button type="button" onClick={() => { setEditingId(null); setForm(blankForm()); setEmployee(null); setEmployeeQuery(""); setEmployeeError(""); setShowEmployeeOptions(false); setFormOpen(true); }} disabled={!site?.id}>
+            <Plus aria-hidden="true" />Nouvel enregistrement
+          </Button>
+          <Button type="button" variant="outline" disabled={loading || !filteredEntries.length} onClick={handleExport}>
+            <Download aria-hidden="true" />Exporter Excel
+          </Button>
+          <Button type="button" variant="outline" onClick={() => exportXlsx(`modele-${kind}.xlsx`, title, spreadsheetHeaders, [])}>
+            <FileDown aria-hidden="true" />Télécharger modèle
+          </Button>
+          <label className={`courrier-import-button ${!site?.id || importing || loading ? "pointer-events-none opacity-50" : ""}`}>
+            <FileUp aria-hidden="true" />{importing ? "Importation…" : "Importer"}
+            <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || importing || loading} onChange={(event) => { void handleImport(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          </label>
+          <Button type="button" variant="outline" disabled={loading || !filteredEntries.length} onClick={printHistory}>
+            <Printer aria-hidden="true" />Imprimer les lignes
+          </Button>
+        </div>
+      </div>
+
+      <div className="courrier-filter-grid scrap-filter-grid courrier-registry-screen">
+        <label className="courrier-filter-field">
+          <span><CalendarDays aria-hidden="true" />Période</span>
+          <div className="courrier-date-range">
+            <Input aria-label="Date de début" type="date" max={dateTo || undefined} value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
+            <span aria-hidden="true">–</span>
+            <Input aria-label="Date de fin" type="date" min={dateFrom || undefined} value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
+          </div>
+        </label>
+        <label className="courrier-filter-field">
+          <span><UserRound aria-hidden="true" />Personne</span>
+          <select value={personFilter} onChange={(event) => { setPersonFilter(event.target.value); setPage(1); }}>
+            <option value="">Toutes les personnes</option>
+            {personOptions.map((person) => <option key={person} value={person}>{person}</option>)}
+          </select>
+        </label>
+        <div className="courrier-filter-field courrier-filter-site">
+          <span><MapPin aria-hidden="true" />Site</span>
+          <SitePicker
+            id={`${kind}-site`}
+            value={siteName}
+            type={site?.type || "USINE"}
+            sites={sites}
+            canCreate={canCreateSite}
+            onAdd={addSite}
+            onChange={(name) => {
+              setSelectedSiteName(name);
+              resetForm();
+              setPage(1);
+            }}
+          />
+        </div>
+        <label className="courrier-filter-field">
+          <span><CheckCircle2 aria-hidden="true" />Statut</span>
+          <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}>
+            <option value="all">Tous</option>
+            <option value="with-reason">Avec motif</option>
+            <option value="without-reason">Sans motif</option>
+          </select>
+        </label>
+        <label className="courrier-filter-field courrier-filter-search">
+          <span><Search aria-hidden="true" />Recherche</span>
+          <Input aria-label="Rechercher dans le registre ferrailles" placeholder="Prénom, matricule, désignation…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+        </label>
+      </div>
+
+      {siteError && <p role="alert" className="text-sm text-destructive">{siteError}</p>}
+      {currentLoadError && <p role="alert" className="text-sm text-destructive">{currentLoadError}</p>}
+      <div className="courrier-results-summary courrier-registry-screen">
+        <p><CheckCircle2 aria-hidden="true" />{filteredEntries.length} enregistrement(s) trouvé(s)</p>
+        <label>Afficher
+          <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+            <option value={10}>10 lignes</option><option value={25}>25 lignes</option><option value={50}>50 lignes</option><option value={100}>100 lignes</option>
+          </select>
+        </label>
+      </div>
+      <div className="overflow-auto rounded-lg courrier-registry-screen">
+        <table className="courrier-table courrier-history-table scrap-table w-full border-collapse text-left text-sm">
+          <thead><tr>{["N°", "Date", "Heure", "Prénom", "Matricule", "Section", "Désignation", "Nombre", "Motif", "Action"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={10} className="courrier-empty-row">Chargement du registre…</td></tr>
+              : !site?.id ? <tr><td colSpan={10} className="courrier-empty-row">Sélectionnez un site pour consulter le registre.</td></tr>
+                : pageEntries.map((entry, index) => <tr key={entry.id} className="courrier-table-row">
+                  <td>{(currentPage - 1) * pageSize + index + 1}</td>
+                  <td className="whitespace-nowrap">{formatDate(entry.date)}</td>
+                  <td className="whitespace-nowrap">{entry.heure}</td>
+                  <td className="font-medium">{entry.prenom}</td>
+                  <td className="whitespace-nowrap">{entry.matricule}</td>
+                  <td>{entry.section || "—"}</td>
+                  <td className="break-words whitespace-pre-wrap">{entry.designation}</td>
+                  <td>{entry.nombre}</td>
+                  <td className="break-words whitespace-pre-wrap">{entry.motif}</td>
+                  <td className="whitespace-nowrap"><div className="flex gap-1">
+                    <Button type="button" variant="ghost" size="icon" aria-label="Imprimer l’enregistrement" title="Imprimer" onClick={() => printEntry(entry)}><Printer className="size-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Modifier l’enregistrement" title="Modifier" onClick={() => editEntry(entry)}><Pencil className="size-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Supprimer l’enregistrement" title="Supprimer" disabled={deletingId === entry.id} onClick={() => void deleteEntry(entry)}><Trash2 className="size-4 text-destructive" /></Button>
+                  </div></td>
+                </tr>)}
+            {!loading && site?.id && !pageEntries.length && <tr><td colSpan={10} className="courrier-empty-row">{entries.length ? "Aucun résultat pour cette recherche." : "Aucun enregistrement pour ce site."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="courrier-pagination courrier-registry-screen">
+        <span>Affichage de {filteredEntries.length ? (currentPage - 1) * pageSize + 1 : 0} à {Math.min(currentPage * pageSize, filteredEntries.length)} sur {filteredEntries.length}</span>
+        <div>
+          <Button type="button" variant="outline" size="icon" aria-label="Page précédente" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft className="size-4" /></Button>
+          <Button type="button" className="courrier-page-number">{currentPage}</Button>
+          <Button type="button" variant="outline" size="icon" aria-label="Page suivante" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight className="size-4" /></Button>
+        </div>
+      </div>
+    </section> : <div><Panel title={`Historique ordures (${filteredEntries.length})`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-[260px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -555,6 +695,6 @@ export default function OrduresFerrailles({ kind }: { kind: RegisterKind }) {
               </tbody>
             </table>
           </div>}
-    </Panel></div>
+    </Panel></div>}
   </div>;
 }
