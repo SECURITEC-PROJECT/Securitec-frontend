@@ -642,7 +642,7 @@ const body = (data: unknown): string => {
     if (siteId) {
       const posteId = typeof payload.posteId === "string" ? payload.posteId : localStorage.getItem(`securitec-active-post:${siteId}`);
       const scopedPayload = posteId && !payload.posteId ? { ...payload, posteId } : payload;
-      if (posteId && !scopedPayload.priseDePosteId) {
+      if (posteId && !Object.prototype.hasOwnProperty.call(scopedPayload, "priseDePosteId")) {
         const activeServiceId = localStorage.getItem(`securitec-active-shift:${siteId}:${posteId}`);
         if (activeServiceId) return JSON.stringify({ ...scopedPayload, priseDePosteId: activeServiceId });
       }
@@ -2645,7 +2645,7 @@ export const serviceApi = {
     });
     return [...pendingCreates, ...pendingUpdates];
   },
-  async createCourrierMovement(data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string }): Promise<CourrierMovement> {
+  async createCourrierMovement(data: { date: string; heureEntree: string; prenom: string; designation: string; nombre: number; siteId: string; priseDePosteId?: string | null }): Promise<CourrierMovement> {
     const requestId = crypto.randomUUID();
     const payload = { ...data, clientRequestId: requestId };
     try {
