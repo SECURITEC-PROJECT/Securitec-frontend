@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { LogOut, Package, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
+import { Download, FileDown, FileUp, LogOut, Package, Pencil, Plus, Printer, Save, Search, Trash2, X } from "lucide-react";
 import { Empty, PageHeader, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { confirmDeletion } from "@/lib/deletion-toast";
 import { isWithinRegistryPeriod, RegistryPeriodExport } from "@/components/RegistryPeriodExport";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
 import { RegistryAttachments } from "@/components/RegistryAttachments";
+import { exportXlsx } from "@/lib/export-xlsx";
+import { readXlsxRows } from "@/lib/read-xlsx";
 
 type MaterialForm = {
   date: string;
@@ -64,6 +66,8 @@ export default function MaterielsStar() {
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [editing, setEditing] = useState<StarMaterialEntry | null>(null);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [exitingId, setExitingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -87,6 +91,8 @@ export default function MaterielsStar() {
       entry.heureSortie ?? "",
     ].join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().includes(normalizedSearch),
   );
+  const spreadsheetHeaders = ["Date", "Heure entrée", "Prénom", "Matricule", "Prestataire", "Matériel", "Nombre"];
+  const spreadsheetRows = filteredEntries.flatMap((entry) => entry.items.map((item) => [entry.date, entry.heureEntree, entry.prenom, entry.matricule, entry.provider, item.designation, item.nombre]));
 
   useEffect(() => {
     serviceApi.listProviders()
@@ -122,6 +128,7 @@ export default function MaterielsStar() {
   const resetForm = () => {
     setForm(emptyForm());
     setEditing(null);
+    setFormOpen(false);
   };
 
   const updateItem = (index: number, field: "designation" | "nombre", value: string) => {
@@ -179,6 +186,7 @@ export default function MaterielsStar() {
 
   const beginEdit = (entry: StarMaterialEntry) => {
     setEditing(entry);
+    setFormOpen(true);
     setForm({
       date: entry.date.slice(0, 10),
       heureEntree: entry.heureEntree,
@@ -188,6 +196,82 @@ export default function MaterielsStar() {
       items: entry.items.map((item) => ({ designation: item.designation, nombre: String(item.nombre) })),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const importMaterials = async (file?: File) => {
+    if (!file) return;
+    if (!site?.id) { toast.error("Sélectionnez un site avant l’importation."); return; }
+    setImporting(true);
+    try {
+      const sheet = await readXlsxRows(file);
+      const normalizeHeader = (value: unknown) => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").replace(/[^a-z0-9]/g, "");
+      const headers = (sheet[0] || []).map(normalizeHeader);
+      const column = (...aliases: string[]) => headers.findIndex((header) => aliases.some((alias) => header === normalizeHeader(alias)));
+      const cols = {
+        date: column("Date"), time: column("Heure entrée", "Heure d’entrée", "Heure"), firstName: column("Prénom", "Nom"),
+        matricule: column("Matricule"), provider: column("Prestataire", "Fournisseur"), material: column("Matériel", "Désignation", "Designation"), count: column("Nombre", "Quantité", "Quantite"),
+      };
+      if ([cols.date, cols.time, cols.firstName, cols.matricule, cols.provider, cols.material, cols.count].some((index) => index < 0)) {
+        throw new Error("Colonnes requises manquantes. Téléchargez le modèle Excel Matériels STAR.");
+      }
+      const get = (cells: string[], index: number) => String(cells[index] ?? "").trim();
+      const parseDate = (value: string) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+        const french = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(value);
+        if (french) return `${french[3]}-${french[2].padStart(2, "0")}-${french[1].padStart(2, "0")}`;
+        const serial = Number(value);
+        return Number.isFinite(serial) && serial > 20000 && serial < 80000 ? new Date(Date.UTC(1899, 11, 30 + Math.floor(serial))).toISOString().slice(0, 10) : "";
+      };
+      const parseTime = (value: string) => {
+        const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value);
+        if (match) return `${match[1].padStart(2, "0")}:${match[2]}`;
+        const fraction = Number(value);
+        if (Number.isFinite(fraction) && fraction >= 0 && fraction < 1) {
+          const minutes = Math.round(fraction * 1440);
+          return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        }
+        return "";
+      };
+      const rows = sheet.slice(1).map((cells, index) => {
+        const providerText = get(cells, cols.provider);
+        const provider = providers.find((item) => item.id.toLocaleLowerCase() === providerText.toLocaleLowerCase() || item.name.trim().toLocaleLowerCase() === providerText.toLocaleLowerCase());
+        const count = Number(get(cells, cols.count));
+        return { line: index + 2, date: parseDate(get(cells, cols.date)), time: parseTime(get(cells, cols.time)), firstName: get(cells, cols.firstName), matricule: get(cells, cols.matricule), provider, material: get(cells, cols.material), count };
+      }).filter((row) => row.date || row.matricule || row.material);
+      if (!rows.length) throw new Error("Le fichier ne contient aucune ligne à importer.");
+      const grouped = new Map<string, { rows: typeof rows; firstLine: number }>();
+      const failures: string[] = [];
+      for (const row of rows) {
+        if (!row.date || !row.time || !row.firstName || !row.matricule || !row.provider || !row.material || !Number.isSafeInteger(row.count) || row.count < 1 || row.count > 1000000) {
+          failures.push(`Ligne ${row.line} : date, heure, prénom, matricule, prestataire, matériel ou nombre invalide.`);
+          continue;
+        }
+        const key = [row.date, row.time, row.matricule.toLocaleLowerCase(), row.provider.id].join("|");
+        const group = grouped.get(key) || { rows: [], firstLine: row.line };
+        group.rows.push(row);
+        grouped.set(key, group);
+      }
+      const created: StarMaterialEntry[] = [];
+      for (const group of grouped.values()) {
+        const first = group.rows[0];
+        try {
+          created.push(await serviceApi.createStarMaterial({
+            date: first.date, heureEntree: first.time, prenom: first.firstName, matricule: first.matricule,
+            prestataireId: first.provider!.id, providerName: first.provider!.name, siteName: selectedSiteName,
+            siteId: site.id, items: group.rows.map((row) => ({ designation: row.material, nombre: row.count })),
+          }));
+        } catch (reason) {
+          failures.push(`Ligne ${group.firstLine} : ${reason instanceof Error ? reason.message : "enregistrement impossible"}`);
+        }
+      }
+      if (created.length) setRegistry((current) => ({ siteId: site.id, error: "", entries: [...created.reverse(), ...(current.siteId === site.id ? current.entries : [])] }));
+      if (failures.length) toast.warning(`${created.length} mouvement(s) importé(s), ${failures.length} ligne(s) ignorée(s). ${failures.slice(0, 2).join(" ")}`);
+      else toast.success(`${created.length} mouvement(s) importé(s).`);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Importation impossible.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const registerExit = async (entry: StarMaterialEntry) => {
@@ -255,7 +339,8 @@ export default function MaterielsStar() {
 
   return (
     <div className="star-materials-module space-y-5">
-      <PageHeader title="Matériels Star" subtitle="Suivi des entrées et sorties de matériels Star." />
+      <PageHeader title="Matériels Star" subtitle="Suivi des entrées et sorties de matériels Star."
+        action={<Button type="button" disabled={!site?.id || loading} onClick={() => { resetForm(); setFormOpen(true); }}><Plus className="mr-2 size-4" />Nouvelle entrée</Button>} />
       <div className="max-w-xl">
         <SitePicker
           id="materiels-star-site"
@@ -281,6 +366,8 @@ export default function MaterielsStar() {
       </Panel>}
       {!loading && (
         <>
+          <div className={`star-materials-entry-shell ${formOpen ? "is-open" : ""}`} aria-hidden={!formOpen} role={formOpen ? "dialog" : undefined} aria-modal={formOpen ? true : undefined} aria-label={editing ? "Modifier un mouvement matériel STAR" : "Nouvelle entrée de matériel STAR"}>
+          <button type="button" className="star-materials-modal-close" aria-label="Fermer le formulaire" onClick={() => setFormOpen(false)}>×</button>
           <Panel title={editing ? "Modifier un mouvement" : "Enregistrer une entrée de matériel"}>
             <form className="star-materials-form space-y-5" onSubmit={(event) => void submit(event)}>
               <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -343,13 +430,26 @@ export default function MaterielsStar() {
               </div>
             </form>
           </Panel>
+          </div>
 
           <section id="star-materials-print-area" className="star-materials-registry">
             <Panel title="Registre des matériels Star">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 star-materials-screen">
+              <div className="star-materials-toolbar mb-4 flex flex-wrap items-center justify-between gap-3 star-materials-screen">
                 <div className="relative min-w-[260px] flex-1">
                   <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input aria-label="Rechercher un mouvement de matériel Star" placeholder="Rechercher date, prénom, matricule, matériel ou heure…" value={search} onChange={(event) => setSearch(event.target.value)} className="min-h-11 pl-9" />
+                </div>
+                <div className="star-materials-actions">
+                  <label className={`star-materials-import ${!site?.id || loading || importing ? "is-disabled" : ""}`}>
+                    <FileUp className="size-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
+                    <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!site?.id || loading || importing} onChange={(event) => { void importMaterials(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                  </label>
+                  <Button type="button" variant="outline" onClick={() => exportXlsx("modele-materiels-star.xlsx", "Matériels STAR", spreadsheetHeaders, [])}>
+                    <FileDown className="mr-2 size-4" />Modèle Excel
+                  </Button>
+                  <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`materiels-star-${today()}.xlsx`, "Matériels STAR", spreadsheetHeaders, spreadsheetRows)}>
+                    <Download className="mr-2 size-4" />Exporter Excel
+                  </Button>
                 </div>
                 <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} filename="materiels-star" columns={[
                   { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
