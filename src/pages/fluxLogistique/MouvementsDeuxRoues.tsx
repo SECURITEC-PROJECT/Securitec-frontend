@@ -1,12 +1,13 @@
-import { Empty, PageHeader, Panel } from "@/components/PageHeader";
+import { Empty, Panel } from "@/components/PageHeader";
 import SitePicker from "@/components/SitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSites } from "@/hooks/useSites";
 import { confirmDeletion } from "@/lib/deletion-toast";
 import { printRecord } from "@/lib/printRecord";
-import { isWithinRegistryPeriod, RegistryPeriodExport, type RegistryColumn } from "@/components/RegistryPeriodExport";
+import { isWithinRegistryPeriod } from "@/components/RegistryPeriodExport";
 import { RegistryAuditHistory } from "@/components/RegistryAuditHistory";
 import { RegistryAttachments } from "@/components/RegistryAttachments";
 import {
@@ -15,7 +16,7 @@ import {
   type MotorcycleMovement,
   type RegisterEmployeeOption,
 } from "@/lib/service-api";
-import { Download, FileDown, FileUp, LogOut, Pencil, Plus, Printer, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, FileDown, FileUp, LogOut, MapPin, Pencil, Plus, Printer, Search, Trash2, Truck, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { exportXlsx } from "@/lib/export-xlsx";
@@ -93,6 +94,10 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   const [search, setSearch] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [personFilter, setPersonFilter] = useState("");
 
   const siteName = selectedSiteName || sites[0]?.name || "";
   const site = useMemo(() => sites.find((item) => item.name === siteName), [sites, siteName]);
@@ -151,6 +156,14 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     const query = normalize(search.trim());
     return entries.filter((entry) => {
       if (!isWithinRegistryPeriod(entry.date, periodStart, periodEnd)) return false;
+      if (statusFilter === "cancelled" && !entry.annuleLe) return false;
+      if (statusFilter === "pending" && !entry.pendingSync) return false;
+      if (statusFilter === "exited" && (entry.annuleLe || entry.pendingSync || !entry.heureSortie)) return false;
+      if (statusFilter === "in-progress" && (entry.annuleLe || entry.pendingSync || entry.heureSortie)) return false;
+      const person = isBicycle
+        ? `${(entry as BicycleMovement).prenom} · ${(entry as BicycleMovement).matricule}`
+        : (entry as MotorcycleMovement).moto;
+      if (personFilter && person !== personFilter) return false;
       const values = isBicycle
         ? [
           entry.date, formatDate(entry.date), entry.heureEntree, (entry as BicycleMovement).matricule,
@@ -163,20 +176,14 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
         ];
       return !query || normalize(values.join(" ")).includes(query);
     });
-  }, [entries, search, isBicycle, periodStart, periodEnd]);
+  }, [entries, search, isBicycle, periodStart, periodEnd, statusFilter, personFilter]);
+  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const personOptions = useMemo(() => Array.from(new Set(entries.map((entry) => isBicycle
+    ? `${(entry as BicycleMovement).prenom} · ${(entry as BicycleMovement).matricule}`
+    : (entry as MotorcycleMovement).moto).filter(Boolean))).sort((left, right) => left.localeCompare(right, "fr")), [entries, isBicycle]);
 
-  const exportColumns: RegistryColumn<MovementEntry>[] = isBicycle
-    ? [
-      { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
-      { label: "Matricule", value: (row) => (row as BicycleMovement).matricule }, { label: "Prénom", value: (row) => (row as BicycleMovement).prenom },
-      { label: "Section", value: (row) => (row as BicycleMovement).section }, { label: "Vélo", value: (row) => (row as BicycleMovement).marqueVelo },
-      { label: "Heure sortie", value: (row) => (row as BicycleMovement).heureSortie }, { label: "Annulé le", value: (row) => (row as BicycleMovement).annuleLe },
-    ]
-    : [
-      { label: "Date", value: (row) => row.date }, { label: "Heure entrée", value: (row) => row.heureEntree },
-      { label: "Moto", value: (row) => (row as MotorcycleMovement).moto }, { label: "Observation", value: (row) => (row as MotorcycleMovement).observation },
-      { label: "Heure sortie", value: (row) => (row as MotorcycleMovement).heureSortie }, { label: "Annulé le", value: (row) => (row as MotorcycleMovement).annuleLe },
-    ];
   const spreadsheetHeaders = isBicycle
     ? ["Date", "Heure entrée", "Matricule", "Marque vélo"]
     : ["Date", "Heure entrée", "Moto", "Observation"];
@@ -250,6 +257,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
             : [entry, ...current.entries]
           : [entry],
       }));
+      setPage(1);
       resetForm();
       toast.success(entry.pendingSync
         ? "Mouvement enregistré localement. Synchronisation au retour du réseau."
@@ -291,7 +299,6 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
         observation: motorcycle.observation,
       });
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const importMovements = async (file?: File) => {
@@ -348,7 +355,10 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           failures.push(`Ligne ${row.line} : ${error instanceof Error ? error.message : "enregistrement impossible"}`);
         }
       }
-      if (created.length) setRegistry((current) => ({ key: currentKey, error: "", entries: [...created.reverse(), ...(current.key === currentKey ? current.entries : [])] }));
+      if (created.length) {
+        setRegistry((current) => ({ key: currentKey, error: "", entries: [...created.reverse(), ...(current.key === currentKey ? current.entries : [])] }));
+        setPage(1);
+      }
       if (failures.length) toast.warning(`${created.length} ligne(s) importée(s), ${failures.length} ignorée(s). ${failures.slice(0, 2).join(" ")}`);
       else toast.success(`${created.length} mouvement(s) importé(s).`);
     } catch (error) {
@@ -445,7 +455,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
     const headings = isBicycle
       ? ["Date", "Heure d’entrée", "Matricule", "Prénom", "Section", "Marque vélo", "Heure de sortie"]
       : ["Date", "Heure d’entrée", "Moto", "Observation", "Heure de sortie"];
-    const tableRows = entries.map((entry) => {
+    const tableRows = filteredEntries.map((entry) => {
       const values = isBicycle
         ? (() => {
           const bicycle = entry as BicycleMovement;
@@ -493,7 +503,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
         </head>
         <body>
           <h1>${escapeHtml(title)}</h1>
-          <p class="site">Site : ${escapeHtml(siteName || "—")}</p>
+          <p class="site">Site : ${escapeHtml(siteName || "—")} · Impression du ${escapeHtml(new Date().toLocaleDateString("fr-FR"))} · ${filteredEntries.length} mouvement(s)</p>
           <table>
             <thead><tr>${headings.map((heading) => `<th>${escapeHtml(heading)}</th>`).join("")}</tr></thead>
             <tbody>${tableRows}</tbody>
@@ -505,29 +515,22 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
   };
 
   return (
-    <div className="two-wheel-module space-y-5">
-      <PageHeader title={title} subtitle={isBicycle
-        ? "Enregistrement des entrées de vélos par employé."
-        : "Enregistrement des entrées et sorties de motos."}
-        action={<Button type="button" disabled={!siteId} onClick={() => { resetForm(); setFormOpen(true); }}><Plus className="mr-2 size-4" />Nouvelle entrée</Button>} />
-      <div className="max-w-xl">
-        <SitePicker
-          id={`${kind}-movement-site`}
-          value={siteName}
-          type={site?.type || "USINE"}
-          sites={sites}
-          canCreate={canCreateSite}
-          onAdd={addSite}
-          onChange={(name) => {
-            setSelectedSiteName(name);
-            resetForm();
-          }}
-        />
-        {siteError && <p className="mt-2 text-sm text-destructive">{siteError}</p>}
-      </div>
+    <div className="courrier-module two-wheel-module space-y-4">
+      <header className="courrier-hero">
+        <div className="courrier-hero-icon"><Truck aria-hidden="true" /></div>
+        <div className="courrier-hero-copy">
+          <h1>{isBicycle ? "Mouvements des vélos" : "Mouvements des motos"}</h1>
+          <p>{isBicycle ? "Enregistrez et suivez les entrées et sorties de vélos par employé" : "Enregistrez et suivez les entrées et sorties des motos"}</p>
+        </div>
+      </header>
+      {loadError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{loadError}</p>}
 
-      <div className={`two-wheel-entry-shell ${formOpen ? "is-open" : ""}`} aria-hidden={!formOpen} role={formOpen ? "dialog" : undefined} aria-modal={formOpen ? true : undefined} aria-label={editingEntry ? "Modifier un mouvement" : `Nouvelle entrée ${isBicycle ? "vélo" : "moto"}`}>
-      <button type="button" className="two-wheel-modal-close" aria-label="Fermer le formulaire" onClick={() => setFormOpen(false)}>×</button>
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="two-wheel-entry-dialog">
+          <DialogHeader>
+            <DialogTitle>{editingEntry ? "Modifier un mouvement" : `Nouvelle entrée ${isBicycle ? "vélo" : "moto"}`}</DialogTitle>
+            <DialogDescription>Renseignez le mouvement et les informations associées au site sélectionné.</DialogDescription>
+          </DialogHeader>
       <Panel title={editingEntry ? "Modifier un mouvement" : `Nouvelle entrée ${isBicycle ? "vélo" : "moto"}`}>
         <form className="two-wheel-form space-y-5" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -597,7 +600,7 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           </div>
           {!siteId && <p className="text-sm text-muted-foreground">Sélectionnez un site pour enregistrer un mouvement.</p>}
           <div className="flex justify-end gap-2 border-t pt-4">
-            {editingEntry && <Button type="button" variant="outline" disabled={saving} onClick={resetForm}><X className="mr-2 size-4" />Annuler</Button>}
+            <Button type="button" variant="outline" disabled={saving} onClick={resetForm}><X className="mr-2 size-4" />Fermer</Button>
             <Button type="submit" disabled={saving || !siteId || (isBicycle && !employee)}>
               {editingEntry ? <Pencil className="mr-2 size-4" /> : <Plus className="mr-2 size-4" />}
               {saving ? "Enregistrement…" : editingEntry ? "Enregistrer les modifications" : "Enregistrer l’entrée"}
@@ -605,61 +608,110 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
           </div>
         </form>
       </Panel>
-      </div>
+          </DialogContent>
+        </Dialog>
 
-      <div className="two-wheel-registry">
-      <Panel title={`Historique ${isBicycle ? "des vélos" : "des motos"} (${filteredEntries.length})`}>
-        <div className="two-wheel-toolbar mb-4 flex flex-wrap items-end gap-3">
-          <div className="relative min-w-[260px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input aria-label={`Rechercher dans ${title}`} placeholder="Rechercher dans le registre…" className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <section className="courrier-history two-wheel-registry">
+          <div className="courrier-history-toolbar">
+            <h2 className="courrier-panel-heading">{isBicycle ? "Historique des vélos" : "Historique des motos"}</h2>
+            <div className="courrier-history-actions courrier-registry-screen">
+              <Button type="button" onClick={() => { resetForm(); setFormOpen(true); }} disabled={!siteId}>
+                <Plus aria-hidden="true" />Nouvelle entrée
+              </Button>
+              <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`${isBicycle ? "mouvements-velos" : "mouvements-motos"}-${today()}.xlsx`, title, spreadsheetHeaders, spreadsheetRows)}>
+                <Download aria-hidden="true" />Exporter Excel
+              </Button>
+              <Button type="button" variant="outline" onClick={() => exportXlsx(`modele-${isBicycle ? "mouvements-velos" : "mouvements-motos"}.xlsx`, title, spreadsheetHeaders, [])}>
+                <FileDown aria-hidden="true" />Télécharger modèle
+              </Button>
+              <label className={`courrier-import-button ${!siteId || loading || importing ? "pointer-events-none opacity-50" : ""}`}>
+                <FileUp aria-hidden="true" />{importing ? "Importation…" : "Importer"}
+                <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || loading || importing} onChange={(event) => { void importMovements(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+              </label>
+              <Button type="button" variant="outline" disabled={loading || !filteredEntries.length} onClick={printHistory}>
+                <Printer aria-hidden="true" />Imprimer les lignes
+              </Button>
+            </div>
           </div>
-          <div className="two-wheel-actions">
-            <label className={`two-wheel-import ${!siteId || loading || importing ? "is-disabled" : ""}`}>
-              <FileUp className="size-4" />{importing ? "Importation…" : "Importer Excel / CSV"}
-              <input className="sr-only" type="file" accept=".xlsx,.csv,text/csv" disabled={!siteId || loading || importing} onChange={(event) => { void importMovements(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+          <div className="courrier-filter-grid two-wheel-filter-grid courrier-registry-screen">
+            <label className="courrier-filter-field">
+              <span><CalendarDays aria-hidden="true" />Période</span>
+              <div className="courrier-date-range">
+                <Input aria-label="Date de début" type="date" max={periodEnd || undefined} value={periodStart} onChange={(event) => { setPeriodStart(event.target.value); setPage(1); }} />
+                <span aria-hidden="true">–</span>
+                <Input aria-label="Date de fin" type="date" min={periodStart || undefined} value={periodEnd} onChange={(event) => { setPeriodEnd(event.target.value); setPage(1); }} />
+              </div>
             </label>
-            <Button type="button" variant="outline" onClick={() => exportXlsx(`modele-${isBicycle ? "mouvements-velos" : "mouvements-motos"}.xlsx`, title, spreadsheetHeaders, [])}>
-              <FileDown className="mr-2 size-4" />Modèle Excel
-            </Button>
-            <Button type="button" variant="outline" disabled={!filteredEntries.length} onClick={() => exportXlsx(`${isBicycle ? "mouvements-velos" : "mouvements-motos"}-${today()}.xlsx`, title, spreadsheetHeaders, spreadsheetRows)}>
-              <Download className="mr-2 size-4" />Exporter Excel
-            </Button>
+            <label className="courrier-filter-field">
+              <span><UserRound aria-hidden="true" />{isBicycle ? "Personne" : "Moto"}</span>
+              <select value={personFilter} onChange={(event) => { setPersonFilter(event.target.value); setPage(1); }}>
+                <option value="">{isBicycle ? "Toutes les personnes" : "Toutes les motos"}</option>
+                {personOptions.map((person) => <option key={person} value={person}>{person}</option>)}
+              </select>
+            </label>
+            <div className="courrier-filter-field courrier-filter-site">
+              <span><MapPin aria-hidden="true" />Site</span>
+              <SitePicker id={`${kind}-movement-site`} value={siteName} type={site?.type || "USINE"} sites={sites} canCreate={canCreateSite} onAdd={addSite} onChange={(name) => { setSelectedSiteName(name); resetForm(); setPage(1); }} />
+            </div>
+            <label className="courrier-filter-field">
+              <span><CheckCircle2 aria-hidden="true" />Statut</span>
+              <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}>
+                <option value="all">Tous</option>
+                <option value="in-progress">En circulation</option>
+                <option value="exited">Sortie effectuée</option>
+                <option value="cancelled">Annulé</option>
+                <option value="pending">En attente de synchronisation</option>
+              </select>
+            </label>
+            <label className="courrier-filter-field courrier-filter-search">
+              <span><Search aria-hidden="true" />Recherche</span>
+              <Input aria-label={`Rechercher dans ${title}`} placeholder={isBicycle ? "Prénom, matricule, vélo…" : "Moto, observation…"} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+            </label>
           </div>
-          <RegistryPeriodExport from={periodStart} to={periodEnd} onFromChange={setPeriodStart} onToChange={setPeriodEnd} records={filteredEntries} columns={exportColumns} filename={isBicycle ? "mouvements-velos" : "mouvements-motos"} />
-          <Button type="button" variant="outline" disabled={loading || !entries.length} onClick={printHistory}>
-            <Printer className="mr-2 size-4" />
-            Imprimer tout l’historique
-          </Button>
-        </div>
-        {!siteId ? <Empty text="Sélectionnez un site pour consulter le registre." />
-          : loading ? <Empty text="Chargement du registre…" />
-            : loadError ? <p className="py-6 text-center text-sm text-destructive">{loadError}</p>
-              : !entries.length ? <Empty text="Aucun mouvement enregistré pour ce site." />
-              : <div className="two-wheel-table-wrap overflow-x-auto rounded-lg border">
-                  <table className="two-wheel-table w-full min-w-[760px] text-left text-sm">
-                    <thead className="two-wheel-table-head bg-muted/70 text-xs uppercase text-muted-foreground">
-                      <tr>{(isBicycle
-                        ? ["Date", "Heure d’entrée", "Matricule", "Prénom", "Section", "Marque vélo", "Heure de sortie", "Actions"]
-                        : ["Date", "Heure d’entrée", "Moto", "Observation", "Heure de sortie", "Actions"]
-                      ).map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {filteredEntries.map((entry) => <tr key={entry.id} className="two-wheel-table-row align-top hover:bg-muted/30">
-                        <td className={`whitespace-nowrap px-3 py-3 ${entry.annuleLe ? "text-muted-foreground line-through" : ""}`}>{formatDate(entry.date)}{entry.annuleLe && <span className="ml-1 text-destructive no-underline">(annulé)</span>}{entry.pendingSync && <span className="mt-1 block text-xs text-amber-700" title={entry.pendingSyncError || undefined}>{entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"}</span>}</td>
-                        <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{entry.heureEntree}</td>
-                        {isBicycle ? <>
-                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{(entry as BicycleMovement).matricule}</td>
-                          <td className="px-3 py-3">{(entry as BicycleMovement).prenom}</td>
-                          <td className="px-3 py-3">{(entry as BicycleMovement).section}</td>
-                          <td className="px-3 py-3">{(entry as BicycleMovement).marqueVelo}</td>
-                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{(entry as BicycleMovement).heureSortie || "—"}</td>
-                        </> : <>
-                          <td className="px-3 py-3">{(entry as MotorcycleMovement).moto}</td>
-                          <td className="whitespace-pre-wrap px-3 py-3">{(entry as MotorcycleMovement).observation || "—"}</td>
-                          <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">{(entry as MotorcycleMovement).heureSortie || "—"}</td>
-                        </>}
-                        <td className="whitespace-nowrap px-3 py-3">
+          {siteError && <p role="alert" className="text-sm text-destructive">{siteError}</p>}
+          {employeeError && isBicycle && !formOpen && <p role="alert" className="text-sm text-destructive">{employeeError}</p>}
+          <div className="courrier-results-summary courrier-registry-screen">
+            <p><CheckCircle2 aria-hidden="true" />{filteredEntries.length} mouvement(s) trouvé(s)</p>
+            <label>Afficher
+              <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+                <option value={10}>10 lignes</option><option value={25}>25 lignes</option><option value={50}>50 lignes</option><option value={100}>100 lignes</option>
+              </select>
+            </label>
+          </div>
+          {!siteId ? <Empty text="Sélectionnez un site pour consulter le registre." />
+            : loading ? <Empty text="Chargement du registre…" />
+              : loadError ? <p className="py-6 text-center text-sm text-destructive">{loadError}</p>
+                : <div className="overflow-auto rounded-lg courrier-registry-screen">
+                    <table className="courrier-table courrier-history-table two-wheel-table w-full border-collapse text-left text-sm">
+                      <thead>
+                        <tr>{(isBicycle
+                          ? ["N°", "Date", "Heure d’entrée", "Matricule", "Prénom", "Section", "Marque vélo", "Heure de sortie", "Statut", "Action"]
+                          : ["N°", "Date", "Heure d’entrée", "Moto", "Observation", "Heure de sortie", "Statut", "Action"]
+                        ).map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {pageEntries.map((entry, index) => {
+                          const status = entry.pendingSync ? "pending" : entry.annuleLe ? "cancelled" : entry.heureSortie ? "exited" : "in-progress";
+                          const statusLabel = status === "pending"
+                            ? entry.pendingSyncStatus === "conflict" ? "Conflit à résoudre" : entry.pendingSyncStatus === "rejected" ? "À vérifier" : "En attente réseau"
+                            : status === "cancelled" ? "Annulé" : status === "exited" ? `Sortie · ${entry.heureSortie}` : "En circulation";
+                          return <tr key={entry.id} className={`courrier-table-row courrier-table-row--${status}`}>
+                          <td>{(currentPage - 1) * pageSize + index + 1}</td>
+                          <td className={`whitespace-nowrap ${entry.annuleLe ? "line-through" : ""}`}>{formatDate(entry.date)}</td>
+                          <td className="whitespace-nowrap">{entry.heureEntree}</td>
+                          {isBicycle ? <>
+                            <td>{(entry as BicycleMovement).matricule}</td>
+                            <td className="font-medium">{(entry as BicycleMovement).prenom}</td>
+                            <td>{(entry as BicycleMovement).section}</td>
+                            <td>{(entry as BicycleMovement).marqueVelo}</td>
+                            <td className="whitespace-nowrap">{(entry as BicycleMovement).heureSortie || "—"}</td>
+                          </> : <>
+                            <td className="font-medium">{(entry as MotorcycleMovement).moto}</td>
+                            <td className="whitespace-pre-wrap">{(entry as MotorcycleMovement).observation || "—"}</td>
+                            <td className="whitespace-nowrap">{(entry as MotorcycleMovement).heureSortie || "—"}</td>
+                          </>}
+                          <td><span className={`courrier-status courrier-status--${status}`}>{statusLabel}</span></td>
+                          <td className="whitespace-nowrap">
                           <div className="flex items-center gap-1">
                             <Button type="button" size="icon" variant="ghost" aria-label="Imprimer le mouvement" title="Imprimer le mouvement" onClick={() => printEntry(entry)}>
                               <Printer className="size-4" />
@@ -676,13 +728,21 @@ export default function MouvementsDeuxRoues({ kind }: { kind: MovementKind }) {
                             {!entry.pendingSync && <RegistryAttachments entity={isBicycle ? "mouvement_velo" : "mouvement_moto"} recordId={entry.id} siteId={siteId} />}
                           </div>
                         </td>
-                      </tr>)}
-                      {!filteredEntries.length && <tr><td colSpan={isBicycle ? 8 : 6} className="px-4 py-8 text-center text-sm text-muted-foreground">Aucun résultat pour cette recherche.</td></tr>}
+                      </tr>;
+                      })}
+                      {!pageEntries.length && <tr><td colSpan={isBicycle ? 10 : 8} className="courrier-empty-row">{entries.length ? "Aucun résultat pour ces filtres." : "Aucun mouvement enregistré pour ce site."}</td></tr>}
                     </tbody>
                   </table>
                 </div>}
-      </Panel>
-      </div>
+        <div className="courrier-pagination courrier-registry-screen">
+          <span>Affichage de {filteredEntries.length ? (currentPage - 1) * pageSize + 1 : 0} à {Math.min(currentPage * pageSize, filteredEntries.length)} sur {filteredEntries.length}</span>
+          <div>
+            <Button type="button" variant="outline" size="icon" aria-label="Page précédente" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft className="size-4" /></Button>
+            <Button type="button" className="courrier-page-number">{currentPage}</Button>
+            <Button type="button" variant="outline" size="icon" aria-label="Page suivante" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight className="size-4" /></Button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -1550,6 +1550,15 @@ main table tbody tr:last-child { border-bottom: 0; }
 }
 
 .two-wheel-module { width: 100%; min-width: 0; }
+.two-wheel-registry { min-width: 0; }
+.two-wheel-filter-grid { grid-template-columns: minmax(260px, 1.15fr) minmax(160px, .9fr) minmax(160px, .85fr) minmax(170px, .9fr) minmax(190px, 1.1fr); }
+.two-wheel-filter-grid .courrier-filter-site > div > label { display: none; }
+.two-wheel-filter-grid .courrier-filter-site > div > div { margin-top: 0; }
+.two-wheel-filter-grid .courrier-filter-site select { height: 40px; }
+.two-wheel-registry .two-wheel-table { min-width: 1150px; }
+.two-wheel-entry-dialog { width: calc(100vw - 1rem); max-width: 1000px; max-height: 94vh; overflow-y: auto; }
+.two-wheel-entry-dialog .panel-card { padding: 14px; }
+.two-wheel-entry-dialog .panel-card > h2 { display: none; }
 .two-wheel-module > .page-heading { margin-bottom: 0; }
 .two-wheel-module > .page-heading > button { flex: 0 0 auto; }
 .two-wheel-module .panel-card { min-width: 0; border-color: #e2e6ed; border-radius: 9px; background: #fff; box-shadow: 0 4px 14px #202c410c; }
@@ -1587,11 +1596,7 @@ main table tbody tr:last-child { border-bottom: 0; }
 .two-wheel-modal-close:hover { background: #e2ebf8; }
 @media (max-width: 640px) {
   .two-wheel-module .panel-card { padding: 12px; }
-  .two-wheel-module > .page-heading { align-items: flex-start; }
-  .two-wheel-module > .page-heading > button { width: 100%; }
-  .two-wheel-entry-shell.is-open { align-items: flex-end; padding: 8px; }
-  .two-wheel-entry-shell.is-open > .panel-card { max-height: calc(100vh - 16px); border-radius: 14px 14px 8px 8px; }
-  .two-wheel-modal-close { top: 14px; right: 22px; }
+  .two-wheel-filter-grid { grid-template-columns: minmax(0, 1fr); }
   .two-wheel-toolbar { align-items: stretch; flex-direction: column; }
   .two-wheel-toolbar > *, .two-wheel-toolbar > .relative { width: 100%; min-width: 0; }
   .two-wheel-actions { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
