@@ -1,0 +1,58 @@
+.header {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #7939b8;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  color: #555;
+}
+
+.brand strong {
+  color: #111;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+.title {
+  flex: 1;
+  text-align: center;
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.site {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #444;
+  font-size: 12px;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 11px;
+  color: #444;
+}
+
+.footer {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding-top: 4px;
+  border-top: 1px solid #ccc;
+  color: #666;
+  font-size: 10px;
+  text-align: center;
+}

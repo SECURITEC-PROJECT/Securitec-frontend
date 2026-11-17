@@ -1,0 +1,40 @@
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 14px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.action:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.row .action {
+  flex: 1;
+}
+
+.hidden {
+  opacity: 0.4;
+}

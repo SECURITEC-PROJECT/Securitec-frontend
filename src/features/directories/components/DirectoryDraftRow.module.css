@@ -1,0 +1,50 @@
+.draft {
+  background: var(--color-bg);
+}
+
+.draft td {
+  padding: 6px 8px;
+}
+
+.close {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.submit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.error {
+  color: var(--color-danger);
+  font-size: 11px;
+  white-space: normal;
+}
+
+.persistent {
+  background: var(--color-primary-soft);
+}
+
+.persistent td {
+  padding: 3px 4px;
+}
+
+.new {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* À l'impression : seulement le contenu du tableau, pas la ligne de saisie. */
+@media print {
+  .draft {
+    display: none;
+  }
+}

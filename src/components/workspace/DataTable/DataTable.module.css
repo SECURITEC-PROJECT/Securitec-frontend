@@ -1,0 +1,135 @@
+.wrapper {
+  overflow: auto;
+  border: 1px solid var(--color-border-soft);
+  background: var(--color-surface);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: 12px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border-soft);
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  height: 33px;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.table tbody tr:hover {
+  background: var(--color-bg);
+}
+
+.table tbody tr.selected {
+  background: var(--color-selected);
+}
+
+.leading {
+  width: 90px;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+@media print {
+  .leading {
+    display: none;
+  }
+}
+
+.sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.arrow {
+  font-size: 9px;
+  opacity: 0.25;
+}
+
+.sort:hover .arrow,
+.arrowActive {
+  opacity: 1;
+}
+
+.filters th {
+  padding: 4px 8px;
+  text-transform: none;
+}
+
+.filter {
+  width: 100%;
+  min-width: 70px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-surface);
+  font: inherit;
+  font-weight: 400;
+}
+
+@media print {
+  .filters,
+  .arrow {
+    display: none;
+  }
+}
+
+.grid th,
+.grid td {
+  border-right: 1px solid var(--color-border-soft);
+}
+
+.grid th:last-child,
+.grid td:last-child {
+  border-right: none;
+}
+
+.grid td {
+  padding: 2px 4px;
+}
+
+/* Ligne mise en avant (ex. depuis un lien de notification) : cadre de couleur. */
+.table tbody tr.selected {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Ligne à traiter (ex. signalement ouvert) : fond rouge et liseré à gauche. */
+.table tbody tr.danger,
+.table tbody tr.danger:hover {
+  background: var(--color-danger-soft);
+}
+
+.table tbody tr.danger td:first-child {
+  box-shadow: inset 4px 0 0 var(--color-danger);
+}

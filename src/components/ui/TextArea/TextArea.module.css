@@ -1,0 +1,26 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.required {
+  color: var(--color-brand-red);
+}
+
+.input {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  outline: none;
+  resize: vertical;
+}
+
+.input:focus {
+  border-color: var(--color-primary);
+}

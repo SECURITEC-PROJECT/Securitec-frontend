@@ -1,0 +1,1 @@
+export { postsConfig } from './posts'

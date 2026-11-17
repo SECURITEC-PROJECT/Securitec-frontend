@@ -1,0 +1,55 @@
+.matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  outline: none;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  position: sticky;
+  top: -20px;
+  padding: 8px 6px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 11px;
+  text-align: left;
+  z-index: 1;
+}
+
+.table td {
+  padding: 6px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.action {
+  width: 70px;
+  text-align: center !important;
+}
+
+.group td {
+  padding: 8px 6px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}

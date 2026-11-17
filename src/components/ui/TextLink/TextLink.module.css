@@ -1,0 +1,8 @@
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 13px;
+  text-decoration: underline;
+}

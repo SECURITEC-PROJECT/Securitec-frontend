@@ -1,0 +1,120 @@
+@import './theme.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-size: 14px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   Impression : seul le contenu de la page est imprimé, sous un en-tête avec le logo SECURITEC,
+   le titre de la page, le site et la date. [data-print='hide'] masque un élément à l'impression ;
+   [data-print-only] n'apparaît qu'à l'impression ; [data-print-flow] laisse le contenu s'étendre sur plusieurs pages.
+   --------------------------------------------------------------------------- */
+[data-print-only] {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm 10mm 14mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000;
+    font-size: 11px;
+  }
+
+  [data-print-only] {
+    display: flex;
+  }
+
+  [data-print='hide'],
+  [role='dialog'],
+  [role='status'] {
+    display: none !important;
+  }
+
+  [data-print-flow] {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* Tableaux : l'en-tête se répète à chaque page, une ligne n'est jamais coupée en deux. */
+  table {
+    width: 100%;
+    overflow: visible !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  input,
+  select,
+  textarea {
+    border: none !important;
+    background: transparent !important;
+  }
+}
+
+/* Titre de page : même taille et même barre d'accent partout (hors connexion et impression). */
+#root h1:not([data-plain]) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+#root h1:not([data-plain])::before {
+  content: '';
+  flex-shrink: 0;
+  width: 5px;
+  height: 22px;
+  border-radius: 3px;
+  background: var(--color-info);
+}
+
+@media print {
+  #root h1::before {
+    display: none;
+  }
+}

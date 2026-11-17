@@ -1,0 +1,22 @@
+.controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.controls button {
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  line-height: 0;
+  color: var(--color-muted);
+}
+
+.controls button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.controls button:disabled {
+  opacity: 0.3;
+}

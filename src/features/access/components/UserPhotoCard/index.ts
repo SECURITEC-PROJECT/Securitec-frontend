@@ -1,0 +1,1 @@
+export { UserPhotoCard } from './UserPhotoCard'

@@ -1,0 +1,34 @@
+.editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.actions button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-info);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.actions button:disabled {
+  color: var(--color-muted);
+}
+
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 12px;
+}

@@ -1,0 +1,61 @@
+/* Thème SECURITEC : seule source de vérité des couleurs et tokens de design. */
+:root {
+  /* Marque */
+  --color-brand-navy: #14235a;
+  --color-brand-red: #e1343f;
+
+  /* Primaire (violet) */
+  --color-primary: #7939b8;
+  --color-primary-end: #7a59d8;
+  --color-primary-soft: #f2eff5;
+
+  /* Secondaire (vert) */
+  --color-secondary: #39b889;
+  --color-secondary-end: #59bdd8;
+
+  /* États */
+  --color-danger: #d32f2f;
+  --color-warning: #ff8f00;
+  --color-attention: #ffff00;
+  --color-success: #aecb12;
+  --color-danger-soft: #fdecea;
+  --color-success-soft: #f1f7d6;
+  --color-info: #1f78c1;
+  --color-neutral: #5b6770;
+  --color-online: #aecb12;
+  --color-on-light-state: #1f1b2d;
+  --gradient-code: linear-gradient(90deg, #3f9bde 0%, #4dbfd0 100%);
+
+  /* Neutres */
+  --color-text: #1f1b2d;
+  --color-muted: #6b6880;
+  --color-border: #d6d3de;
+  --color-border-soft: #efedf3;
+  --color-surface: #ffffff;
+  --color-on-primary: #ffffff;
+  --color-bg: #f6f4f9;
+  --color-bg-gradient-start: #ece8f8;
+  --color-overlay: rgba(20, 15, 40, 0.5);
+  --color-selected: #ece4f7;
+  --color-hover: rgba(0, 0, 0, 0.07);
+
+  /* Dégradés */
+  --gradient-primary: linear-gradient(121deg, var(--color-primary) 0%, var(--color-primary-end) 100%);
+  --gradient-secondary: linear-gradient(121deg, var(--color-secondary) 0%, var(--color-secondary-end) 100%);
+  --gradient-outline: linear-gradient(135deg, var(--color-primary-soft) 0%, rgba(255, 255, 255, 0) 100%);
+
+  /* Forme et typographie */
+  --shadow-card: 0 2px 8px rgb(60 70 120 / 10%);
+  --shadow-lift: 0 8px 22px rgb(60 70 120 / 18%);
+  --radius-card: 14px;
+  --radius-control: 10px;
+  --gradient-shell: linear-gradient(180deg, #eef1ff 0%, #f7f8fd 100%);
+  --shadow-modal: 0 10px 40px rgba(0, 0, 0, 0.25);
+  --radius: 8px;
+  --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+:root {
+  --color-primary-light: #b79ae0;
+  --gradient-page: linear-gradient(180deg, var(--color-bg-gradient-start) 0%, var(--color-bg) 60%);
+}
