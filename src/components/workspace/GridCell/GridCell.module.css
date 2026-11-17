@@ -1,0 +1,89 @@
+.cell,
+.static,
+.editing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+.cell {
+  cursor: cell;
+}
+
+.cell:hover {
+  background: var(--color-primary-soft);
+}
+
+.cell:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  background: var(--color-surface);
+}
+
+.editing {
+  padding: 0;
+}
+
+.label {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.label::after {
+  content: ' :';
+}
+
+.empty {
+  color: var(--color-muted);
+}
+
+.error {
+  flex-basis: 100%;
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.danger {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.success {
+  color: #1d7a4f;
+}
+
+/* Mode tableur : un champ toujours visible, qui se fond dans la cellule tant qu'il n'a pas le focus. */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sheet input,
+.sheet select {
+  min-width: 90px;
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sheet input:hover,
+.sheet select:hover {
+  background: var(--color-primary-soft);
+}
+
+.sheet input:focus,
+.sheet select:focus {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.invalid input,
+.invalid select {
+  border-color: var(--color-danger);
+}

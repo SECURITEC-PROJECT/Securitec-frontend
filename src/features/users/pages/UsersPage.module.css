@@ -1,0 +1,52 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.wrapper {
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  padding: 10px 14px;
+  background: var(--color-bg);
+  font-size: 12px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.table td {
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.name {
+  font-weight: 600;
+}
+
+.inactive {
+  opacity: 0.55;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.error {
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}

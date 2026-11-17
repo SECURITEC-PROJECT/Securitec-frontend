@@ -1,0 +1,47 @@
+.menu {
+  position: relative;
+}
+
+.button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 2px 8px rgb(60 70 120 / 10%);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: 0 6px 24px rgb(40 50 90 / 18%);
+}
+
+.popup button {
+  padding: 9px 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  text-align: left;
+}
+
+.popup button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.popup button:disabled {
+  color: var(--color-muted);
+}

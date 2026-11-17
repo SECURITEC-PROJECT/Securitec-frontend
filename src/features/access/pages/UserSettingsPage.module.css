@@ -1,0 +1,140 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 20px;
+}
+
+.tools {
+  display: flex;
+  gap: 6px;
+}
+
+.tool {
+  padding: 6px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  line-height: 0;
+}
+
+.tool:hover {
+  background: var(--color-hover);
+}
+
+.columns {
+  column-count: 3;
+  column-gap: 16px;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.value {
+  margin: 0;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status {
+  padding: 24px;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.errorInline {
+  flex-basis: 100%;
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.notice {
+  color: #1d7a4f;
+  font-size: 12px;
+}
+
+.pin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+}
+
+.pinLabel {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.pinLabel::after {
+  content: ' :';
+}
+
+.pinInput {
+  width: 110px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--color-primary);
+  border-radius: 3px;
+  outline: none;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-info);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 1000px) {
+  .columns {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .columns {
+    column-count: 1;
+  }
+}

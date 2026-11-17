@@ -1,0 +1,28 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  position: relative;
+  padding-left: 30px;
+  margin-bottom: 7px;
+  line-height: 1.4;
+}
+
+.item:last-child {
+  margin-bottom: 0;
+}
+
+.item::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 7px;
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+  transform: rotate(45deg);
+}

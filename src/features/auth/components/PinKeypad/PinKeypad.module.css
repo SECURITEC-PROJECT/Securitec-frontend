@@ -1,0 +1,18 @@
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+.key {
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  font-weight: 600;
+}
+
+.key:active {
+  background: var(--color-bg);
+}

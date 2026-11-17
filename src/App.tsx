@@ -1,183 +1,49 @@
-import { Toaster } from '@/components/ui/sonner';
-import { clearSession, restoreSession, type AuthenticatedUser } from '@/lib/auth-api';
-import Administration from '@/pages/administration/Administration';
-import AgentAccueil from '@/pages/agentAccueil/AgentAccueil';
-import QuestionnaireVisiteur from '@/pages/agentAccueil/QuestionnaireVisiteur';
-import DeclarationObjets from '@/pages/agentAccueil/DeclarationObjets';
-import Vehicule from '@/pages/agentAccueil/vehicule/Vehicule';
-import ControleAcces from '@/pages/agentControle/controleAcces/ControleAcces';
-import Alcootest from '@/pages/agentControle/controleAcces/Alcootest';
-import Rondes from '@/pages/agentControle/ronde/Rondes';
-import PointsVigilance from '@/pages/agentControle/ronde/PointsVigilance';
-import Cameras from '@/pages/agentSupVideo/cameras/Cameras';
-import MainCourante from '@/pages/agentSupVideo/mainCourante/MainCourante';
-import Courrier from '@/pages/courrier/Courrier';
-import Authentification from '@/pages/authentification/Authentification';
-import CompteRendu from '@/pages/compteRendu/CompteRendu';
-import Dashboard from '@/pages/dashboard/Dashboard';
-import Documents from '@/pages/documentation/Documentation';
-import Chauffeurs from '@/pages/chauffeurs/Chauffeurs';
-import Transporteurs from '@/pages/transporteurs/Transporteurs';
-import Employes from '@/pages/employes/Employes';
-import LayoutPrincipal from '@/pages/layouts/LayoutPrincipal';
-// import Messagerie from '@/pages/messagerie/Messagerie';
-import Passation from '@/pages/passation/Passation';
-import Consignes from '@/pages/consigne/Consignes';
-import MaterielsSousTraitant from '@/pages/materielsSousTraitant/MaterielsSousTraitant';
-import MaterielsStar from '@/pages/materielsStar/MaterielsStar';
-import FluxLogistique from '@/pages/fluxLogistique/FluxLogistique';
-import ChargementsStarParticuliers from '@/pages/fluxLogistique/ChargementsStarParticuliers';
-import DechetsLevee from '@/pages/fluxLogistique/DechetsLevee';
-import OrduresFerrailles from '@/pages/fluxLogistique/OrduresFerrailles';
-import MouvementsDeuxRoues from '@/pages/fluxLogistique/MouvementsDeuxRoues';
-import DechargementBouteillesVides from '@/pages/fluxLogistique/DechargementBouteillesVides';
-import PondBrut from '@/pages/fluxLogistique/PondBrut';
-import DechargementMatierePremiere from '@/pages/fluxLogistique/DechargementMatierePremiere';
-import DepotageFuelGasoil from '@/pages/fluxLogistique/DepotageFuelGasoil';
-import CheckListCamion from '@/pages/fluxLogistique/CheckListCamion';
-import PriseDePoste from '@/pages/priseDePoste/PriseDePoste';
-import Statistiques from '@/pages/statistique/Statistique';
-import CarteGrisePermis from '@/pages/carteGrisePermis/CarteGrisePermis';
-import PointageAPS from '@/pages/pointageAps/PointageAPS';
-import MouvementsAPS from '@/pages/pointageAps/MouvementsAPS';
-import Anomalie from '@/pages/anomalie/Anomalie';
-import PostesDeGarde from '@/pages/postes/PostesDeGarde';
-import PosteOperationnel from '@/pages/postes/PosteOperationnel';
-import FichePrestataire from '@/pages/prestataires/FichePrestataire';
-import Prestataires from '@/pages/prestataires/Prestataires';
-import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { canAccessRoute, homeRouteForRole } from '@/pages/layouts/navigation';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { SiteLayout } from './components/layout/SiteLayout'
+import { DefaultSitePage } from './components/layout/SiteLayout/DefaultSitePage'
+import { AdminHome, AdminLayout, UsersPage as AdminUsersPage, UserSettingsPage } from './features/access'
+import { AuthProvider, LoginPage, RequireAuth, RequirePermission } from './features/auth'
+import { DirectoryPage, postsConfig } from './features/directories'
+import { PostSettingsPage } from './features/posts'
+import { PlanningPage } from './features/planning'
+import { SheetBuilderPage, SheetEntryPage, SheetsPage } from './features/sheets'
+import { MinutesEditorPage, MinutesListPage } from './features/minutes'
+import { ProjectSettingsPage } from './features/projectSettings'
+import { SitesPage } from './features/sites'
 
-function RoleAccessGuard({ role }: { role: number }) {
-  const location = useLocation();
-  return canAccessRoute(role, location.pathname)
-    ? <Outlet />
-    : <Navigate to={homeRouteForRole(role)} replace state={{ deniedPath: location.pathname }} />;
-}
-
-export default function App() {
-  const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [sessionChecking, setSessionChecking] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    restoreSession()
-      .then((restoredUser) => {
-        if (active) setUser(restoredUser);
-      })
-      .finally(() => {
-        if (active) setSessionChecking(false);
-      });
-    return () => { active = false; };
-  }, []);
-
-  const handleLogout = () => {
-    clearSession();
-    setUser(null);
-  };
-
+function App() {
   return (
-    <BrowserRouter>
-      <Toaster richColors position="top-right" />
-      {sessionChecking ? <div className="min-h-screen" aria-label="Vérification de la session" /> : <Routes>
-        {/* page connexion */}
-        <Route
-          path="/login"
-          element={
-            !user ? (
-              <Authentification
-                onLoginSuccess={(userData) => setUser(userData)}
-              />
-            ) : (
-              <Navigate to={homeRouteForRole(user.role)} replace />
-            )
-          }
-        />
-        <Route path="/auth" element={<Navigate to="/login" replace />} />
-        <Route path="/" element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />} />
-        <Route path="/choisir-poste" element={!user ? <Navigate to="/login" replace /> : <Navigate to="/dashboard/postes" replace />} />
-
-        {/* page protégée (LayoutPrincipal) */}
-        <Route
-          path="/dashboard"
-          element={
-            user ? (
-              <LayoutPrincipal user={user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        >
-          <Route element={<RoleAccessGuard role={user?.role ?? 0} />}>
-          {/* Vue d'ensemble (Page principale) */}
-          <Route index element={<Dashboard />} />
-          <Route path="postes" element={<PostesDeGarde />} />
-          <Route path="postes/:posteId" element={user ? <PosteOperationnel user={user} /> : <Navigate to="/login" replace />} />
-          <Route path="prestataires" element={<Prestataires />} />
-          <Route path="prestataires/:providerId" element={<FichePrestataire />} />
-
-          {/* Les autres pages du menu */}
-          <Route path="statistiques" element={<Statistiques />} />
-          <Route path="prise-de-poste" element={<PriseDePoste />} />
-          <Route path="passation" element={<Passation />} />
-          <Route path="visiteurs" element={<AgentAccueil canManageSiteBans={Boolean(user && [1, 3].includes(user.role))} />} />
-          <Route path="logistique" element={<FluxLogistique />} />
-          <Route path="controle-acces" element={<ControleAcces />} />
-          <Route path="flux-logistiques" element={<FluxLogistique />} />
-          <Route path="rondes" element={<Rondes />} />
-          <Route path="points-vigilance" element={<PointsVigilance />} />
-          <Route path="cameras" element={<Cameras />} />
-          <Route path="main-courante" element={<MainCourante />} />
-          <Route path="comptes-rendus" element={<CompteRendu />} />
-          {/* <Route path="messagerie" element={<Messagerie />} /> */}
-          <Route path="documents" element={<Documents />} />
-          <Route path="chauffeurs" element={<Chauffeurs />} />
-          <Route path="transporteurs" element={<Transporteurs />} />
-          <Route path="employes" element={<Employes />} />
-          <Route path="administration" element={<Administration />} />
-          
-          {/* Cahiers */}
-          <Route path="mouvements-cles" element={<ControleAcces />} />
-          <Route path="carte-grise-permis" element={<CarteGrisePermis />} />
-          <Route path="dechets-levee" element={<DechetsLevee />} />
-          <Route path="mouvements-aps" element={<MouvementsAPS />} />
-          <Route path="dechargements-bennes-vides" element={<DechargementBouteillesVides />} />
-          <Route path="pond-brut" element={<PondBrut />} />
-          <Route path="dechargements-matiere-premiere" element={<DechargementMatierePremiere />} />
-          <Route path="depotage-fuel-gasoil" element={<DepotageFuelGasoil />} />
-          <Route path="mouvements-vehicules" element={<Vehicule />} />
-          <Route path="pointage-aps" element={<PointageAPS />} />
-          <Route path="enregistrements-bon-facture-bon-sortie" element={<FluxLogistique />} />
-          <Route path="courrier" element={<Courrier />} />
-          <Route path="anomalie" element={<Anomalie/>} />
-          <Route path="violations-procedure" element={<Anomalie initialType="VIOLATION_PROCEDURE" />} />
-          <Route path="alcootest" element={<Alcootest />} />
-          <Route path="test-alcool" element={<Navigate to="/dashboard/alcootest" replace />} />
-          <Route path="consigne" element={<Consignes />} />
-          <Route path="chargements-star-particuliers" element={<ChargementsStarParticuliers />} />
-          <Route path="materiels-sous-traitant" element={<MaterielsSousTraitant />} />
-          <Route path="enregistrements-ordures" element={<OrduresFerrailles kind="ordures" />} />
-          <Route path="ordures" element={<FluxLogistique kind="ordures" />} />
-          <Route path="ferrailles" element={<OrduresFerrailles kind="ferrailles" />} />
-          <Route path="mouvement-velos" element={<MouvementsDeuxRoues kind="velo" />} />
-          <Route path="mouvement-moto" element={<MouvementsDeuxRoues kind="moto" />} />
-          <Route path="materiels-star" element={<MaterielsStar />} />
-          
-          {/* Fiches */}
-          <Route path="check-list-camion" element={<CheckListCamion />} />
-          <Route path="questionnaires-visiteurs" element={<QuestionnaireVisiteur />} />
-          <Route path="recoter" element={<FluxLogistique />} />
-          <Route path="declaration-objets" element={<DeclarationObjets />} />
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/sites" element={<SitesPage />} />
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminHome />} />
+              <Route path="users" element={<RequirePermission permission="users.view"><AdminUsersPage /></RequirePermission>} />
+              <Route path="users/:userId" element={<RequirePermission permission="users.view"><UserSettingsPage /></RequirePermission>} />
+              <Route path="planning" element={<RequirePermission permission="planning.view"><PlanningPage /></RequirePermission>} />
+              <Route path="roles" element={<Navigate to="/admin/users" replace />} />
+            </Route>
+            <Route path="/sites/:siteId" element={<SiteLayout />}>
+              <Route index element={<DefaultSitePage />} />
+              <Route path="postes" element={<RequirePermission permission="administration.view"><DirectoryPage key="posts" config={postsConfig} /></RequirePermission>} />
+              <Route path="postes/:postId" element={<RequirePermission permission="administration.view"><PostSettingsPage /></RequirePermission>} />
+              <Route path="postes/:postId/feuilles/:sheetId" element={<RequirePermission permission="administration.view"><SheetBuilderPage /></RequirePermission>} />
+              <Route path="feuilles" element={<RequirePermission permission="sheets.view"><SheetsPage /></RequirePermission>} />
+              <Route path="feuilles/:sheetId" element={<RequirePermission permission="sheets.view"><SheetEntryPage /></RequirePermission>} />
+              <Route path="comptes-rendus" element={<RequirePermission permission="minutes.view"><MinutesListPage /></RequirePermission>} />
+              <Route path="comptes-rendus/:minutesId" element={<RequirePermission permission="minutes.view"><MinutesEditorPage /></RequirePermission>} />
+              <Route path="parametres" element={<ProjectSettingsPage />} />
+              <Route path="parametres/utilisateurs/:userId" element={<RequirePermission permission="users.view"><UserSettingsPage /></RequirePermission>} />
+            </Route>
           </Route>
-        </Route>
-
-        {/* Redirection par défaut */}
-        <Route
-          path="*"
-          element={<Navigate to={user ? homeRouteForRole(user.role) : "/login"} replace />}
-        />
-      </Routes>}
-    </BrowserRouter>
-  );
+          <Route path="*" element={<Navigate to="/sites" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
 }
+
+export default App

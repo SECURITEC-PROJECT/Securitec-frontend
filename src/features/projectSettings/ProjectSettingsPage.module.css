@@ -1,0 +1,53 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.header p {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.columns {
+  column-count: 3;
+  column-gap: 16px;
+}
+
+.profile {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.profile dt {
+  color: var(--color-muted);
+}
+
+.profile dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+@media (max-width: 1000px) {
+  .columns {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .columns {
+    column-count: 1;
+  }
+}

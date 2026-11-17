@@ -1,0 +1,132 @@
+.grid {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.header {
+  display: grid;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.dayHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: none;
+  border-left: 1px solid var(--color-border-soft);
+  background: none;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.dayHead:hover {
+  background: var(--color-hover);
+}
+
+.dayHead small {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.dayHead strong {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-text);
+  font-size: 16px;
+}
+
+.today strong {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.scroller {
+  max-height: 62vh;
+  min-height: 320px;
+  overflow-y: auto;
+}
+
+.body {
+  position: relative;
+  display: grid;
+}
+
+.hours {
+  position: relative;
+}
+
+.hours span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  color: var(--color-muted);
+  font-size: 10px;
+}
+
+.column {
+  position: relative;
+  border-left: 1px solid var(--color-border-soft);
+  background-image: linear-gradient(to bottom, var(--color-border-soft) 1px, transparent 1px);
+}
+
+.todayColumn {
+  background-color: var(--color-primary-soft);
+}
+
+.block {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 2px 5px;
+  overflow: hidden;
+  border: none;
+  border-left: 4px solid;
+  border-radius: 5px;
+  color: var(--color-text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.block:hover {
+  box-shadow: var(--shadow-lift);
+  z-index: 2;
+}
+
+.block strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.block span,
+.block small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-brand-red);
+  pointer-events: none;
+  z-index: 3;
+}

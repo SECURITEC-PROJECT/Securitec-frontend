@@ -1,0 +1,1 @@
+export { UserIdCard } from './UserIdCard'

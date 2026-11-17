@@ -1,4 +1,5 @@
-# React + TypeScript + Vite
+# SECURITEC
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
@@ -40,9 +41,10 @@ export default defineConfig([
     },
   },
 ])
+
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js
 // eslint.config.js
@@ -69,6 +71,5 @@ export default defineConfig([
     },
   },
 ])
+
 ```
-# Securitec-frontend
-# Securitec-backend
